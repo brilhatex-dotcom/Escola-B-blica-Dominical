@@ -1,0 +1,334 @@
+// Schema gerado a partir do export real do sistema antigo (Google Apps Script):
+//   data/EBD_EXPORT_2026-08-03_1343.json  (planilha 1mFRh_sPmc863fLuXe5zHqKa-TLLcZcwgDnQhxHXVboI)
+//
+// Convencoes aplicadas:
+//   - `id` e a PK original da planilha (@id, SEM autoincrement) para nao quebrar os
+//     relacionamentos existentes.
+//   - `legacyId` so e preenchido nas poucas linhas cujo id original COLIDIA com outra
+//     linha (ver README-IMPORT.md). Nesses casos o id novo fica acima do maximo original
+//     e o id da planilha e preservado em legacyId.
+//   - congId / classeId sao Int? porque no export vem ora como numero, ora como "".
+//     A importacao converte "" em null.
+//   - Datas "YYYY-MM-DD" viram DateTime @db.Date (sem hora, imune a fuso).
+//     Timestamps ISO completos (registradoEm, when) viram DateTime normal.
+//   - Valores monetarios sao Decimal(10,2), nao Float.
+//
+// Abas presentes no export mas VAZIAS (0 linhas) -> sem model, pois nao ha como inferir
+// os campos: Pedidos_Revistas, Obs_Alunos, Visitas_Pastorais, Reunioes_Presenca,
+// EBD_Animada, Subsidios.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Nao existe aba "Congregacoes" no export. Este model e DERIVADO dos congId
+/// distintos encontrados em todas as abas (1..14). O `nome` nasce vazio para
+/// ser preenchido manualmente depois.
+model Congregacao {
+  id   Int    @id
+  nome String @default("")
+
+  usuarios     Usuario[]
+  classes      Classe[]
+  alunos       Aluno[]
+  frequencias  Frequencia[]
+  freqLicoes   FreqLicao[]
+  ofertas      Oferta[]
+  visitantes   Visitante[]
+  licoes       Licao[]
+  escalaCultos EscalaCulto[]
+  eventos      Evento[]
+  avisos       Aviso[]
+
+  @@map("Congregacoes")
+}
+
+model Usuario {
+  id       Int     @id
+  legacyId Int?
+  nome     String
+  login    String  @unique
+  /// Hash SHA-256 herdado do sistema antigo. NAO re-hashear na importacao.
+  senha    String
+  perfil   String
+  congId   Int?
+  classeId Int?
+  ativo    Boolean @default(true)
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+
+  @@index([congId])
+  @@index([classeId])
+  @@map("Usuarios")
+}
+
+model Classe {
+  id         Int     @id
+  legacyId   Int?
+  nome       String
+  faixa      String
+  /// Vazio em 3 linhas do export -> null.
+  prof       String?
+  tipoClasse String
+  congId     Int?
+  ativa      Boolean @default(true)
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  usuarios    Usuario[]
+  alunos      Aluno[]
+  frequencias Frequencia[]
+  freqLicoes  FreqLicao[]
+  ofertas     Oferta[]
+  visitantes  Visitante[]
+
+  @@index([congId])
+  @@map("Classes")
+}
+
+model Aluno {
+  id       Int       @id
+  legacyId Int?
+  nome     String
+  /// Data de nascimento; vazia em 149 linhas do export -> null.
+  nasc     DateTime? @db.Date
+  /// No export vem como numero (ex.: 87981418516). Guardado como String:
+  /// estoura Int32 e telefone nao e aritmetica.
+  tel      String?
+  resp     String?
+  congId   Int?
+  classeId Int?
+  ativo    Boolean   @default(true)
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+
+  frequencias Frequencia[]
+
+  @@index([congId])
+  @@index([classeId])
+  @@map("Alunos")
+}
+
+model Frequencia {
+  id       Int      @id
+  legacyId Int?
+  alunoId  Int
+  classeId Int?
+  congId   Int?
+  data     DateTime @db.Date
+  presente Boolean
+
+  aluno       Aluno        @relation(fields: [alunoId], references: [id])
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([alunoId])
+  @@index([classeId])
+  @@index([congId])
+  @@index([data])
+  @@map("Frequencias")
+}
+
+model FreqLicao {
+  id          Int      @id
+  legacyId    Int?
+  classeId    Int?
+  congId      Int?
+  data        DateTime @db.Date
+  licaoId     Int
+  licaoTitulo String
+
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+  licao       Licao        @relation(fields: [licaoId], references: [id])
+
+  @@index([classeId])
+  @@index([congId])
+  @@index([licaoId])
+  @@map("Freq_Licao")
+}
+
+model Licao {
+  id         Int      @id
+  legacyId   Int?
+  ano        Int
+  data       DateTime @db.Date
+  escopo     String
+  tipoClasse String
+  titulo     String
+  trim       String
+  /// Sempre "" no export atual -> null.
+  classeId   Int?
+  congId     Int?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  freqLicoes FreqLicao[]
+
+  @@index([congId])
+  @@map("Licoes")
+}
+
+model Oferta {
+  id       Int      @id
+  legacyId Int?
+  classeId Int?
+  congId   Int?
+  data     DateTime @db.Date
+  obs      String?
+  valor    Decimal  @db.Decimal(10, 2)
+
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([classeId])
+  @@index([congId])
+  @@map("Ofertas")
+}
+
+model Visitante {
+  id       Int      @id
+  legacyId Int?
+  nome     String
+  /// "" em 43 linhas -> null.
+  idade    Int?
+  /// Numero no export -> String (mesmo motivo de Aluno.tel).
+  tel      String?
+  obs      String?
+  classeId Int?
+  congId   Int?
+  data     DateTime @db.Date
+
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([classeId])
+  @@index([congId])
+  @@map("Visitantes")
+}
+
+/// Sem coluna `id` no export. A chave natural e (key, categoria), unica nas 35 linhas.
+model PrecoRevista {
+  key       String
+  categoria String
+  label     String
+  preco     Decimal @db.Decimal(10, 2)
+
+  @@id([key, categoria])
+  @@map("Precos_Revistas")
+}
+
+/// Sem coluna `id` no export; `parametro` e unico.
+model Parametro {
+  parametro String  @id
+  valor     Decimal @db.Decimal(10, 2)
+
+  @@map("Parametros")
+}
+
+model Reuniao {
+  id       Int      @id
+  legacyId Int?
+  titulo   String
+  tipo     String
+  data     DateTime @db.Date
+  local    String?
+  obs      String?
+  autor    String
+  /// No export e uma STRING com JSON serializado: [{"nome":..,"presente":bool}].
+  /// A importacao faz o parse e grava como jsonb (13/13 linhas validadas).
+  participantes Json
+  presentes     Int
+  total         Int
+  registradoEm  DateTime
+
+  @@map("Reunioes")
+}
+
+model EscalaCulto {
+  id          Int      @id
+  legacyId    Int?
+  titulo      String
+  mesAno      DateTime @db.Date
+  dataUpload  DateTime @db.Date
+  nomeArquivo String
+  url         String
+  urlPreview  String
+  obs         String?
+  autor       String
+  congId      Int?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([congId])
+  @@map("Escala_Cultos")
+}
+
+model Evento {
+  id        Int      @id
+  legacyId  Int?
+  titulo    String
+  descricao String
+  tipo      String
+  local     String
+  data      DateTime @db.Date
+  dataFim   DateTime @db.Date
+  obs       String?
+  congId    Int?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([congId])
+  @@map("Eventos")
+}
+
+model Aviso {
+  id             Int      @id
+  legacyId       Int?
+  titulo         String
+  texto          String
+  prioridade     Int
+  dataPublicacao DateTime @db.Date
+  dataExpiracao  DateTime @db.Date
+  autor          String
+  congId         Int?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([congId])
+  @@map("Avisos")
+}
+
+model Auditoria {
+  id       Int      @id
+  legacyId Int?
+  /// Timestamp ISO completo no export.
+  when     DateTime
+  who      String
+  whoLogin String
+  action   String
+  entidade String
+  desc     String
+
+  @@index([when])
+  @@index([whoLogin])
+  @@map("Auditoria")
+}
+
+model Versiculo {
+  id       Int     @id
+  legacyId Int?
+  ref      String
+  texto    String
+  ativo    Boolean @default(true)
+
+  @@map("Versiculos")
+}
