@@ -69,17 +69,17 @@ export function AmbientVideo({
   return (
     <div className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}>
       {/* ---------- Camada 1: catedral em CSS (sempre presente) ---------- */}
-      <div className="absolute inset-0 bg-[#02060f]" />
+      <div className="absolute inset-0 bg-[#020713]" />
 
       {/* Luz alta entrando por uma janela alta a esquerda */}
       <div
         className="animate-slow-drift absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 90% at 22% -12%, rgba(226,186,77,0.32) 0%, rgba(226,186,77,0.11) 30%, transparent 62%)," +
-            "radial-gradient(95% 75% at 84% 6%, rgba(142,176,255,0.26) 0%, transparent 58%)," +
-            "radial-gradient(85% 70% at 50% 108%, rgba(26,48,189,0.30) 0%, transparent 62%)," +
-            "radial-gradient(140% 110% at 50% 120%, rgba(6,15,48,0.9) 0%, transparent 68%)",
+            "radial-gradient(120% 90% at 22% -12%, rgba(212,175,55,0.30) 0%, rgba(212,175,55,0.10) 30%, transparent 62%)," +
+            "radial-gradient(95% 75% at 84% 6%, rgba(138,165,208,0.28) 0%, transparent 58%)," +
+            "radial-gradient(85% 70% at 50% 108%, rgba(22,58,112,0.42) 0%, transparent 62%)," +
+            "radial-gradient(140% 110% at 50% 120%, rgba(11,31,69,0.92) 0%, transparent 68%)",
         }}
       />
 
@@ -101,7 +101,7 @@ export function AmbientVideo({
         className="absolute inset-x-0 bottom-0 h-1/2"
         style={{
           background:
-            "radial-gradient(65% 100% at 50% 128%, rgba(212,163,44,0.30) 0%, transparent 72%)",
+            "radial-gradient(65% 100% at 50% 128%, rgba(212,175,55,0.26) 0%, transparent 72%)",
         }}
       />
 
@@ -142,15 +142,15 @@ export function AmbientVideo({
         style={{
           background:
             scrim === "deep"
-              ? "linear-gradient(180deg, rgba(2,6,15,0.86) 0%, rgba(3,8,23,0.74) 45%, rgba(2,6,15,0.92) 100%)"
-              : "linear-gradient(180deg, rgba(2,6,15,0.62) 0%, rgba(3,8,23,0.48) 45%, rgba(2,6,15,0.76) 100%)",
+              ? "linear-gradient(180deg, rgba(2,7,19,0.86) 0%, rgba(4,12,29,0.74) 45%, rgba(2,7,19,0.92) 100%)"
+              : "linear-gradient(180deg, rgba(2,7,19,0.62) 0%, rgba(4,12,29,0.48) 45%, rgba(2,7,19,0.76) 100%)",
         }}
       />
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 92% at 50% 45%, transparent 40%, rgba(1,3,10,0.66) 100%)",
+            "radial-gradient(120% 92% at 50% 45%, transparent 40%, rgba(2,7,19,0.66) 100%)",
         }}
       />
 

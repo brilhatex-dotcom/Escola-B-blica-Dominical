@@ -1,16 +1,16 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { markSvgDataUri } from "@/lib/brand-mark";
+import { LOGO_MASK_SRC, LOGO_RATIO } from "@/lib/brand";
 
 /* ==========================================================================
  * Campo de particulas da abertura.
  *
  * As particulas nascem de um ponto de luz, orbitam em espiral e depois "se
- * arrumam" ate desenharem o emblema. O truque para a formacao parecer magica
+ * arrumam" ate desenharem o contorno da logomarca oficial. O truque para a formacao parecer magica
  * e nao coreografada:
  *
- *   1. o emblema (lib/brand-mark) e rasterizado num canvas fora de tela;
+ *   1. a mascara de alfa da logomarca oficial e rasterizada fora de tela;
  *   2. os pixels opacos viram a nuvem de destinos;
  *   3. cada particula recebe um destino, um atraso proprio e uma curva
  *      levemente diferente — entao a figura "cristaliza" em ondas, nunca
@@ -109,7 +109,8 @@ export const ParticleField = forwardRef<ParticleFieldHandle, ParticleFieldProps>
       let cx = 0;
       let cy = 0;
       let dpr = 1;
-      let markSide = 0;
+      let markW = 0;
+      let markH = 0;
       let particles: Particle[] = [];
       let targets: Array<{ x: number; y: number }> = [];
       let raf = 0;
@@ -118,27 +119,28 @@ export const ParticleField = forwardRef<ParticleFieldHandle, ParticleFieldProps>
       /* ---------------- amostragem do emblema ---------------- */
 
       const sampleTargets = (img: HTMLImageElement) => {
-        const side = markSide;
         const off = document.createElement("canvas");
-        // Resolucao de amostragem fixa: o passo do grid controla a densidade,
-        // entao nao faz diferenca desenhar em alta resolucao aqui.
-        const res = 190;
-        off.width = res;
-        off.height = res;
+        // A grade de amostragem segue a proporcao real da marca. Amostrar num
+        // quadrado esticaria a logo — e a arte oficial nao se deforma.
+        const ratio = img.naturalWidth / img.naturalHeight || 1;
+        const resX = 200;
+        const resY = Math.max(1, Math.round(resX / ratio));
+        off.width = resX;
+        off.height = resY;
         const octx = off.getContext("2d", { willReadFrequently: true });
         if (!octx) return;
-        octx.drawImage(img, 0, 0, res, res);
+        octx.drawImage(img, 0, 0, resX, resY);
 
-        const { data } = octx.getImageData(0, 0, res, res);
+        const { data } = octx.getImageData(0, 0, resX, resY);
         const found: Array<{ x: number; y: number }> = [];
         const step = 2;
-        for (let y = 0; y < res; y += step) {
-          for (let x = 0; x < res; x += step) {
-            const alpha = data[(y * res + x) * 4 + 3];
+        for (let y = 0; y < resY; y += step) {
+          for (let x = 0; x < resX; x += step) {
+            const alpha = data[(y * resX + x) * 4 + 3];
             if (alpha > 130) {
               found.push({
-                x: cx + ((x / res) - 0.5) * side,
-                y: cy + ((y / res) - 0.5) * side,
+                x: cx + (x / resX - 0.5) * markW,
+                y: cy + (y / resY - 0.5) * markH,
               });
             }
           }
@@ -197,11 +199,13 @@ export const ParticleField = forwardRef<ParticleFieldHandle, ParticleFieldProps>
         if (rect && rect.width > 8) {
           cx = rect.left + rect.width / 2;
           cy = rect.top + rect.height / 2;
-          markSide = rect.width;
+          markW = rect.width;
+          markH = rect.height;
         } else {
           cx = width / 2;
           cy = height / 2 + height * offsetY;
-          markSide = Math.min(width, height) * scale;
+          markW = Math.min(width, height) * scale;
+          markH = markW / LOGO_RATIO;
         }
 
         canvas.width = Math.floor(width * dpr);
@@ -287,10 +291,11 @@ export const ParticleField = forwardRef<ParticleFieldHandle, ParticleFieldProps>
           if (alpha <= 0.01) continue;
 
           const size = p.size * (1 + p.bound * 0.45);
-          // Do branco-quente ao ouro, para nao virar um borrao amarelo chapado.
-          const r = 255;
-          const g = Math.round(232 - p.warm * 46);
-          const b = Math.round(186 - p.warm * 96);
+          // Creme luminoso -> dourado oficial (#D4AF37). A variacao evita que o
+          // campo vire um borrao amarelo chapado.
+          const r = Math.round(247 - p.warm * 35);
+          const g = Math.round(239 - p.warm * 64);
+          const b = Math.round(210 - p.warm * 155);
 
           ctx.beginPath();
           ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
@@ -322,7 +327,7 @@ export const ParticleField = forwardRef<ParticleFieldHandle, ParticleFieldProps>
         last = performance.now();
         raf = requestAnimationFrame(frame);
       };
-      img.src = markSvgDataUri("#ffffff");
+      img.src = LOGO_MASK_SRC;
 
       const onResize = () => {
         if (!img.complete) return;

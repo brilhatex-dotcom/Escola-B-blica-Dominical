@@ -40,20 +40,49 @@ Os comandos de banco estão em [README-IMPORT.md](./README-IMPORT.md).
 
 ---
 
-## Duas coisas para você trocar
+## A logomarca oficial
 
-### 1. A logomarca oficial
+A arte oficial da IEADPE (`IEADPE.png`, 2000×1597, fundo transparente) é o
+elemento principal das duas telas. Ela é usada **como bitmap, sem nenhuma
+alteração** — não é recolorida, redesenhada, recortada, espelhada nem esticada.
+O único ajuste é escala proporcional.
 
-O emblema atual é **provisório** — um brasão autoral (anel, raios, cruz sobre a
-Bíblia aberta, pomba), porque não tive acesso ao arquivo oficial da IEADPE.
+| Arquivo | O quê |
+|---|---|
+| `public/brand/ieadpe-logo.png` | master web, 1000×798 (reduzido proporcionalmente do oficial) |
+| `public/brand/ieadpe-mask.png` | máscara de alfa, 260px, ~18 KB |
+| `app/icon.png` | favicon, a partir do ícone oficial |
 
-Troque os paths em **`lib/brand-mark.ts`**. É a única fonte do desenho: o
-componente React e a formação de partículas da splash leem os dois do mesmo
-lugar, então uma edição atualiza tudo.
+Todos os efeitos acontecem **atrás ou em volta** da marca: sombra projetada,
+halo, selo, partículas, brilho horizontal e inclinação 3D. Nenhum toca nos
+pixels da arte.
 
-O selo secundário da EBD fica em `components/brand/EbdMark.tsx`.
+A máscara de alfa existe para que o campo de partículas e o brilho horizontal
+conheçam o *contorno* da marca sem baixar o master de 442 KB.
 
-### 2. Os vídeos de ambiente
+### Por que a marca aparece sobre um selo claro
+
+O texto arqueado "ASSEMBLEIA DE DEUS" e o "PERNAMBUCO" da arte oficial são
+azuis (#1060A0). Medindo o contraste contra os fundos deste portal:
+
+| Fundo | Contraste |
+|---|---|
+| Preto da splash | 3,20:1 |
+| Azul do card (#0B1F45) | 2,47:1 |
+| Versão ícone oficial sobre o próprio fundo | 1,15:1 |
+
+Ou seja: **a logomarca foi desenhada para fundo claro.** Sobre fundo escuro o
+letreiro some e a marca perde leitura.
+
+Como a arte não pode ser alterada — nem recolorir o texto, nem trocar por uma
+versão "para fundo escuro" —, a saída correta de manual de marca é apoiá-la
+sobre a superfície clara para a qual foi feita. É o que o selo circular faz:
+branco → #F5F7FA, fio dourado discreto, sombra suave. Desenhado **atrás**; a
+arte segue intacta.
+
+Se quiser a marca sem selo, é a prop `plate` do `<BrandMark />`.
+
+## Os vídeos de ambiente
 
 Nenhum vídeo foi versionado. As duas telas funcionam sem eles: há um fundo
 "catedral" em CSS que sustenta a atmosfera sozinho.
@@ -61,6 +90,21 @@ Nenhum vídeo foi versionado. As duas telas funcionam sem eles: há um fundo
 Para ativar, coloque os arquivos em `public/media/` (nomes e specs em
 [`public/media/README.md`](./public/media/README.md)) e vire
 `HAS_AMBIENT_VIDEO = true` em `lib/config.ts`.
+
+## Paleta
+
+Toda a interface segue as cores da própria logomarca. Predominância do azul
+institucional; o vermelho só em pequenos detalhes (erros de formulário) e o
+dourado só em brilhos e destaques.
+
+| Cor | Hex | Token | Uso |
+|---|---|---|---|
+| Azul institucional | `#163A70` | `brand-600` | predominante |
+| Azul escuro | `#0B1F45` | `brand-800` | superfícies e profundidade |
+| Branco | `#FFFFFF` | `white` | selo da marca, textos |
+| Cinza claro | `#F5F7FA` | `brand-50` | base do selo, texto corrido |
+| Dourado | `#D4AF37` | `gold-400` | brilhos e destaques |
+| Vermelho da chama | `#D62828` | `flame-500` | apenas pequenos detalhes |
 
 ---
 
@@ -74,8 +118,8 @@ Toda a coreografia é uma única `gsap.timeline` em
 | 0,0s | preto absoluto |
 | 0,5s | ponto de luz dourada, pulsando |
 | 1,0s | a luz solta partículas; elas giram |
-| 2,0s | as partículas começam a formar o emblema |
-| 4,0s | emblema formado; brilho varre da esquerda para a direita |
+| 2,0s | as partículas começam a formar a logomarca |
+| 4,0s | logomarca nítida; brilho varre da esquerda para a direita |
 | 5,0s | "ASSEMBLEIA DE DEUS EM PERNAMBUCO" |
 | 7,0s | "Campo de Betânia" |
 | 9,0s | leve zoom de câmera + vídeo desfocado ao fundo |
@@ -85,14 +129,30 @@ Toda a coreografia é uma única `gsap.timeline` em
 
 ### Como a formação de partículas funciona
 
-O emblema é rasterizado num canvas fora de tela; os pixels opacos viram a nuvem
-de destinos; cada partícula recebe um destino, um atraso próprio e uma curva
-levemente diferente. Por isso a figura **cristaliza em ondas** em vez de estalar
-de uma vez.
+A máscara de alfa da logomarca é rasterizada num canvas fora de tela; os pixels
+opacos viram a nuvem de destinos; cada partícula recebe um destino, um atraso
+próprio e uma curva levemente diferente. Por isso a figura **cristaliza em
+ondas** em vez de estalar de uma vez. As partículas são douradas (#D4AF37) — a
+marca em si nunca muda de cor.
 
-O campo é ancorado no `rect` real do elemento do emblema (`anchorRef`), não num
+O campo é ancorado no `rect` real do elemento da marca (`anchorRef`), não num
 palpite de porcentagem — é isso que faz as partículas assentarem exatamente
-sobre o SVG que aparece depois, em qualquer tamanho de tela.
+sobre o bitmap que aparece depois, em qualquer tamanho de tela.
+
+### O parallax 3D
+
+Rotação rígida de no máximo **±5°** em cada eixo, com perspectiva, seguindo o
+ponteiro. É inclinação, não deformação: a marca nunca gira por completo, nunca
+estica e nunca sai de foco. Em telas de toque, onde não há ponteiro, um respiro
+lento assume o mesmo papel.
+
+### A geometria do selo
+
+O selo é um círculo de 137% da largura da marca, posicionado de forma absoluta —
+ou seja, transborda a caixa da logo e não ocupa espaço no fluxo. Em vez de
+compensar isso com margens ajustadas à mão (que precisariam de um número
+diferente para cada altura de tela), o wrapper usa `aspect-[100/137]` e reserva
+o quadrado do selo. A partir daí margens normais funcionam em qualquer viewport.
 
 ### Ajustes rápidos
 
@@ -121,7 +181,7 @@ app/
   page.tsx                orquestra splash → login na mesma rota
   globals.css             tokens do design system
 components/
-  brand/                  BrandMark (IEADPE), EbdMark
+  brand/                  BrandMark — a logomarca oficial
   splash/                 SplashScreen (timeline GSAP), ParticleField (canvas)
   login/                  LoginScreen, LoginCard, FormField, VerseOfTheDay,
                           AuthSuccessOverlay
@@ -129,7 +189,7 @@ components/
   ui/                     Button, Checkbox
 lib/
   config.ts               ajustes da abertura
-  brand-mark.ts           o desenho do emblema (fonte única)
+  brand.ts                caminhos e regras de uso da logomarca
   verses.ts               os 51 versículos, vindos do export da igreja
 prisma/                   schema + importador
 ```
@@ -164,9 +224,8 @@ configuração especial. Basta:
 
 ## Próximos passos sugeridos
 
-1. Trocar a logomarca provisória pela arte oficial.
-2. Ligar a autenticação real (`/api/auth/login`), conferindo o SHA-256 herdado
+1. Ligar a autenticação real (`/api/auth/login`), conferindo o SHA-256 herdado
    da planilha e re-gravando em bcrypt/argon2 no primeiro login correto — assim
    a base migra sozinha, sem forçar ninguém a trocar de senha.
-3. Ler os versículos do banco em vez do arquivo estático.
-4. Construir o Dashboard e apontar o `onDone` do `AuthSuccessOverlay` para ele.
+2. Ler os versículos do banco em vez do arquivo estático.
+3. Construir o Dashboard e apontar o `onDone` do `AuthSuccessOverlay` para ele.

@@ -49,11 +49,11 @@ export function FormField({
       <div
         className={cn(
           "group relative rounded-xl transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          "border bg-royal-950/40",
+          "border bg-brand-950/40",
           error
-            ? "border-red-400/60 shadow-[0_0_0_1px_rgba(248,113,113,0.35),0_0_22px_-4px_rgba(248,113,113,0.45)]"
+            ? "border-flame-400/70 shadow-[0_0_0_1px_rgba(214,40,40,0.35),0_0_22px_-4px_rgba(214,40,40,0.42)]"
             : focused
-              ? "border-royal-300/70 shadow-[0_0_0_1px_rgba(142,176,255,0.55),0_0_26px_-2px_rgba(53,94,244,0.55)]"
+              ? "border-brand-300/70 shadow-[0_0_0_1px_rgba(138,165,208,0.55),0_0_26px_-2px_rgba(45,83,145,0.75)]"
               : "border-white/12 hover:border-white/25",
         )}
       >
@@ -66,7 +66,7 @@ export function FormField({
           )}
           style={{
             background:
-              "linear-gradient(100deg, rgba(53,94,244,0.14) 0%, rgba(142,176,255,0.06) 45%, transparent 75%)",
+              "linear-gradient(100deg, rgba(45,83,145,0.22) 0%, rgba(138,165,208,0.07) 45%, transparent 75%)",
           }}
         />
 
@@ -75,10 +75,10 @@ export function FormField({
           className={cn(
             "pointer-events-none absolute left-4 top-1/2 h-[1.05rem] w-[1.05rem] -translate-y-1/2 transition-all duration-400",
             error
-              ? "text-red-300"
+              ? "text-flame-400"
               : focused
-                ? "scale-110 text-royal-200"
-                : "text-royal-200/45 group-hover:text-royal-200/70",
+                ? "scale-110 text-brand-200"
+                : "text-brand-200/45 group-hover:text-brand-200/70",
           )}
         />
 
@@ -87,8 +87,8 @@ export function FormField({
           className={cn(
             "pointer-events-none absolute left-11 origin-left transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)]",
             floating
-              ? "top-[0.44rem] text-[0.62rem] uppercase tracking-[0.16em] text-royal-200/65"
-              : "top-1/2 -translate-y-1/2 text-[0.9rem] text-royal-200/50",
+              ? "top-[0.44rem] text-[0.62rem] uppercase tracking-[0.16em] text-brand-200/65"
+              : "top-1/2 -translate-y-1/2 text-[0.9rem] text-brand-200/50",
           )}
         >
           {label}
@@ -119,7 +119,7 @@ export function FormField({
             aria-label={revealed ? "Ocultar senha" : "Mostrar senha"}
             className={cn(
               "absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2",
-              "text-royal-200/45 transition-all duration-300",
+              "text-brand-200/45 transition-all duration-300",
               "hover:bg-white/5 hover:text-gold-200",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/60",
             )}
@@ -134,9 +134,9 @@ export function FormField({
           className={cn(
             "absolute bottom-0 left-1/2 h-px -translate-x-1/2 rounded-full transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)]",
             error
-              ? "w-[85%] bg-gradient-to-r from-transparent via-red-400/70 to-transparent"
+              ? "w-[85%] bg-gradient-to-r from-transparent via-flame-500/80 to-transparent"
               : focused
-                ? "w-[85%] bg-gradient-to-r from-transparent via-royal-300/80 to-transparent"
+                ? "w-[85%] bg-gradient-to-r from-transparent via-brand-300/80 to-transparent"
                 : "w-0 bg-transparent",
           )}
         />
@@ -151,7 +151,7 @@ export function FormField({
             animate={{ opacity: 1, height: "auto", y: 0 }}
             exit={{ opacity: 0, height: 0, y: -4 }}
             transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            className="overflow-hidden pl-1 pt-1.5 text-[0.74rem] text-red-300/90"
+            className="overflow-hidden pl-1 pt-1.5 text-[0.74rem] text-flame-400/95"
           >
             {error}
           </motion.p>

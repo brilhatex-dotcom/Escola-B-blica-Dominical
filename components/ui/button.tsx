@@ -9,7 +9,7 @@ const buttonVariants = cva(
   [
     "relative inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl",
     "font-medium transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-royal-990",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-brand-990",
     "disabled:pointer-events-none disabled:opacity-55",
     "select-none overflow-hidden",
   ],
@@ -22,14 +22,14 @@ const buttonVariants = cva(
          * `background` animado — gradiente nao interpola bem entre estados.
          */
         primary: [
-          "bg-gradient-to-b from-royal-500 to-royal-700 text-white",
-          "shadow-[0_10px_30px_-8px_rgba(31,62,226,0.65),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
-          "hover:shadow-[0_14px_38px_-8px_rgba(212,163,44,0.6),inset_0_1px_0_0_rgba(255,255,255,0.3)]",
-          "hover:text-royal-950 active:scale-[0.985]",
+          "bg-gradient-to-b from-brand-500 to-brand-700 text-white",
+          "shadow-[0_10px_30px_-8px_rgba(22,58,112,0.75),inset_0_1px_0_0_rgba(255,255,255,0.22)]",
+          "hover:shadow-[0_14px_38px_-8px_rgba(212,175,55,0.55),inset_0_1px_0_0_rgba(255,255,255,0.3)]",
+          "hover:text-brand-950 active:scale-[0.985]",
         ],
         ghost:
-          "text-royal-200/80 hover:text-gold-200 hover:bg-white/5 rounded-lg",
-        link: "text-royal-200/75 hover:text-gold-200 underline-offset-4 hover:underline rounded-md",
+          "text-brand-200/80 hover:text-gold-200 hover:bg-white/5 rounded-lg",
+        link: "text-brand-200/75 hover:text-gold-200 underline-offset-4 hover:underline rounded-md",
       },
       size: {
         default: "h-11 px-5 text-sm",

@@ -8,7 +8,6 @@ import { VerseOfTheDay } from "./VerseOfTheDay";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { EbdMark } from "@/components/brand/EbdMark";
 import { APP_VERSION, ORG_NAME } from "@/lib/config";
 
 interface LoginCardProps {
@@ -92,22 +91,49 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
         className="pointer-events-none absolute -right-24 -top-24 h-56 w-56 rounded-full bg-gold-400/10 blur-3xl"
       />
 
-      {/* ---------------- Topo: marcas ---------------- */}
+      {/* ---------------- Topo: logomarca oficial ---------------- */}
       <motion.div variants={rise} className="flex flex-col items-center">
-        <div className="flex items-end gap-4">
-          <BrandMark idSuffix="login" className="w-[3.9rem] drop-shadow-[0_0_20px_rgba(226,186,77,0.3)]" />
-          <span aria-hidden="true" className="mb-2 h-9 w-px bg-white/12" />
-          <EbdMark idSuffix="login" className="mb-0.5 w-[2.9rem] opacity-90" />
+        {/*
+          Largura da MARCA entre 90px e 120px, conforme a norma: 96px no celular,
+          116px a partir de sm. `clamp` deixa o passo continuo, sem salto no
+          breakpoint.
+
+          `aspect-[100/137]` reserva no fluxo o quadrado do selo, que e maior que
+          a marca e fica posicionado de forma absoluta. Sem isso, as margens em
+          volta teriam de compensar o transbordo na mao — e cada tamanho de tela
+          pediria um numero diferente.
+
+          A flutuacao vive no wrapper externo, separada do elemento da imagem:
+          assim o `translate` da animacao nunca se mistura com o `transform` de
+          entrada do Framer Motion, que e o que faz a marca "pular" ao montar.
+        */}
+        <div className="animate-logo-float mb-1 flex aspect-[100/137] w-[clamp(6rem,19vw,7.25rem)] items-center justify-center">
+          <div className="relative w-full">
+          {/* Iluminacao suave — desenhada ATRAS da marca, sem tocar nos pixels */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-10 scale-[1.45] rounded-full opacity-80 blur-2xl"
+            style={{
+              background:
+                "radial-gradient(closest-side, rgba(212,175,55,0.30) 0%, rgba(22,58,112,0.28) 52%, transparent 76%)",
+            }}
+          />
+            <BrandMark
+              plate
+              priority
+              sizes="(max-width: 640px) 96px, 116px"
+            />
+          </div>
         </div>
 
-        <h1 className="mt-6 font-display text-[1.42rem] font-semibold uppercase tracking-[0.2em] text-gold-gradient">
+        <h1 className="mt-4 font-display text-[1.42rem] font-semibold uppercase tracking-[0.2em] text-gold-gradient">
           Portal Oficial
         </h1>
 
-        <p className="mt-2.5 font-serif text-[0.95rem] italic text-royal-100/85">
+        <p className="mt-2.5 font-serif text-[0.95rem] italic text-brand-100/85">
           Escola Bíblica Dominical
         </p>
-        <p className="mt-1 font-sans text-[0.7rem] uppercase tracking-[0.28em] text-royal-200/50">
+        <p className="mt-1 font-sans text-[0.7rem] uppercase tracking-[0.28em] text-brand-200/50">
           Campo de Betânia
         </p>
       </motion.div>
@@ -151,7 +177,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
         />
 
         {erros.geral && (
-          <p role="alert" className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-[0.78rem] text-red-200">
+          <p role="alert" className="rounded-lg border border-flame-500/35 bg-flame-500/10 px-3 py-2 text-[0.78rem] text-flame-400">
             {erros.geral}
           </p>
         )}
@@ -164,7 +190,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
               onCheckedChange={(v) => setLembrar(v === true)}
               disabled={loading}
             />
-            <span className="text-[0.78rem] text-royal-200/70 transition-colors duration-300 group-hover:text-royal-100">
+            <span className="text-[0.78rem] text-brand-200/70 transition-colors duration-300 group-hover:text-brand-100">
               Lembrar-me
             </span>
           </label>
@@ -200,13 +226,13 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
       {/* ---------------- Rodape ---------------- */}
       <motion.footer variants={rise} className="mt-8 text-center">
         <div className="mb-4 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-        <p className="font-sans text-[0.66rem] uppercase tracking-[0.2em] text-royal-200/40">
+        <p className="font-sans text-[0.66rem] uppercase tracking-[0.2em] text-brand-200/40">
           Versão {APP_VERSION}
         </p>
-        <p className="mt-1.5 text-[0.7rem] text-royal-200/45">
+        <p className="mt-1.5 text-[0.7rem] text-brand-200/45">
           © {new Date().getFullYear()} {ORG_NAME}
         </p>
-        <p className="mt-0.5 text-[0.7rem] text-royal-200/30">
+        <p className="mt-0.5 text-[0.7rem] text-brand-200/30">
           Todos os direitos reservados.
         </p>
       </motion.footer>

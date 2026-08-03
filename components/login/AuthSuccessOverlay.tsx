@@ -37,7 +37,7 @@ export function AuthSuccessOverlay({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#01040c]/96 backdrop-blur-xl"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#020713]/96 backdrop-blur-xl"
       role="status"
       aria-live="polite"
     >
@@ -48,9 +48,17 @@ export function AuthSuccessOverlay({
           initial={{ opacity: 0, scale: 0.9, filter: "blur(12px)" }}
           animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
           transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.25 }}
-          className="w-[min(22vh,170px)]"
+          className="relative w-[min(22vh,170px)]"
         >
-          <BrandMark idSuffix="auth" className="drop-shadow-[0_0_34px_rgba(226,186,77,0.4)]" />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 -z-10 scale-150 rounded-full opacity-80 blur-3xl"
+            style={{
+              background:
+                "radial-gradient(closest-side, rgba(212,175,55,0.32) 0%, rgba(22,58,112,0.26) 55%, transparent 78%)",
+            }}
+          />
+          <BrandMark plate priority sizes="170px" />
         </motion.div>
 
         <motion.p
@@ -66,7 +74,7 @@ export function AuthSuccessOverlay({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, delay: 1.5 }}
-          className="mt-3 font-serif text-sm italic text-royal-200/60"
+          className="mt-3 font-serif text-sm italic text-brand-200/60"
         >
           Preparando o seu painel…
         </motion.p>

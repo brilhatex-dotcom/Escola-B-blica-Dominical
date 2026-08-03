@@ -38,7 +38,7 @@ export function VerseOfTheDay() {
             transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
             className="px-3 text-center"
           >
-            <p className="font-serif text-[0.86rem] italic leading-relaxed text-royal-100/78">
+            <p className="font-serif text-[0.86rem] italic leading-relaxed text-brand-100/78">
               {verso.texto}
             </p>
             <footer className="mt-2.5 flex items-center justify-center gap-2.5">

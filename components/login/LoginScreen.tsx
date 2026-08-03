@@ -22,7 +22,7 @@ export function LoginScreen() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-      className="relative h-screen-safe w-full overflow-hidden bg-[#01040c]"
+      className="relative h-screen-safe w-full overflow-hidden bg-[#020713]"
     >
       {/*
         Aqui o scrim e o "soft": o card de vidro ja escurece o miolo da tela por
@@ -37,7 +37,7 @@ export function LoginScreen() {
         className="pointer-events-none absolute left-1/2 top-1/2 h-[46rem] w-[46rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70"
         style={{
           background:
-            "radial-gradient(circle, rgba(31,62,226,0.16) 0%, rgba(212,163,44,0.06) 42%, transparent 68%)",
+            "radial-gradient(circle, rgba(22,58,112,0.30) 0%, rgba(212,175,55,0.07) 42%, transparent 68%)",
           filter: "blur(40px)",
         }}
       />

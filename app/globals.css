@@ -12,39 +12,49 @@
   --font-serif: var(--font-playfair), Georgia, serif;
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 
-  /* -- Azul profundo (institucional) ------------------------------------ */
-  --color-royal-50: #eef4ff;
-  --color-royal-100: #d9e5ff;
-  --color-royal-200: #bcd0ff;
-  --color-royal-300: #8eb0ff;
-  --color-royal-400: #5a85fb;
-  --color-royal-500: #355ef4;
-  --color-royal-600: #1f3ee2;
-  --color-royal-700: #1a30bd;
-  --color-royal-800: #16277c;
-  --color-royal-900: #0d1a4f;
-  --color-royal-950: #060f30;
-  --color-royal-990: #030817;
+  /* -- Azul institucional -----------------------------------------------
+     Escala construida a partir das duas cores oficiais da logomarca:
+       brand-600 = #163A70  (azul institucional — cor predominante da UI)
+       brand-800 = #0B1F45  (azul escuro)
+     Os tons acima e abaixo existem so para dar profundidade; qualquer
+     superficie de destaque deve pousar em 600 ou 800.                      */
+  --color-brand-50: #f5f7fa; /* cinza claro oficial */
+  --color-brand-100: #dce5f2;
+  --color-brand-200: #b8c9e4;
+  --color-brand-300: #8aa5d0;
+  --color-brand-400: #5578b4;
+  --color-brand-500: #2d5391;
+  --color-brand-600: #163a70; /* OFICIAL — azul institucional */
+  --color-brand-700: #112e5b;
+  --color-brand-800: #0b1f45; /* OFICIAL — azul escuro */
+  --color-brand-900: #07142e;
+  --color-brand-950: #040c1d;
+  --color-brand-990: #020713;
 
-  /* -- Dourado ---------------------------------------------------------- */
-  --color-gold-100: #fbf3d8;
-  --color-gold-200: #f5e3ab;
-  --color-gold-300: #edd07a;
-  --color-gold-400: #e2ba4d;
-  --color-gold-500: #d4a32c;
-  --color-gold-600: #b8871d;
-  --color-gold-700: #8f6716;
+  /* -- Dourado — SOMENTE brilhos e destaques ----------------------------- */
+  --color-gold-100: #f7efd2;
+  --color-gold-200: #efdfa8;
+  --color-gold-300: #e3cb79;
+  --color-gold-400: #d4af37; /* OFICIAL */
+  --color-gold-500: #b8952c;
+  --color-gold-600: #94761f;
+  --color-gold-700: #6f5816;
+
+  /* -- Vermelho da chama — SOMENTE pequenos detalhes --------------------- */
+  --color-flame-400: #e24545;
+  --color-flame-500: #d62828; /* OFICIAL */
+  --color-flame-600: #b01f1f;
 
   /* -- Superficies de vidro --------------------------------------------- */
   --color-glass-line: oklch(1 0 0 / 14%);
   --color-glass-fill: oklch(1 0 0 / 6%);
 
   /* -- Sombras ---------------------------------------------------------- */
-  --shadow-glass: 0 24px 70px -18px rgb(2 6 20 / 0.85),
-    0 2px 10px -4px rgb(2 6 20 / 0.6);
-  --shadow-gold-glow: 0 0 32px -4px rgb(226 186 77 / 0.45);
-  --shadow-focus-ring: 0 0 0 1px rgb(142 176 255 / 0.55),
-    0 0 22px -2px rgb(53 94 244 / 0.55);
+  --shadow-glass: 0 24px 70px -18px rgb(2 7 19 / 0.85),
+    0 2px 10px -4px rgb(2 7 19 / 0.6);
+  --shadow-gold-glow: 0 0 32px -4px rgb(212 175 55 / 0.42);
+  --shadow-focus-ring: 0 0 0 1px rgb(138 165 208 / 0.55),
+    0 0 22px -2px rgb(45 83 145 / 0.6);
 
   /* -- Curvas de animacao ----------------------------------------------- */
   --ease-cinematic: cubic-bezier(0.16, 1, 0.3, 1);
@@ -66,8 +76,8 @@
   }
 
   body {
-    background-color: #000;
-    color: theme(--color-royal-50);
+    background-color: #020713;
+    color: theme(--color-brand-50);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -88,17 +98,17 @@
   }
 
   ::selection {
-    background: rgb(212 163 44 / 0.3);
+    background: rgb(212 175 55 / 0.32);
     color: #fff;
   }
 
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
-    -webkit-text-fill-color: #eef4ff;
-    -webkit-box-shadow: 0 0 0 1000px rgb(6 15 48 / 0.6) inset;
+    -webkit-text-fill-color: #f5f7fa;
+    -webkit-box-shadow: 0 0 0 1000px rgb(11 31 69 / 0.65) inset;
     transition: background-color 9999s ease-in-out 0s;
-    caret-color: #eef4ff;
+    caret-color: #f5f7fa;
   }
 }
 
@@ -133,11 +143,11 @@
 @utility text-gold-gradient {
   background: linear-gradient(
     100deg,
-    #b8871d 0%,
-    #f5e3ab 28%,
-    #ffffff 45%,
-    #f5e3ab 62%,
-    #b8871d 100%
+    #94761f 0%,
+    #e3cb79 26%,
+    #f7efd2 45%,
+    #d4af37 64%,
+    #94761f 100%
   );
   background-size: 220% 100%;
   -webkit-background-clip: text;
@@ -182,6 +192,18 @@
   }
 }
 
+/* Flutuacao discreta da logomarca no card de login.
+   Amplitude de 6px: perceptivel como "respiro", nunca como elemento solto. */
+@keyframes logo-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
 @keyframes spin-slow {
   to {
     transform: rotate(360deg);
@@ -196,6 +218,9 @@
 }
 .animate-slow-drift {
   animation: slow-drift 34s ease-in-out infinite;
+}
+.animate-logo-float {
+  animation: logo-float 6.5s var(--ease-soft) infinite;
 }
 
 /* ==========================================================================
