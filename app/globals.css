@@ -1,0 +1,214 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   IEADPE — Campo de Betania
+   Sistema de design do Portal Oficial da Escola Biblica Dominical.
+   Azul profundo / Branco / Dourado.
+   ========================================================================== */
+
+@theme {
+  /* -- Tipografia ------------------------------------------------------- */
+  --font-display: var(--font-cinzel), "Times New Roman", serif;
+  --font-serif: var(--font-playfair), Georgia, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+
+  /* -- Azul profundo (institucional) ------------------------------------ */
+  --color-royal-50: #eef4ff;
+  --color-royal-100: #d9e5ff;
+  --color-royal-200: #bcd0ff;
+  --color-royal-300: #8eb0ff;
+  --color-royal-400: #5a85fb;
+  --color-royal-500: #355ef4;
+  --color-royal-600: #1f3ee2;
+  --color-royal-700: #1a30bd;
+  --color-royal-800: #16277c;
+  --color-royal-900: #0d1a4f;
+  --color-royal-950: #060f30;
+  --color-royal-990: #030817;
+
+  /* -- Dourado ---------------------------------------------------------- */
+  --color-gold-100: #fbf3d8;
+  --color-gold-200: #f5e3ab;
+  --color-gold-300: #edd07a;
+  --color-gold-400: #e2ba4d;
+  --color-gold-500: #d4a32c;
+  --color-gold-600: #b8871d;
+  --color-gold-700: #8f6716;
+
+  /* -- Superficies de vidro --------------------------------------------- */
+  --color-glass-line: oklch(1 0 0 / 14%);
+  --color-glass-fill: oklch(1 0 0 / 6%);
+
+  /* -- Sombras ---------------------------------------------------------- */
+  --shadow-glass: 0 24px 70px -18px rgb(2 6 20 / 0.85),
+    0 2px 10px -4px rgb(2 6 20 / 0.6);
+  --shadow-gold-glow: 0 0 32px -4px rgb(226 186 77 / 0.45);
+  --shadow-focus-ring: 0 0 0 1px rgb(142 176 255 / 0.55),
+    0 0 22px -2px rgb(53 94 244 / 0.55);
+
+  /* -- Curvas de animacao ----------------------------------------------- */
+  --ease-cinematic: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+@layer base {
+  * {
+    border-color: var(--color-glass-line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: #000;
+    color: theme(--color-royal-50);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    /* Trava o scroll: as duas telas sao viewport-fixed. */
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  /* iOS: evita "pulo" da barra de endereco em 100vh */
+  @supports (height: 100dvh) {
+    .h-screen-safe {
+      height: 100dvh;
+    }
+  }
+  .h-screen-safe {
+    height: 100vh;
+  }
+
+  ::selection {
+    background: rgb(212 163 44 / 0.3);
+    color: #fff;
+  }
+
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #eef4ff;
+    -webkit-box-shadow: 0 0 0 1000px rgb(6 15 48 / 0.6) inset;
+    transition: background-color 9999s ease-in-out 0s;
+    caret-color: #eef4ff;
+  }
+}
+
+/* ==========================================================================
+   Utilitarios de acabamento
+   ========================================================================== */
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+/* Vidro fosco padrao do sistema */
+@utility glass-panel {
+  background: linear-gradient(
+    150deg,
+    oklch(1 0 0 / 10%) 0%,
+    oklch(1 0 0 / 4%) 45%,
+    oklch(1 0 0 / 7%) 100%
+  );
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid oklch(1 0 0 / 14%);
+  box-shadow: var(--shadow-glass);
+}
+
+/* Fio de luz no topo do card (acabamento premium) */
+@utility glass-sheen {
+  position: relative;
+}
+
+/* Gradiente dourado para textos de destaque */
+@utility text-gold-gradient {
+  background: linear-gradient(
+    100deg,
+    #b8871d 0%,
+    #f5e3ab 28%,
+    #ffffff 45%,
+    #f5e3ab 62%,
+    #b8871d 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ==========================================================================
+   Keyframes
+   ========================================================================== */
+
+@keyframes sheen-sweep {
+  0% {
+    background-position: 220% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes slow-drift {
+  0% {
+    transform: scale(1.06) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: scale(1.12) translate3d(-1.2%, -0.8%, 0);
+  }
+  100% {
+    transform: scale(1.06) translate3d(0, 0, 0);
+  }
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-sheen {
+  animation: sheen-sweep 5.5s var(--ease-soft) infinite;
+}
+.animate-soft-pulse {
+  animation: soft-pulse 2.6s var(--ease-soft) infinite;
+}
+.animate-slow-drift {
+  animation: slow-drift 34s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   Acessibilidade — respeita quem pediu menos movimento
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
