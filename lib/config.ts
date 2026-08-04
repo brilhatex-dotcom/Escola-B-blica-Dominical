@@ -6,8 +6,8 @@
 /** Duracao total da splash, em segundos (spec: 15s). */
 export const SPLASH_DURATION = 15;
 
-/** Fade da splash para o login (spec: ~800ms). */
-export const SPLASH_TO_LOGIN_MS = 800;
+/** Fade da splash para o login (spec: ~900ms, junto do congelamento). */
+export const SPLASH_TO_LOGIN_MS = 900;
 
 /**
  * `true`  -> a splash roda em toda visita.
@@ -28,15 +28,5 @@ export const SPLASH_SESSION_KEY = "ebd:splash-seen";
  */
 export const ALLOW_SKIP_SPLASH = true;
 
-/**
- * Vire para `true` DEPOIS de colocar os arquivos em `public/media/`
- * (ver public/media/README.md).
- *
- * Enquanto for `false`, o `<video>` sequer e montado — sem isso o navegador
- * pediria arquivos inexistentes e encheria o console de 404 em toda visita.
- * O fundo "catedral" em CSS cobre a tela do mesmo jeito, entao nada quebra.
- */
-export const HAS_AMBIENT_VIDEO = false;
-
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.0";
 export const ORG_NAME = "IEADPE Campo de Betânia";

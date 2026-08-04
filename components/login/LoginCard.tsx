@@ -126,15 +126,16 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
           </div>
         </div>
 
-        <h1 className="mt-4 font-display text-[1.42rem] font-semibold uppercase tracking-[0.2em] text-gold-gradient">
-          Portal Oficial
-        </h1>
-
-        <p className="mt-2.5 font-serif text-[0.95rem] italic text-brand-100/85">
-          Escola Bíblica Dominical
+        <p className="mt-4 font-display text-[0.62rem] uppercase tracking-[0.42em] text-gold-300/85">
+          Portal da
         </p>
-        <p className="mt-1 font-sans text-[0.7rem] uppercase tracking-[0.28em] text-brand-200/50">
-          Campo de Betânia
+        <h1 className="mt-2 font-display text-[1.18rem] font-semibold uppercase leading-tight tracking-[0.17em] text-white">
+          Escola Bíblica
+          <br />
+          Dominical
+        </h1>
+        <p className="mt-3 font-serif text-[0.9rem] italic text-brand-100/80">
+          Campo de Betânia — PE
         </p>
       </motion.div>
 
@@ -229,11 +230,11 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
         <p className="font-sans text-[0.66rem] uppercase tracking-[0.2em] text-brand-200/40">
           Versão {APP_VERSION}
         </p>
-        <p className="mt-1.5 text-[0.7rem] text-brand-200/45">
-          © {new Date().getFullYear()} {ORG_NAME}
+        <p className="mt-1.5 text-[0.7rem] text-brand-200/50">
+          Sistema Oficial da Escola Bíblica Dominical
         </p>
-        <p className="mt-0.5 text-[0.7rem] text-brand-200/30">
-          Todos os direitos reservados.
+        <p className="mt-0.5 text-[0.7rem] text-brand-200/35">
+          {ORG_NAME}
         </p>
       </motion.footer>
     </motion.div>

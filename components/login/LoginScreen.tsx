@@ -2,17 +2,20 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AmbientVideo } from "@/components/media/AmbientVideo";
 import { LoginCard } from "./LoginCard";
 import { AuthSuccessOverlay } from "./AuthSuccessOverlay";
+import { SPLASH_TO_LOGIN_MS } from "@/lib/config";
 
 /**
  * Tela de login.
  *
- * Video em tela cheia ao fundo (escurecido, com leve blur, lento, em loop) e o
- * card de vidro centralizado por cima. O scroll fica travado no `body`: as duas
- * telas do portal sao viewport-fixed. Em telas muito baixas — celular deitado —
- * o proprio container rola, para o botao Entrar nunca ficar inalcancavel.
+ * Nao renderiza fundo proprio: o quadro congelado do video do drone ja esta em
+ * cena, montado em `app/page.tsx`, e continua ali. Este componente so entrega o
+ * card por cima dele.
+ *
+ * O scroll fica travado no `body` — as duas telas do portal sao viewport-fixed.
+ * Em telas muito baixas, como celular deitado, o proprio container rola, para o
+ * botao Entrar nunca ficar inalcancavel.
  */
 export function LoginScreen() {
   const [autenticado, setAutenticado] = useState<string | null>(null);
@@ -21,28 +24,24 @@ export function LoginScreen() {
     <motion.main
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-      className="relative h-screen-safe w-full overflow-hidden bg-[#020713]"
+      transition={{
+        // Entra no mesmo ritmo do congelamento do video: 900ms, sem corte.
+        duration: SPLASH_TO_LOGIN_MS / 1000,
+        ease: [0.16, 1, 0.3, 1],
+      }}
+      className="relative z-20 h-screen-safe w-full overflow-hidden"
     >
-      {/*
-        Aqui o scrim e o "soft": o card de vidro ja escurece o miolo da tela por
-        conta propria, entao somar o scrim pesado apagaria a luz de vitral e o
-        fundo viraria um retangulo preto sem leitura nenhuma.
-      */}
-      <AmbientVideo blur={18} opacity={0.55} playbackRate={0.5} scrim="soft" />
-
-      {/* Brilhos de ambiente atras do card */}
+      {/* Halo de ambiente atras do card, para descolar do fundo */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-1/2 h-[46rem] w-[46rem] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-70"
         style={{
           background:
-            "radial-gradient(circle, rgba(22,58,112,0.30) 0%, rgba(212,175,55,0.07) 42%, transparent 68%)",
+            "radial-gradient(circle, rgba(22,58,112,0.42) 0%, rgba(212,175,55,0.07) 44%, transparent 68%)",
           filter: "blur(40px)",
         }}
       />
 
-      {/* Conteudo */}
       <div className="relative z-10 flex h-full w-full items-center justify-center overflow-y-auto overscroll-contain px-4 py-8 sm:px-6">
         <LoginCard onAuthenticated={(u) => setAutenticado(u)} />
       </div>
@@ -55,9 +54,9 @@ export function LoginScreen() {
               /* ----------------------------------------------------------
                * Aqui entra o Dashboard.
                *
-               * A spec pediu apenas estas duas telas, entao a navegacao fica
-               * comentada de proposito — apontar para uma rota inexistente
-               * daria 404 logo depois de uma animacao bonita.
+               * A spec pediu apenas a experiencia inicial, entao a navegacao
+               * fica comentada de proposito — apontar para uma rota
+               * inexistente daria 404 logo depois de uma animacao bonita.
                *
                * Quando o painel existir:
                *   const router = useRouter();   // next/navigation
