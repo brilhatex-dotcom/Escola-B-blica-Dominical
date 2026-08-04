@@ -78,7 +78,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
       variants={stagger}
       initial="hidden"
       animate="show"
-      className="glass-panel relative w-full max-w-[460px] overflow-hidden rounded-[1.75rem] px-7 py-9 sm:px-9"
+      className="glass-panel relative w-full max-w-[460px] overflow-hidden rounded-[1.75rem] px-7 py-9 sm:px-9 short:py-5 shorter:py-6"
     >
       {/* Fio de luz no topo do card */}
       <span
@@ -92,7 +92,19 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
       />
 
       {/* ---------------- Topo: logomarca oficial ---------------- */}
-      <motion.div variants={rise} className="flex flex-col items-center">
+      {/*
+        Em telas baixas a marca vai para o LADO do titulo, nao acima.
+
+        Empilhado, este bloco custa 227px dos 736 do card — e num notebook
+        1366x768 (625px uteis) isso e o que empurrava o botao Entrar para fora
+        da tela. Lado a lado, a altura passa a ser a do maior dos dois em vez
+        da soma, e o card inteiro cabe sem rolagem. E o mesmo lockup horizontal
+        que qualquer manual de marca ja preve para espacos de pouca altura.
+      */}
+      <motion.div
+        variants={rise}
+        className="flex flex-col items-center shorter:flex-row shorter:items-center shorter:gap-4 shorter:text-left"
+      >
         {/*
           Largura da MARCA entre 90px e 120px, conforme a norma: 96px no celular,
           116px a partir de sm. `clamp` deixa o passo continuo, sem salto no
@@ -107,7 +119,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
           assim o `translate` da animacao nunca se mistura com o `transform` de
           entrada do Framer Motion, que e o que faz a marca "pular" ao montar.
         */}
-        <div className="animate-logo-float mb-1 flex aspect-[100/137] w-[clamp(6rem,19vw,7.25rem)] items-center justify-center">
+        <div className="animate-logo-float mb-1 flex aspect-[100/137] w-[clamp(6rem,19vw,7.25rem)] items-center justify-center short:w-[6rem] shorter:w-[5.9rem] shorter:shrink-0 shorter:mb-0">
           <div className="relative w-full">
           {/* Iluminacao suave — desenhada ATRAS da marca, sem tocar nos pixels */}
           <div
@@ -126,28 +138,30 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
           </div>
         </div>
 
-        <p className="mt-4 font-display text-[0.62rem] uppercase tracking-[0.42em] text-gold-300/85">
-          Portal da
-        </p>
-        <h1 className="mt-2 font-display text-[1.18rem] font-semibold uppercase leading-tight tracking-[0.17em] text-white">
-          Escola Bíblica
-          <br />
-          Dominical
-        </h1>
-        <p className="mt-3 font-serif text-[0.9rem] italic text-brand-100/80">
-          Campo de Betânia — PE
-        </p>
+        <div className="shorter:min-w-0 shorter:flex-1">
+          <p className="mt-4 font-display text-[0.62rem] uppercase tracking-[0.42em] text-gold-300/85 short:mt-2 shorter:mt-0">
+            Portal da
+          </p>
+          <h1 className="mt-2 font-display text-[1.18rem] font-semibold uppercase leading-tight tracking-[0.17em] text-white short:mt-1.5 short:text-[1.05rem]">
+            Escola Bíblica
+            <br />
+            Dominical
+          </h1>
+          <p className="mt-3 font-serif text-[0.9rem] italic text-brand-100/80 short:mt-2 short:text-[0.82rem]">
+            Campo de Betânia — PE
+          </p>
+        </div>
       </motion.div>
 
       {/* ---------------- Versiculo ---------------- */}
-      <motion.div variants={rise} className="my-7">
-        <div className="mb-6 h-px w-full bg-gradient-to-r from-transparent via-white/12 to-transparent" />
+      <motion.div variants={rise} className="my-7 short:my-3 shorter:my-3">
+        <div className="mb-6 h-px w-full bg-gradient-to-r from-transparent via-white/12 to-transparent short:mb-4" />
         <VerseOfTheDay />
-        <div className="mt-6 h-px w-full bg-gradient-to-r from-transparent via-white/12 to-transparent" />
+        <div className="mt-6 h-px w-full bg-gradient-to-r from-transparent via-white/12 to-transparent short:mt-4" />
       </motion.div>
 
       {/* ---------------- Formulario ---------------- */}
-      <motion.form variants={rise} onSubmit={handleSubmit} className="space-y-3.5" noValidate>
+      <motion.form variants={rise} onSubmit={handleSubmit} className="space-y-3.5 short:space-y-2.5" noValidate>
         <FormField
           label="Usuário"
           icon={User}
@@ -184,7 +198,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
         )}
 
         {/* Lembrar-me / Esqueci minha senha */}
-        <div className="flex items-center justify-between pt-1.5">
+        <div className="flex items-center justify-between pt-1.5 short:pt-0.5">
           <label className="group flex cursor-pointer select-none items-center gap-2.5">
             <Checkbox
               checked={lembrar}
@@ -209,7 +223,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
           </Button>
         </div>
 
-        <Button type="submit" size="lg" disabled={loading} className="mt-3 w-full">
+        <Button type="submit" size="lg" disabled={loading} className="mt-3 w-full short:mt-2">
           {loading ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -225,12 +239,12 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
       </motion.form>
 
       {/* ---------------- Rodape ---------------- */}
-      <motion.footer variants={rise} className="mt-8 text-center">
-        <div className="mb-4 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+      <motion.footer variants={rise} className="mt-8 text-center short:mt-4 shorter:mt-3">
+        <div className="mb-4 h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent short:mb-3" />
         <p className="font-sans text-[0.66rem] uppercase tracking-[0.2em] text-brand-200/40">
           Versão {APP_VERSION}
         </p>
-        <p className="mt-1.5 text-[0.7rem] text-brand-200/50">
+        <p className="mt-1.5 text-[0.7rem] leading-snug text-brand-200/50 shorter:mt-1">
           Sistema Oficial da Escola Bíblica Dominical
         </p>
         <p className="mt-0.5 text-[0.7rem] text-brand-200/35">

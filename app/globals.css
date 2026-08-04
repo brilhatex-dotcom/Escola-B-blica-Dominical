@@ -1,6 +1,20 @@
 @import "tailwindcss";
 
 /* ==========================================================================
+   Variantes por ALTURA de tela.
+
+   O card de login e alto por natureza — marca, titulo, versiculo, formulario
+   e rodape. Num notebook 1366x768 sobram ~625px uteis depois da barra do
+   navegador, e sem estas variantes o botao Entrar cai para fora da tela: o
+   usuario abre o sistema e nao ve como entrar.
+
+   `short` cobre de 1080p para baixo (um 1920x1080 tem ~937px uteis);
+   `shorter` cobre notebooks 768p, celular e tablet deitado.
+   ========================================================================== */
+@custom-variant short (@media (max-height: 950px));
+@custom-variant shorter (@media (max-height: 680px));
+
+/* ==========================================================================
    IEADPE — Campo de Betania
    Sistema de design do Portal Oficial da Escola Biblica Dominical.
    Azul profundo / Branco / Dourado.

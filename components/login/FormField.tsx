@@ -105,6 +105,7 @@ export function FormField({
           aria-describedby={error ? `${fieldId}-error` : undefined}
           className={cn(
             "relative h-[3.4rem] w-full rounded-xl bg-transparent pl-11 pr-12 pt-4 text-[0.95rem]",
+            "short:h-[3.05rem] short:pt-3.5",
             "text-white outline-none placeholder:text-transparent",
             "font-sans tracking-[0.01em]",
           )}

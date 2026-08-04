@@ -42,7 +42,7 @@ export function LoginScreen() {
         }}
       />
 
-      <div className="relative z-10 flex h-full w-full items-center justify-center overflow-y-auto overscroll-contain px-4 py-8 sm:px-6">
+      <div className="relative z-10 flex h-full w-full items-center justify-center overflow-y-auto overscroll-contain px-4 py-8 sm:px-6 short:py-3 shorter:py-2">
         <LoginCard onAuthenticated={(u) => setAutenticado(u)} />
       </div>
 

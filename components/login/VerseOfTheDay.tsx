@@ -20,11 +20,11 @@ export function VerseOfTheDay() {
   }, []);
 
   return (
-    <div className="relative min-h-[5.6rem] w-full">
+    <div className="relative min-h-[5.6rem] w-full short:min-h-[4.2rem] shorter:min-h-[3.6rem]">
       {/* Aspas decorativas */}
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute -left-1 -top-3 font-serif text-5xl leading-none text-gold-400/20"
+        className="pointer-events-none absolute -left-1 -top-3 font-serif text-5xl leading-none text-gold-400/20 short:text-4xl"
       >
         &ldquo;
       </span>
@@ -38,7 +38,7 @@ export function VerseOfTheDay() {
             transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.15 }}
             className="px-3 text-center"
           >
-            <p className="font-serif text-[0.86rem] italic leading-relaxed text-brand-100/78">
+            <p className="font-serif text-[0.86rem] italic leading-relaxed text-brand-100/78 short:text-[0.8rem] short:leading-normal shorter:line-clamp-2">
               {verso.texto}
             </p>
             <footer className="mt-2.5 flex items-center justify-center gap-2.5">
