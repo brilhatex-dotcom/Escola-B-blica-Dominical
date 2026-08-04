@@ -5,23 +5,102 @@ Origem: `data/EBD_EXPORT_2026-08-03_1343.json`
 
 ---
 
-## 1. Comandos
+## 1. Comandos — Neon via Vercel
+
+### 1.1 Criar o banco
+
+Na Vercel, dentro do projeto: aba **Storage** → **Create Database** → **Neon** →
+região **South America (São Paulo)**. A integração cria o banco e injeta as
+variáveis no projeto sozinha. Não precisa copiar nada.
+
+### 1.2 Trazer as credenciais para a sua máquina
 
 ```bash
-cp .env.example .env      # preencha DATABASE_URL (pooler) e DIRECT_URL (direta)
-npm install
-npm run db:generate                      # prisma generate
-npm run db:seed:dry                      # confere os números SEM tocar no banco
-npm run db:migrate -- --name init_ebd    # cria as tabelas
-npm run db:seed                          # importa
+npx vercel login
+npx vercel link        # associa esta pasta ao projeto na Vercel
+npm run env:pull       # monta o .env com os nomes certos
 ```
 
-Em produção/CI use `npm run db:deploy` (`prisma migrate deploy`).
-Outro arquivo: `npm run db:seed -- --file data/OUTRO.json`.
+O `env:pull` existe por um motivo específico: a integração Neon injeta as
+variáveis com os nomes **dela** (`DATABASE_URL_UNPOOLED`, `PGHOST_UNPOOLED`…),
+que não são os que o `schema.prisma` lê. O script identifica qual é a conexão
+com pooler e qual é a direta, garante o `pgbouncer=true` só na primeira, e
+escreve o `.env`. Ele entende os três formatos que as integrações usam
+(Neon nativa, Vercel Postgres legado e genérico) e avisa em português se
+faltar alguma.
+
+Trocar as duas de lugar na mão é o erro mais comum desse caminho — e o erro que
+o Postgres devolve não explica o que houve.
+
+### 1.3 Migrar e importar
+
+```bash
+npm install
+npm run db:generate                      # prisma generate
+npm run db:seed:dry                      # ensaio: NÃO grava nada
+npm run db:deploy                        # cria as 17 tabelas
+npm run db:seed                          # importa
+npm run db:studio                        # confere no navegador
+```
+
+Use **`db:deploy`**, não `db:migrate`. O `migration.sql` já está versionado e
+foi validado contra um PostgreSQL 16 real; o `deploy` aplica exatamente aquele
+SQL. O `migrate dev` só é necessário quando você **muda** o schema.
+
+Outro arquivo de export: `npm run db:seed -- --file data/OUTRO.json`.
 
 O seed é **idempotente** (upsert por PK): pode rodar quantas vezes quiser sem
-duplicar. `DIRECT_URL` é obrigatória porque migrations não funcionam através do
-pgbouncer.
+duplicar.
+
+### 1.4 O deploy do site não precisa de banco (ainda)
+
+As duas telas são estáticas — nenhuma delas importa o Prisma:
+
+```
+Route (app)                    Size  First Load JS
+┌ ○ /                          99 kB        201 kB     ○ (Static)
+```
+
+Ou seja: **a migração e a importação são uma operação única, feita da sua
+máquina contra o Neon.** O deploy na Vercel não precisa de nenhuma variável de
+banco por enquanto, e não há risco de o build tentar migrar sozinho.
+
+Isso muda quando entrarem as rotas de API (login de verdade). Aí:
+
+1. em **Settings → Environment Variables**, garanta que `DATABASE_URL` tenha
+   `&pgbouncer=true` no fim — a URL que a integração injeta costuma vir sem, e
+   sem isso o Prisma falha em runtime com erro de prepared statement;
+2. adicione `DIRECT_URL` com a conexão **sem** `-pooler` no host;
+3. só então, se quiser migrations automáticas a cada deploy, troque o build para
+   `prisma migrate deploy && next build`.
+
+**Nunca coloque o seed no build.** Ele importa 4.700 linhas e é uma operação
+única, não algo para repetir a cada deploy.
+
+### 1.5 Já foi testado de ponta a ponta
+
+Antes de qualquer banco de produção, a rodada completa foi executada contra um
+PostgreSQL 16 real:
+
+| Verificação | Resultado |
+|---|---|
+| `prisma migrate` aplica | 17 tabelas, 19 FKs, 23 índices |
+| `db:seed` | 7,8s |
+| Contagens conferidas no SQL puro | 319 / 2592 / 1671 — batem |
+| Congregações | chegam nomeadas |
+| Colisão de id | id 64 ficou com "Adão", como decidido |
+| Aluno 164 | `classeId` nulo, como definido |
+| FK é real | `INSERT` com classe inexistente **recusado** pelo banco |
+| Rodar 2× | contagens idênticas, zero duplicata |
+
+### 1.6 Se der errado
+
+| Erro | Causa |
+|---|---|
+| `prepared statement "s0" already exists` | `DIRECT_URL` está apontando para a URL com `-pooler`. Rode `npm run env:pull` de novo |
+| `Can't reach database server` | o banco Neon suspende após inatividade; a primeira conexão acorda e pode demorar alguns segundos — tente de novo |
+| `P3005: The database schema is not empty` | o banco já tem tabelas. Use um banco novo ou `npm run db:reset` (**apaga tudo**) |
+| `Environment variable not found: DIRECT_URL` | o `.env` não foi gerado. Rode `npm run env:pull` |
 
 ### O que o dry-run mostra hoje
 
