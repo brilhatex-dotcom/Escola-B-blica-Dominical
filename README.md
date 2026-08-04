@@ -489,17 +489,50 @@ composto ("Argument `congId` must not be null") — pela mesma razão. O backfil
 usa `findFirst` com `equals: null` (que vira `IS NULL`) e deixa o índice como
 rede de segurança.
 
-### A migration é aditiva
+### Como aplicar no banco
+
+**Caminho simples — sem linha de comando.** Abra o SQL Editor do Neon, cole
+`prisma/aplicar-fase-05.sql` inteiro e clique em Run. Ele traz as tabelas novas
+e as 59 pessoas já apuradas, e termina imprimindo a conferência:
+
+```
+pessoas_unicas  cargos_ocupados  acumulam_funcao  a_conferir
+      59              68                9              5
+```
+
+**Caminho da linha de comando**, para quem tiver o projeto na máquina:
+
+```bash
+npm run db:deploy             # aplica a migration
+npm run db:pessoas            # apura as pessoas a partir do texto livre
+npm run db:pessoas -- --dry   # só mostra o que faria
+```
+
+### A migration é aditiva, e repetível
 
 Não apaga, não renomeia e não altera nenhuma tabela do sistema antigo. A única
 mudança em tabela existente é uma coluna nova e opcional em `Usuarios`
 (`pessoaId`), que nasce nula. **Dá para rodar com o sistema no ar.**
 
-```bash
-npm run db:deploy      # aplica a migration
-npm run db:pessoas     # popula pessoas e cargos (repetível)
-npm run db:pessoas -- --dry   # só mostra o que faria
-```
+O arquivo de colar leva guardas que a migration não precisa: `prisma migrate
+deploy` registra o que já aplicou e nunca repete, mas colar à mão não registra
+nada — sem `IF NOT EXISTS` em tudo e blocos `EXCEPTION WHEN duplicate_object`
+nas chaves estrangeiras, a segunda colagem quebraria no meio e deixaria o banco
+pela metade.
+
+Verificado: três aplicações seguidas, mesmo resultado, com os 319 alunos e as
+2.592 frequências intactos.
+
+### A variável de conexão pode ter outro nome
+
+A integração Neon+Vercel nomeia a variável conforme o tipo de conexão
+(`POSTGRES_PRISMA_URL` ou `DATABASE_URL`) e ainda aceita um **prefixo** escolhido
+na instalação — ela pode chegar como `STORAGE_DATABASE_URL`.
+
+Exigir o nome exato transformaria um detalhe de instalação num defeito
+silencioso: o portal publicaria sem erro nenhum e mostraria dados de
+demonstração para sempre, porque não achou uma variável que estava ali com outro
+nome. Por isso `lib/prisma.ts` procura por **sufixo**, aceitando prefixo.
 
 ---
 
