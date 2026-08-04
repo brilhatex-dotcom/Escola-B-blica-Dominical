@@ -102,6 +102,11 @@ PostgreSQL 16 real:
 | `P3005: The database schema is not empty` | o banco já tem tabelas. Use um banco novo ou `npm run db:reset` (**apaga tudo**) |
 | `Environment variable not found: DIRECT_URL` | o `.env` não foi gerado. Rode `npm run env:pull` |
 
+> O `db:seed` carrega o `.env` por conta própria (`process.loadEnvFile`). Isso
+> não é automático: o CLI do Prisma lê o arquivo sozinho, mas um script em Node
+> puro não — e sem esse cuidado o `db:deploy` funcionava e o `db:seed` falhava
+> dizendo que a variável não existe, com o arquivo correto ali do lado.
+
 ### O que o dry-run mostra hoje
 
 ```

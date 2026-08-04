@@ -18,6 +18,41 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PrismaClient, Prisma } from "@prisma/client";
 
+/* ------------------------------------------------------------------ *
+ * Carregamento do .env
+ *
+ * O CLI do Prisma (`migrate`, `validate`, `studio`) le o `.env` sozinho.
+ * ESTE script nao — ele roda em Node puro, e o Prisma Client so olha para
+ * `process.env`. O resultado era desconcertante: `db:deploy` funcionava,
+ * `db:seed` falhava com "Environment variable not found: DATABASE_URL"
+ * com o arquivo correto ali do lado, e a pessoa ficava procurando erro
+ * numa configuracao que estava certa.
+ *
+ * `process.loadEnvFile` e nativo do Node 20.12+, entao nao precisa de
+ * dependencia. `.env.local` tem precedencia, seguindo a convencao do Next.
+ * Se a variavel ja veio do ambiente (CI, container), o arquivo nao e lido:
+ * quem chamou manda.
+ * ------------------------------------------------------------------ */
+if (!process.env.DATABASE_URL) {
+  for (const arquivo of [".env.local", ".env"]) {
+    try {
+      process.loadEnvFile(resolve(process.cwd(), arquivo));
+      break;
+    } catch {
+      /* arquivo ausente: tenta o proximo */
+    }
+  }
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error(
+    "DATABASE_URL nao definida.\n\n" +
+      "Rode `npm run env:pull` para montar o .env a partir da Vercel,\n" +
+      "ou copie o .env.example para .env e preencha as duas conexoes.",
+  );
+  process.exit(1);
+}
+
 const prisma = new PrismaClient();
 
 /**
