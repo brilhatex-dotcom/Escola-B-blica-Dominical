@@ -23,8 +23,8 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 05 | Pessoas e cargos (modelagem normalizada) | pronto |
 | 05 | Rotas de API sobre o Postgres | pronto |
 | 05 | Chamada, Alunos, Professores, Classes, Visitantes | pronto |
-| 05 | Relatórios, Agenda, Configurações | **próxima etapa** |
-| 06 | Autenticação real e sincronização offline ligada | próxima etapa |
+| 05 | Relatórios, Agenda, Configurações | pronto |
+| 06 | Autenticação real e sincronização offline ligada | **próxima etapa** |
 
 O login **não autentica de verdade ainda** — a chamada está simulada, com o
 ponto exato de troca marcado em `components/login/LoginCard.tsx`.
@@ -580,6 +580,42 @@ só na hora de exibir.
 | `/api/classes` | classes com professores de verdade e o texto original |
 | `/api/visitantes` | recebidos, do mais recente ao mais antigo |
 | `/api/chamada` | GET a chamada do dia, POST grava a classe inteira |
+| `/api/relatorios` | frequência por classe e ofertas do período |
+| `/api/agenda` | eventos e reuniões numa lista só, mais as escalas |
+| `/api/lideranca` | GET a hierarquia, POST troca quem ocupa um cargo |
+| `/api/diagnostico` | com qual banco o app está falando |
+
+### A liderança é editada, não recompilada
+
+`/dashboard/configuracoes` troca quem ocupa cada cargo. Os candidatos são as
+**pessoas já cadastradas**, e não um campo de texto — digitar o nome à mão foi
+exatamente o que produziu "Ana costa", "Ana maria da costa" e "Ana Maria costa".
+
+O vínculo anterior é **encerrado, não apagado**: `fim` recebe a data em que a
+pessoa deixou a função e a linha permanece. Apagar destruiria o histórico — daqui
+a dois anos ninguém responderia quem era o Supervisor da EBD em 2026, que é
+exatamente a pergunta que uma ata faz. Quem volta a um cargo reaproveita o
+vínculo antigo em vez de criar outro.
+
+### Relatórios comparam por MÉDIA, não por soma
+
+Uma classe que fez chamada em 3 domingos e outra que fez em 12 não são
+comparáveis pelo total de presenças — a segunda pareceria quatro vezes melhor só
+por ter registrado mais vezes. A média divide pelos domingos que **tiveram**
+chamada, e a coluna "domingos" fica visível porque é o denominador: uma média de
+40 apurada em 1 domingo não vale o mesmo que 38 apurada em 12.
+
+O que o relatório **não** faz é dividir presenças pelo número de alunos de hoje
+para achar a taxa de um domingo de março. O cadastro não guarda histórico de
+matrícula; uma classe que dobrou desde então apareceria com metade da frequência
+real, e o número pareceria confiável.
+
+### A escala de culto não é um compromisso
+
+Apesar do nome, `Escala_Cultos` guarda `mesAno`, `nomeArquivo` e `url`: é o
+**arquivo** da escala do mês, uma folha digitalizada. Colocá-la na linha do tempo
+da agenda inventaria um evento que nunca existiu, então ela sai numa lista
+própria, de documentos.
 
 ### A chamada tem TRÊS estados por aluno
 

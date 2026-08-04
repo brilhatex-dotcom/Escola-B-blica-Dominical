@@ -44,9 +44,9 @@ export const MENU: readonly ItemMenu[] = [
   { chave: "professores", rotulo: "Professores", href: "/dashboard/professores", icone: UserRound, descricao: "Pessoas e cargos — cadastro único" },
   { chave: "classes", rotulo: "Classes", href: "/dashboard/classes", icone: School, descricao: "Classes por faixa e congregação" },
   { chave: "visitantes", rotulo: "Visitantes", href: "/dashboard/visitantes", icone: Users, descricao: "Visitantes recebidos" },
-  { chave: "relatorios", rotulo: "Relatórios", href: "/dashboard/relatorios", icone: ChartColumn, descricao: "Frequência, ofertas e estatísticas", emBreve: true },
-  { chave: "agenda", rotulo: "Agenda", href: "/dashboard/agenda", icone: CalendarDays, descricao: "Cultos, EBD e eventos", emBreve: true },
-  { chave: "configuracoes", rotulo: "Configurações", href: "/dashboard/configuracoes", icone: Settings, descricao: "Parâmetros, usuários e permissões", emBreve: true },
+  { chave: "relatorios", rotulo: "Relatórios", href: "/dashboard/relatorios", icone: ChartColumn, descricao: "Frequência, ofertas e estatísticas" },
+  { chave: "agenda", rotulo: "Agenda", href: "/dashboard/agenda", icone: CalendarDays, descricao: "Cultos, EBD e eventos" },
+  { chave: "configuracoes", rotulo: "Configurações", href: "/dashboard/configuracoes", icone: Settings, descricao: "Liderança do campo e parâmetros" },
 ];
 
 /**
