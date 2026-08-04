@@ -1,13 +1,42 @@
-# Migracao EBD: Google Apps Script -> Postgres/Prisma
+# Migração EBD: Google Apps Script → Postgres/Prisma
 
 Origem: `data/EBD_EXPORT_2026-08-03_1343.json`
 (export da planilha `1mFRh_sPmc863fLuXe5zHqKa-TLLcZcwgDnQhxHXVboI`, gerado em 2026-08-03T16:43:49Z, 22 abas).
 
 ---
 
-## 1. O que o export realmente contem
+## 1. Comandos
 
-Inspecionadas as 22 abas. Com dados:
+```bash
+cp .env.example .env      # preencha DATABASE_URL (pooler) e DIRECT_URL (direta)
+npm install
+npm run db:generate                      # prisma generate
+npm run db:seed:dry                      # confere os números SEM tocar no banco
+npm run db:migrate -- --name init_ebd    # cria as tabelas
+npm run db:seed                          # importa
+```
+
+Em produção/CI use `npm run db:deploy` (`prisma migrate deploy`).
+Outro arquivo: `npm run db:seed -- --file data/OUTRO.json`.
+
+O seed é **idempotente** (upsert por PK): pode rodar quantas vezes quiser sem
+duplicar. `DIRECT_URL` é obrigatória porque migrations não funcionam através do
+pgbouncer.
+
+### O que o dry-run mostra hoje
+
+```
+Alunos              319  OK  (323 no export − 4 por id repetido)
+Frequencias        2592  OK  (2599 no export − 7 por id repetido)
+Auditoria          1671  OK  (1679 no export − 8 por id repetido)
+Classes / Usuarios / Freq_Licao ....... OK
+```
+
+---
+
+## 2. O que o export contém
+
+22 abas. Com dados:
 
 | Aba | Linhas | Aba | Linhas |
 |---|---:|---|---:|
@@ -20,193 +49,176 @@ Inspecionadas as 22 abas. Com dados:
 | Escala_Cultos | 1 | Versiculos | 50 |
 | Eventos | 1 | Avisos | 1 |
 
-**Vazias (0 linhas)** — sem model no schema, porque nao ha como inferir os campos:
+**Vazias (0 linhas)** — sem model, porque não há como inferir os campos:
 `Pedidos_Revistas`, `Obs_Alunos`, `Visitas_Pastorais`, `Reunioes_Presenca`,
-`EBD_Animada`, `Subsidios`. Quando existir pelo menos uma linha (ou o cabecalho da
-planilha), da para modelar.
+`EBD_Animada`, `Subsidios`.
 
 ---
 
-## 2. Problemas encontrados nos dados (leia antes de migrar)
+## 3. Decisões tomadas
 
-### 2.1 Nao existe aba `Congregacoes`
+### 3.1 Colisão de id → **sobrescrever** (decisão do responsável)
 
-`congId` aparece em 11 abas com valores **1..14**, mas nao ha tabela de origem com
-nome/dados das congregacoes.
+A planilha reaproveitou números de matrícula, e alguns ids pertencem a **dois
+registros diferentes**. Como num banco o id é único, alguma coisa tem de ceder.
 
-**Decisao aplicada:** o model `Congregacao` e **derivado** — a importacao cria as 14
-linhas a partir dos `congId` distintos, com `nome` vazio para voce preencher depois.
-Isso permite FKs reais. O upsert usa `update: {}`, entao **os nomes que voce digitar
-nao sao sobrescritos** em re-execucoes.
+Modo escolhido: **`ON_ID_COLLISION = "sobrescrever"`** em `prisma/seed.ts`. O id
+da planilha é mantido sem exceção e a segunda ocorrência sobrescreve a primeira.
+**19 registros do export não entram** — 4 alunos, 7 frequências, 8 auditorias.
 
-> Se preferir seguir a regra "onde nao houver tabela alvo, deixe so o campo Int?",
-> basta remover o model `Congregacao` e as relacoes `congregacao` — os campos `congId`
-> ja sao `Int?` e continuam funcionando sozinhos.
+Os 4 alunos perdidos, nomeados no log a cada execução:
 
-### 2.2 IDs repetidos — linhas DISTINTAS com o mesmo id
+| id | Sai | Fica |
+|---|---|---|
+| 64 | Cecília (Quixabeira) | Adão (Boqueirão) |
+| 66 | Sofia (Quixabeira) | Henrique da Silva Barbosa (Carnaubinha) |
+| 73 | EdnaCacielia (Bandeiras) | Irmã Sônia (Templo Sede) |
+| 83 | Irmã Helena (Templo Sede) | Lucas Emanuel (Bandeiras) |
 
-A planilha reaproveitou ids. Nao sao linhas duplicadas: sao registros diferentes.
+**Efeito colateral:** as frequências seguem o id, não a pessoa. **37 frequências
+mudam de dono** (11 da Cecília → Adão, 11 da Sofia → Henrique, 9 da EdnaCacielia
+→ Irmã Sônia, 6 da Irmã Helena → Lucas Emanuel). Não há como evitar mantendo o
+id original: é a mesma matrícula apontando para duas pessoas.
 
-| Tabela | ids colididos | linhas afetadas |
-|---|---|---:|
-| Alunos | 64, 66, 73, 83 | 8 |
-| Frequencias | 864, 865, 866, 2355, 2356, 2357, 2358 | 14 |
-| Auditoria | 225, 227, 237, 326, 332, 344, 359 | 16 |
+> **Para não perder nada:** troque `ON_ID_COLLISION` para `"remapear"`. A
+> primeira ocorrência mantém o id e a segunda ganha um id novo acima do máximo,
+> guardando o antigo em `legacyId`. Nesse modo as contagens voltam a 323 / 2599
+> / 1679, e as 81 frequências ambíguas são desempatadas por (congregação,
+> classe) — todas as 81 resolvem para exatamente uma pessoa.
 
-Exemplo real — o id 64 e duas pessoas diferentes:
+### 3.2 Congregações — derivadas e **nomeadas automaticamente**
 
-```json
-{"id":64,"congId":5, "classeId":11,"nome":"Cecília","ativo":true}
-{"id":64,"congId":13,"classeId":18,"nome":"Adão",   "ativo":true}
+Não existe aba `Congregacoes`, mas os nomes estavam no export o tempo todo: cada
+`congId` tem um usuário coordenador cuja conta é a própria congregação
+(`ebdbetania` → "Cong. Betânia"). O filtro por login iniciado em `ebd` separa as
+contas institucionais das contas de pessoas.
+
+| id | Nome | id | Nome |
+|---:|---|---:|---|
+| 1 | Templo Sede | 8 | Cong. Bredos Altos |
+| 2 | Cong. Bandeiras | 9 | Cong. Carnaubinha |
+| 3 | Cong. Betânia | 10 | Cong. Marianos |
+| 4 | Cong. Pinheiro | 11 | Cong. Esperança |
+| 5 | Cong. B.D. Quixabeira | 12 | Cong. Riacho do Saco |
+| 6 | Cong. Riacho Fundo | 13 | Cong. M.D. Boqueirão |
+| 7 | Cong. Bredos Baixo | 14 | Cong. Carnauba |
+
+Duas observações:
+
+- A congregação 1 tem duas contas ("Templo Sede" e "T. Matriz"); usei a primeira.
+- As congregações **11 e 14 não têm nenhuma classe nem aluno** — só a conta do
+  coordenador. Entram normalmente, prontas para receber cadastro.
+
+O upsert usa `update: {}`, então **um nome corrigido no banco sobrevive** a novas
+execuções do seed.
+
+### 3.3 Aluno sem classe
+
+**Luiz Simplício dos Santos** (id 164, 76 anos, Cong. Bredos Baixo) está na
+classe 23, removida da planilha (junto das classes 5 e 42). Nenhuma frequência
+dele existe.
+
+Decisão: entra **sem classe**, com aviso no log. Basta colocá-lo na turma certa
+pelo próprio sistema depois.
+
+Se preferir resolver na importação, preencha `CLASSE_MANUAL` em `prisma/seed.ts`:
+
+```ts
+const CLASSE_MANUAL: Record<number, number> = {
+  164: 21,  // Luiz Simplicio dos Santos -> Senhores
+};
 ```
 
-**Isto torna os requisitos originais incompativeis entre si:** usar o `id` da planilha
-como `@id` + upsert por id faria a segunda linha sobrescrever a primeira, e as
-contagens finais seriam **319 / 2592 / 1671** — nunca 323 / 2599 / 1679.
+---
 
-**Decisao aplicada (preserva as duas coisas):**
-- `id` continua sendo `@id`, **sem autoincrement**.
-- A **primeira** ocorrencia de cada id mantem o id original — ou seja, ~99% dos ids
-  ficam intactos e **todos os relacionamentos existentes continuam validos**.
-- As ocorrencias seguintes recebem um id novo acima do maximo (Alunos a partir de 320,
-  Frequencias de 2593, Auditoria de 1672) e guardam o id da planilha em **`legacyId`**.
-- Nenhuma linha e perdida: as contagens batem exatamente com as esperadas.
+## 4. Limpezas pendentes (importar não resolve)
 
-### 2.3 FKs das frequencias para alunos colididos
+### 4.1 Classes duplicadas — 6 grupos, 14 classes
 
-81 linhas de `Frequencias` apontam para os ids 64/66/73/83, que ficaram ambiguos.
-A importacao desempata pelo par **(congId, classeId)** da propria frequencia:
-**81 de 81 resolvem para exatamente 1 aluno**, sem ambiguidade e sem sobra.
+Mesma congregação, mesmo nome, mesma faixa. Confirmado como **duplicatas para
+limpar depois**; a importação traz todas como estão.
 
-### 2.4 Classe orfa
+Os professores denunciam a origem: são erros de digitação e recadastros.
 
-O aluno **164 (Luiz Simplício dos Santos)** aponta para a **classe 23, que nao existe**
-(as classes 5, 23 e 42 foram removidas da planilha). Nenhuma frequencia referencia esse
-aluno. A importacao grava `classeId = null` para ele e avisa no log.
+| Congregação | Classe | Manter | Candidatas a remover |
+|---|---|---|---|
+| Templo Sede | Obreiros | **1** (10 alunos, 89 freq) | 15 (4 alunos, 3 freq) — "Pb.Lourival" sem espaço |
+| Bandeiras | Classe única | **12** (8 alunos, 72 freq) | 32 (vazia) |
+| Bredos Baixo | Classe juniores | **33** (11 alunos, 154 freq) | 35 (vazia) |
+| Bredos Baixo | Juniores | — | 45, 46, 47, 48 (**todas vazias**) — "Ana maria da costa" / "Ana Maria costa", "Andreyna Magslhaes" / "Andreyna Magalhaes" |
+| Bredos Baixo | Senhoras | **10** (7 alunos, 84 freq) | 13 (2 alunos, 0 freq) — "Jessica e elisangela" vs "Jéssica e Elisângela" |
+| Bredos Baixo | Senhores | **21** (3 alunos, 30 freq) | 44 (vazia) |
 
-### 2.5 Frequencias repetidas para o mesmo aluno no mesmo dia
+**8 dessas classes estão completamente vazias** (0 alunos, 0 frequências) e podem
+ser removidas sem consequência. Duas têm conteúdo e pedem cuidado: a **15** (4
+alunos e 3 frequências) e a **13** (2 alunos) — antes de apagar, mova os alunos
+para a classe que fica.
 
-`(alunoId, data)` se repete em **380 grupos** (546 linhas alem da primeira de cada grupo).
-Desses, **43 grupos se contradizem** (`presente` true numa linha e false na outra) e
-14 divergem na `classeId`.
-
-**Nao foi feita deduplicacao** — as 2599 linhas sao importadas como estao, para bater com
-o numero esperado. Mas isso e sujeira real da planilha e vale uma limpeza depois; para
-listar os casos:
+Para reproduzir a lista depois de importar:
 
 ```sql
-SELECT "alunoId", data, count(*), array_agg(presente)
-FROM "Frequencias" GROUP BY "alunoId", data HAVING count(*) > 1 ORDER BY 3 DESC;
+SELECT c."congId", c.nome, c.faixa, c.id, c.prof,
+       (SELECT count(*) FROM "Alunos" a WHERE a."classeId" = c.id)      AS alunos,
+       (SELECT count(*) FROM "Frequencias" f WHERE f."classeId" = c.id) AS frequencias
+FROM "Classes" c
+WHERE (c."congId", c.nome, c.faixa) IN (
+  SELECT "congId", nome, faixa FROM "Classes"
+  GROUP BY "congId", nome, faixa HAVING count(*) > 1
+)
+ORDER BY c."congId", c.nome, alunos DESC;
 ```
+
+### 4.2 Frequências repetidas no mesmo dia
+
+`(alunoId, data)` se repete em **380 grupos** — 546 linhas além da primeira de
+cada grupo. Desses, **43 grupos se contradizem** (`presente` true numa linha e
+false na outra) e 14 divergem na classe.
+
+Não foi feita deduplicação: as linhas entram como estão. Para listar:
+
+```sql
+SELECT "alunoId", data, count(*), array_agg(presente), array_agg("classeId")
+FROM "Frequencias"
+GROUP BY "alunoId", data HAVING count(*) > 1
+ORDER BY 3 DESC;
+```
+
+### 4.3 Senhas
+
+São SHA-256 sem salt, herdados da planilha, e o seed **não re-hasheia**. O
+caminho sem atrito: no primeiro login correto, o servidor confere o SHA-256 e
+re-grava em bcrypt/argon2 — a base migra sozinha, sem forçar ninguém a trocar de
+senha.
 
 ---
 
-## 3. Decisoes de tipagem (inferidas dos dados reais)
+## 5. Decisões de tipagem (inferidas dos dados reais)
 
-- **`senha`**: `String`. Hash SHA-256 herdado, **nao e re-hasheado** na importacao.
-- **`ativo` / `ativa` / `presente`**: `Boolean` (ja vem boolean real no JSON).
-- **`congId` / `classeId`**: `Int?` em todas as tabelas, conforme pedido — vem ora como
-  numero, ora como `""`, e a importacao converte `""` em `null`.
-  (Na pratica `Classes.congId`, `Alunos.congId/classeId` e os das frequencias estao 100%
-  preenchidos; da para apertar para obrigatorio depois se quiser.)
-- **`tel`**: `String?`, nao `Int`. No JSON vem como numero (ex.: `87981418516`), que
-  **estoura Int32** — e telefone nao e aritmetica.
-- **Datas `YYYY-MM-DD`**: `DateTime @db.Date`, convertidas em UTC meia-noite (imune a fuso).
-- **Timestamps ISO** (`registradoEm`, `when`): `DateTime` normal.
+- **`senha`**: `String`. Hash SHA-256 herdado, sem re-hash.
+- **`ativo` / `ativa` / `presente`**: `Boolean`.
+- **`congId` / `classeId`**: `Int?` em todas as tabelas — vêm ora como número,
+  ora como `""`, e a importação converte `""` em `null`.
+- **`tel`**: `String?`, não `Int`. No JSON vem como número (ex.: `87981418516`),
+  que **estoura Int32** — e telefone não é aritmética.
+- **Datas `YYYY-MM-DD`**: `DateTime @db.Date`, em UTC meia-noite (imune a fuso).
+- **Timestamps ISO** (`registradoEm`, `when`): `DateTime`.
 - **Dinheiro** (`Ofertas.valor`, `Precos_Revistas.preco`, `Parametros.valor`):
-  `Decimal @db.Decimal(10,2)`, nao `Float`.
-- **`Reunioes.participantes`**: no JSON e uma **string** com JSON serializado. As 13
-  linhas foram validadas e sao parseadas para `Json` (jsonb).
-- **`Precos_Revistas`** nao tem coluna `id`; PK composta **`@@id([key, categoria])`**
-  (unica nas 35 linhas). **`Parametros`** usa `parametro` como `@id`.
+  `Decimal @db.Decimal(10,2)`, não `Float`.
+- **`Reunioes.participantes`**: no JSON é uma **string** com JSON serializado.
+  As 13 linhas foram validadas e são parseadas para `Json` (jsonb).
+- **`Precos_Revistas`** não tem coluna `id`; PK composta `@@id([key, categoria])`
+  (única nas 35 linhas). **`Parametros`** usa `parametro` como `@id`.
 
 ---
 
-## 4. Comandos
-
-### 4.1 Configurar o banco
-
-```bash
-cp .env.example .env
-# edite .env com as credenciais reais
-```
-
-`DATABASE_URL` = conexao com pooler (Supabase: porta 6543, `?pgbouncer=true`).
-`DIRECT_URL` = conexao direta (porta 5432) — **migrations nao funcionam pelo pgbouncer**.
-
-### 4.2 Instalar e gerar o client
-
-```bash
-npm install
-npm run db:generate          # prisma generate
-```
-
-### 4.3 Conferir os numeros ANTES de tocar no banco
-
-```bash
-npm run db:seed:dry          # roda todas as conversoes, nao grava nada
-```
-
-Ja executado — saida atual:
-
-```
-Classes              53  OK (esperado 53)
-Usuarios             19  OK (esperado 19)
-Alunos              323  OK (esperado 323)
-Frequencias        2599  OK (esperado 2599)
-Freq_Licao           65  OK (esperado 65)
-```
-
-### 4.4 Criar a migration (so depois de revisar o schema)
-
-```bash
-npm run db:migrate -- --name init_ebd     # prisma migrate dev --name init_ebd
-```
-
-Em producao/CI, use `npm run db:deploy` (`prisma migrate deploy`).
-
-### 4.5 Importar os dados
-
-```bash
-npm run db:seed
-```
-
-Outro arquivo de export:
-
-```bash
-npm run db:seed -- --file data/EBD_EXPORT_2026-08-03_1340.json
-```
-
-O seed e **idempotente** (upsert por PK): pode rodar quantas vezes quiser sem duplicar.
-Ao final imprime a contagem de cada tabela e compara com os numeros esperados, saindo
-com codigo 1 se algum divergir.
-
-### 4.6 Inspecionar
-
-```bash
-npm run db:studio
-```
-
----
-
-## 5. Scripts disponiveis
+## 6. Scripts
 
 | Script | Faz |
 |---|---|
 | `npm run db:generate` | `prisma generate` |
 | `npm run db:migrate` | `prisma migrate dev` |
-| `npm run db:deploy` | `prisma migrate deploy` (producao) |
+| `npm run db:deploy` | `prisma migrate deploy` (produção) |
 | `npm run db:seed` | importa o JSON para o banco |
 | `npm run db:seed:dry` | valida e conta, sem gravar |
 | `npm run db:reset` | `prisma migrate reset` (apaga tudo e re-semeia) |
 | `npm run db:studio` | abre o Prisma Studio |
-
----
-
-## 6. Pendencias para voce decidir
-
-1. Preencher os `nome` das 14 congregacoes derivadas.
-2. Decidir se quer deduplicar as 380 frequencias repetidas (43 contraditorias).
-3. Confirmar se manter a `Congregacao` derivada ou deixar `congId` como inteiro solto.
-4. Rehash das senhas para bcrypt/argon2 num proximo passo (hoje sao SHA-256 sem salt).
-5. Modelar as 6 abas vazias quando houver dados ou o cabecalho da planilha.
