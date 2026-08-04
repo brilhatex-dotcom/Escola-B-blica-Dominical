@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BookOpen, Check, CheckCheck, Loader2, Save, X } from "lucide-react";
+import { BookOpen, Check, CheckCheck, CloudOff, Loader2, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,10 @@ import {
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
 import { iniciais } from "@/lib/dashboard/formato";
+import { temBancoLocal } from "@/lib/db/local";
+import { guardarChamada, lerChamadaLocal, situacaoDoEnvio } from "@/lib/db/chamadas";
+import type { ChamadaLocal } from "@/lib/db/schema";
+import { sincronizar } from "@/lib/sync/motor";
 
 /**
  * Chamada — o coracao do sistema.
@@ -31,9 +36,25 @@ import { iniciais } from "@/lib/dashboard/formato";
  * fossem reais.
  * ============================================================================
  *
+ * ============================================================================
+ * GRAVAR E ESCREVER NO APARELHO — ENVIAR VEM DEPOIS
+ *
+ * O botao "Gravar chamada" nao fala com o servidor. Ele escreve no IndexedDB e
+ * enfileira o pacote; quem fala com o servidor e o motor de sincronizacao
+ * (lib/sync), que insiste sozinho ate conseguir.
+ *
+ * A ordem importa e e o coracao desta tela. Enviando primeiro, existe uma
+ * janela — do toque no botao ate a resposta chegar — em que a chamada so existe
+ * na memoria da aba: e ali que ela se perde quando o sinal cai no meio, quando
+ * a tela bloqueia e o sistema descarta a pagina, ou quando alguem fecha a aba
+ * sem esperar. Escrevendo primeiro, essa janela nao existe. No pior caso a
+ * chamada esta guardada e ainda nao subiu — que e uma situacao com conserto,
+ * ao contrario de perdida.
+ *
  * A gravacao manda a chamada INTEIRA num pacote so. Uma requisicao por aluno
  * significaria trinta requisicoes na rede da igreja, com algumas chegando e
  * outras nao, deixando a chamada pela metade sem ninguem saber quais faltaram.
+ * ============================================================================
  */
 
 interface AlunoChamada {
@@ -56,6 +77,38 @@ interface Chamada {
   alunos: AlunoChamada[];
 }
 
+/**
+ * Remonta a tela a partir do que ficou guardado no aparelho.
+ *
+ * E o caminho de quem abre a Chamada sem sinal: o `GET` nao responde, mas a
+ * classe ja foi carregada antes e o instantaneo continua aqui. Sem isto, a tela
+ * mostraria "não foi possível carregar" para uma chamada que esta inteira no
+ * aparelho, e o professor recomecaria do zero — no papel.
+ */
+function daMemoriaDoAparelho(local: ChamadaLocal): Chamada | null {
+  if (!local.cache) return null;
+  const marcado = new Map(local.marcas.map((m) => [m.alunoId, m.presente]));
+  return {
+    classe: {
+      id: local.classeId,
+      nome: local.cache.classeNome,
+      faixa: local.cache.faixa,
+      congregacao: null,
+      professores: local.cache.professores.map((nome, i) => ({
+        id: -1 - i,
+        nome,
+        tratamento: null,
+      })),
+    },
+    data: local.data,
+    iniciada: local.marcas.length > 0,
+    alunos: local.cache.alunos.map((a) => ({
+      ...a,
+      presente: marcado.get(a.id) ?? null,
+    })),
+  };
+}
+
 /** Domingo mais recente, "YYYY-MM-DD" — o dia que a chamada quase sempre quer. */
 function domingoMaisRecente(): string {
   const d = new Date();
@@ -75,6 +128,12 @@ export default function ChamadaPage() {
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  /** Ha um pacote guardado no aparelho que ainda nao chegou ao servidor. */
+  const [naFila, setNaFila] = useState(false);
+  /** O servidor recusou de um jeito que insistir nao resolve. Exige acao. */
+  const [bloqueio, setBloqueio] = useState<string | null>(null);
+  /** A tela esta mostrando o que ficou guardado, e nao o que o servidor tem. */
+  const [semServidor, setSemServidor] = useState(false);
 
   // A data so e calculada no cliente: no servidor, em UTC, "hoje" pode ser
   // outro dia para quem esta em Pernambuco.
@@ -102,28 +161,74 @@ export default function ChamadaPage() {
       setCarregando(true);
       setErro(null);
       setAviso(null);
+      setBloqueio(null);
+      setSemServidor(false);
+      setNaFila(false);
+
+      // 1. O servidor, se der.
+      let doServidor: Chamada | null = null;
       try {
         const url = new URL("/api/chamada", window.location.origin);
         url.searchParams.set("classe", String(classeId));
         url.searchParams.set("data", data);
         const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const dados: Chamada = await res.json();
-        setChamada(dados);
+        doServidor = await res.json();
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+      }
+
+      // 2. O que estiver guardado neste aparelho.
+      const local = temBancoLocal()
+        ? await lerChamadaLocal(classeId, data).catch(() => undefined)
+        : undefined;
+
+      // Trocar de classe no meio da leitura do aparelho: sem esta conferencia,
+      // a busca antiga terminaria depois da nova e desenharia a classe errada.
+      if (controle.signal.aborted) return;
+
+      const pendente = !!local && local.estado !== "sincronizado";
+
+      const base = doServidor ?? (local ? daMemoriaDoAparelho(local) : null);
+      if (!base) {
+        setErro("Não foi possível carregar a chamada.");
+        setChamada(null);
+        setCarregando(false);
+        return;
+      }
+
+      setChamada(base);
+      setSemServidor(!doServidor);
+
+      /*
+       * Quem manda nas marcacoes: o aparelho, quando ha pendencia.
+       *
+       * O pacote guardado e mais novo que o do servidor por definicao — ele
+       * existe justamente porque ainda nao chegou la. Deixar o servidor vencer
+       * apagaria da tela a chamada que o professor fez no domingo sem sinal,
+       * e ele a refaria sem saber que ja estava feita.
+       *
+       * E o pacote entra INTEIRO: as marcacoes dele substituem as do servidor
+       * em vez de se somarem. Somando, um aluno desmarcado no aparelho voltaria
+       * marcado pela versao antiga do servidor.
+       */
+      if (pendente && local) {
+        setMarcas(new Map(local.marcas.map((m) => [m.alunoId, m.presente])));
+        const situacao = await situacaoDoEnvio(classeId, data);
+        if (controle.signal.aborted) return;
+        setNaFila(situacao.situacao === "aguardando" || situacao.situacao === "bloqueada");
+        if (situacao.situacao === "bloqueada") setBloqueio(situacao.motivo);
+      } else {
         setMarcas(
           new Map(
-            dados.alunos
+            base.alunos
               .filter((a) => a.presente !== null)
               .map((a) => [a.id, a.presente as boolean]),
           ),
         );
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        setErro("Não foi possível carregar a chamada.");
-        setChamada(null);
-      } finally {
-        setCarregando(false);
       }
+
+      setCarregando(false);
     })();
 
     return () => controle.abort();
@@ -153,29 +258,72 @@ export default function ChamadaPage() {
 
   async function salvar() {
     if (!chamada || salvando) return;
+
     setSalvando(true);
     setErro(null);
+    setAviso(null);
+    setBloqueio(null);
+
+    const classeId = chamada.classe.id;
+    const dia = chamada.data;
+    const presencas = [...marcas].map(([alunoId, presente]) => ({ alunoId, presente }));
+    const quantas = `${presencas.length} ${presencas.length === 1 ? "marcação" : "marcações"}`;
+
     try {
-      const res = await fetch("/api/chamada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          classeId: chamada.classe.id,
-          data: chamada.data,
-          presencas: [...marcas].map(([alunoId, presente]) => ({ alunoId, presente })),
-        }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const r = await res.json();
-      setAviso(`Chamada gravada — ${r.total} ${r.total === 1 ? "registro" : "registros"}.`);
-    } catch {
       /*
-       * TODO (Fase 06): em vez de avisar, enfileirar em lib/db/repositorio e
-       * deixar o motor de sincronizacao reenviar. A infraestrutura ja existe
-       * desde a Fase 01; falta so ligar o transporte.
+       * Sem IndexedDB nao ha onde guardar, e mentir seria pior do que avisar:
+       * aqui a gravacao volta a depender da rede, e a tela diz isso.
        */
+      if (!temBancoLocal()) {
+        const res = await fetch("/api/chamada", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ classeId, data: dia, presencas }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setAviso(`Chamada enviada — ${quantas}.`);
+        return;
+      }
+
+      // 1. Guardar. A partir daqui a chamada nao se perde mais.
+      await guardarChamada({
+        classeId,
+        data: dia,
+        marcas: presencas,
+        cache: {
+          classeNome: chamada.classe.nome,
+          faixa: chamada.classe.faixa,
+          professores: chamada.classe.professores.map((p) =>
+            [p.tratamento, p.nome].filter(Boolean).join(" "),
+          ),
+          alunos: chamada.alunos.map((a) => ({ id: a.id, nome: a.nome, nasc: a.nasc })),
+        },
+      });
+      setNaFila(true);
+
+      // 2. Tentar enviar agora. Se nao der, o motor continua tentando sozinho.
+      await sincronizar();
+
+      const situacao = await situacaoDoEnvio(classeId, dia);
+      if (situacao.situacao === "enviada") {
+        setNaFila(false);
+        setSemServidor(false);
+        setAviso(`Chamada gravada e enviada — ${quantas}.`);
+      } else if (situacao.situacao === "bloqueada") {
+        setBloqueio(situacao.motivo);
+      } else {
+        setAviso(
+          `Chamada guardada neste aparelho — ${quantas}. ` +
+            "Ela será enviada sozinha assim que houver conexão; pode fechar a tela.",
+        );
+      }
+    } catch (e) {
+      // So chega aqui o caminho sem IndexedDB: o outro nao lanca, porque
+      // gravar no aparelho e a parte que nao depende de nada externo.
+      console.error("[chamada] falha ao gravar:", e);
       setErro(
-        "Não foi possível enviar agora. Não feche esta tela — as marcações continuam aqui.",
+        "Não foi possível enviar agora, e este navegador não permite guardar no aparelho. " +
+          "Não feche esta tela — as marcações continuam aqui.",
       );
     } finally {
       setSalvando(false);
@@ -208,6 +356,32 @@ export default function ChamadaPage() {
       </CabecalhoModulo>
 
       {erro && <EstadoErro mensagem={erro} />}
+
+      {/*
+        O bloqueio vem antes de tudo porque e o unico aviso desta tela que pede
+        uma acao de quem esta lendo. Os outros informam; este e uma tarefa.
+      */}
+      {bloqueio && (
+        <Alert tipo="alerta" titulo="A chamada está guardada, mas o envio foi recusado" className="mb-3">
+          {bloqueio} A chamada continua salva neste aparelho e sobe sozinha assim
+          que isso for resolvido — nada foi perdido.
+        </Alert>
+      )}
+
+      {semServidor && chamada && (
+        <Alert tipo="info" className="mb-3">
+          Sem conexão com o servidor. Esta é a última versão desta chamada
+          guardada no aparelho — dá para marcar e gravar normalmente.
+        </Alert>
+      )}
+
+      {naFila && !bloqueio && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-gold-400/25 bg-gold-400/10 px-4 py-2.5 text-[0.82rem] text-gold-100">
+          <CloudOff className="h-4 w-4 shrink-0" />
+          Guardada no aparelho, aguardando envio.
+        </div>
+      )}
+
       {aviso && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-2.5 text-[0.82rem] text-emerald-200">
           <Check className="h-4 w-4 shrink-0" />

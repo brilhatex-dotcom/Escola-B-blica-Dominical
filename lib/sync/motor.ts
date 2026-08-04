@@ -1,17 +1,19 @@
 import { db } from "@/lib/db/local";
 import { confirmarEnvio } from "@/lib/db/repositorio";
 import type { ItemFila } from "@/lib/db/schema";
+import { ehErroPermanente } from "./erros";
 
 /**
  * Motor de sincronizacao.
  *
- * Esvazia a fila do banco local contra o servidor. Nesta fase o TRANSPORTE
- * ainda nao existe — as rotas de API entram na Fase 05 —, entao ele e injetado
- * de fora, por `configurarTransporte`. O motor cuida do que e dificil e nao
- * muda: ordem, repeticao, recuo progressivo e o que fazer quando falha.
+ * Esvazia a fila do banco local contra o servidor. O TRANSPORTE — quem de fato
+ * fala com a rede — e injetado de fora, por `configurarTransporte`
+ * (lib/sync/transporte.ts monta o de verdade; um teste monta um de mentira). O
+ * motor cuida do que e dificil e nao muda: ordem, repeticao, recuo progressivo
+ * e o que fazer quando falha.
  *
  * Sem transporte configurado, o motor fica parado em vez de dar erro: a fila
- * continua enchendo normalmente e sobe inteira quando as rotas existirem.
+ * continua enchendo normalmente e sobe inteira quando alguem o configurar.
  */
 
 export type Transporte = (item: ItemFila) => Promise<{ idRemoto?: number }>;
@@ -23,9 +25,15 @@ export function configurarTransporte(fn: Transporte | null): void {
   transporte = fn;
 }
 
-export type EstadoMotor = "ocioso" | "sincronizando" | "offline" | "erro";
+export type EstadoMotor =
+  | "ocioso"
+  | "sincronizando"
+  | "offline"
+  | "erro"
+  /** Ha item que o servidor recusa e reenviar nao resolve. Ver lib/sync/erros. */
+  | "bloqueado";
 
-type Ouvinte = (estado: EstadoMotor, pendentes: number) => void;
+type Ouvinte = (estado: EstadoMotor, pendentes: number, motivo?: string) => void;
 const ouvintes = new Set<Ouvinte>();
 
 export function aoMudar(fn: Ouvinte): () => void {
@@ -33,8 +41,8 @@ export function aoMudar(fn: Ouvinte): () => void {
   return () => ouvintes.delete(fn);
 }
 
-function anunciar(estado: EstadoMotor, pendentes: number) {
-  for (const fn of ouvintes) fn(estado, pendentes);
+function anunciar(estado: EstadoMotor, pendentes: number, motivo?: string) {
+  for (const fn of ouvintes) fn(estado, pendentes, motivo);
 }
 
 /**
@@ -61,6 +69,7 @@ export async function sincronizar(): Promise<{
   enviados: number;
   restantes: number;
   estado: EstadoMotor;
+  motivo?: string;
 }> {
   const banco = db();
 
@@ -83,6 +92,7 @@ export async function sincronizar(): Promise<{
   rodando = true;
   let enviados = 0;
   let estado: EstadoMotor = "ocioso";
+  let motivo: string | undefined;
 
   try {
     anunciar("sincronizando", await banco.fila.count());
@@ -90,9 +100,32 @@ export async function sincronizar(): Promise<{
     const itens = await banco.fila.orderBy("criadoEm").toArray();
 
     for (const item of itens) {
+      /*
+       * Item bloqueado nem chega a ser enviado.
+       *
+       * O servidor ja disse que recusa (senha herdada, por exemplo) e vai
+       * recusar de novo. Sair daqui SEM tentar e o ponto: e a diferenca entre
+       * uma requisicao inutil a cada 30 segundos a manha inteira e nenhuma.
+       *
+       * E `break`, e nao `continue`, pela mesma razao de sempre: pular o item
+       * enviaria alteracoes que dependem dele.
+       */
+      if (item.bloqueado) {
+        estado = "bloqueado";
+        motivo = item.ultimoErro;
+        break;
+      }
+
       const agora = Date.now();
-      // Item que falhou ha pouco ainda esta de castigo.
-      if (item.tentativas > 0 && agora - item.criadoEm < esperaDaTentativa(item.tentativas)) {
+      /*
+       * Item que falhou ha pouco ainda esta de castigo — e o castigo conta da
+       * ULTIMA TENTATIVA, nao da criacao. Medindo da criacao, uma chamada presa
+       * ha uma hora ja passou de qualquer espera calculavel e voltaria a ser
+       * tentada em toda passada do motor, que e exatamente o martelo que o
+       * recuo progressivo existe para evitar.
+       */
+      const desde = item.ultimaTentativa ?? item.criadoEm;
+      if (item.tentativas > 0 && agora - desde < esperaDaTentativa(item.tentativas)) {
         continue;
       }
 
@@ -102,11 +135,22 @@ export async function sincronizar(): Promise<{
         await confirmarEnvio(item.tabela, item.uid, idRemoto);
         enviados++;
       } catch (erro) {
+        const permanente = ehErroPermanente(erro);
+        const mensagem = erro instanceof Error ? erro.message : String(erro);
+
         await banco.fila.update(item.id!, {
           tentativas: item.tentativas + 1,
-          ultimoErro: erro instanceof Error ? erro.message : String(erro),
+          ultimaTentativa: Date.now(),
+          ultimoErro: mensagem,
+          bloqueado: permanente,
         });
-        estado = "erro";
+
+        if (permanente) {
+          estado = "bloqueado";
+          motivo = mensagem;
+        } else {
+          estado = "erro";
+        }
         break; // ver o comentario do bloco acima: parar e proposital
       }
     }
@@ -115,10 +159,34 @@ export async function sincronizar(): Promise<{
   }
 
   const restantes = await banco.fila.count();
-  if (estado !== "erro") estado = restantes > 0 ? "erro" : "ocioso";
-  anunciar(estado, restantes);
+  if (estado === "ocioso" && restantes > 0) estado = "erro";
+  anunciar(estado, restantes, motivo);
 
-  return { enviados, restantes, estado };
+  return { enviados, restantes, estado, motivo };
+}
+
+/**
+ * Destrava a fila e manda tentar de novo.
+ *
+ * Chamada quando a causa do bloqueio deixa de existir — hoje, quando alguem
+ * troca a senha herdada. Sem isto, a chamada ficaria parada para sempre mesmo
+ * depois de resolvido o que a impedia de subir, e a unica saida seria fechar e
+ * reabrir o aplicativo sem saber por que.
+ *
+ * As tentativas voltam a zero junto: manter o recuo de um bloqueio antigo
+ * faria a primeira tentativa da fila liberada esperar cinco minutos a toa.
+ */
+export async function liberarBloqueios(): Promise<number> {
+  const banco = db();
+  const presos = await banco.fila.filter((i) => i.bloqueado === true).toArray();
+  for (const item of presos) {
+    await banco.fila.update(item.id!, {
+      bloqueado: false,
+      tentativas: 0,
+      ultimaTentativa: undefined,
+    });
+  }
+  return presos.length;
 }
 
 /**

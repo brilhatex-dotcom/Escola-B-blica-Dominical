@@ -1,4 +1,4 @@
-# Continuação — Fase 07: ligar a fila offline na Chamada
+# Continuação — Fase 08: otimização e acessibilidade
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -37,49 +37,35 @@ Substitui um sistema antigo em Google Apps Script.
 | 04 | Dashboard completo |
 | 05 | Pessoas e cargos normalizados, API sobre o Postgres, 9 módulos |
 | 06 | Autenticação real (bcrypt, JWT em cookie httpOnly, rotas protegidas) |
+| 07 | **Fila offline ligada na Chamada** — grava no aparelho, enfileira e reenvia sozinha |
+
+## O que a Fase 07 entregou (para não refazer)
+
+O botão "Gravar chamada" não fala mais com o servidor: escreve no IndexedDB e
+enfileira. Quem envia é o motor (`lib/sync/motor.ts`), pelo transporte novo
+(`lib/sync/transporte.ts`), ligado no navegador pelo
+`components/sync/SincronizacaoProvider.tsx` (montado no layout do painel).
+
+- A chamada vai **inteira, num pacote** (tabela local `chamadas`,
+  `salvarPacote` no repositório) — nunca uma requisição por aluno.
+- Os **três estados** por aluno atravessam a fila: quem não foi marcado
+  simplesmente não entra no pacote.
+- `403` da senha herdada é **erro que não adianta repetir**: o item fica parado
+  e visível em vez de martelar o servidor, e sobe quando a pessoa troca a senha
+  (`liberarBloqueios`).
+- `npm run verificar:offline` — **54 asserções**, todas passando.
+
+### O que ficou conhecido e não foi feito
+
+- Abrir uma classe pela **primeira vez** ainda precisa de servidor (a lista de
+  alunos vem da API). Depois disso a tela abre sem sinal.
+- Desmarcar aluno **já gravado no servidor** não apaga o registro de lá — a rota
+  não tem remoção, e criar uma mexeria em dado do sistema antigo.
 
 ## A PRÓXIMA ETAPA — o que fazer
 
-**Ligar a fila de sincronização offline na Chamada.** A infraestrutura existe
-desde a Fase 01 e nunca foi conectada.
-
-Hoje, em `app/dashboard/chamada/page.tsx`, quando o `POST /api/chamada` falha, a
-tela apenas mostra *"Não foi possível enviar agora"* e mantém as marcações em
-memória — se a pessoa fechar a aba, a chamada se perde. Há um `TODO` marcando o
-ponto exato.
-
-Precisa passar a: gravar no IndexedDB, enfileirar, e deixar o motor reenviar
-quando a internet voltar.
-
-### Peças que já existem e devem ser usadas
-
-| Arquivo | O que oferece |
-|---|---|
-| `lib/db/local.ts` | banco Dexie; índice composto `[classeId+data]` |
-| `lib/db/repositorio.ts` | `salvar` · `remover` · `receberDoServidor` · `confirmarEnvio` — gravam tabela e fila na MESMA transação |
-| `lib/db/schema.ts` | tipos locais; `uid` local imutável vs `idRemoto` |
-| `lib/sync/motor.ts` | `configurarTransporte` · `sincronizar` · `iniciarSincronizacaoAutomatica` · `aoMudar` |
-| `components/dashboard/SystemStatus.tsx` | já lê o motor e mostra online/offline/sincronizando |
-
-O motor **para no primeiro erro** de propósito (a ordem importa: "criar aluno"
-antes de "marcar presença desse aluno") e tem recuo progressivo de 2s até 5min.
-
-### Pontos de atenção
-
-- O transporte precisa mandar a chamada **inteira num pacote**, não uma
-  requisição por aluno — a rota `POST /api/chamada` já é transacional e
-  idempotente (reenviar atualiza em vez de duplicar).
-- A chamada tem **três** estados por aluno: presente, ausente e **não marcado**.
-  Não colapsar para dois.
-- A rota exige sessão e recusa quem ainda usa a senha herdada (`403` com
-  `precisaTrocar: true`). O motor precisa tratar isso como **erro que não
-  adianta repetir** — reenviar em laço não resolve e só gasta bateria.
-- `npm run verificar:offline` roda 20 asserções da camada offline no Node.
-
-### Depois disso (não fazer sem aprovação)
-
-Fase 07 — otimização: imagens, revalidação, `loading.tsx` por rota, e revisão
-de acessibilidade.
+**Fase 08 — otimização e acessibilidade.** Imagens, revalidação, `loading.tsx`
+por rota e uma revisão de acessibilidade em todas as telas.
 
 ## Pendências do usuário (não são código)
 

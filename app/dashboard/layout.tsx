@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AvisoDeSeguranca } from "@/components/dashboard/AvisoDeSeguranca";
 import { Header } from "@/components/dashboard/Header";
 import { Sidebar } from "@/components/dashboard/Sidebar";
+import { SincronizacaoProvider } from "@/components/sync/SincronizacaoProvider";
 import { carregarPainel } from "@/lib/dashboard/dados";
 import type { Usuario } from "@/lib/dashboard/tipos";
 
@@ -76,6 +77,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       className="relative min-h-[100dvh] bg-brand-990"
       style={{ ["--lateral" as string]: largura }}
     >
+      {/*
+        O motor de sincronizacao vive no layout, e nao numa tela: a fila precisa
+        continuar subindo depois que o professor sai da Chamada.
+      */}
+      <SincronizacaoProvider />
       {/* ---------------- Ambiente ----------------
         Duas luzes muito difusas, fixas. Sao o que impede o painel de virar um
         retangulo azul chapado — a mesma profundidade do card de login, sem

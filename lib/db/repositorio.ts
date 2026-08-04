@@ -30,6 +30,7 @@ function tabelaDe(nome: NomeTabela): Table<Base, string> {
     alunos: banco.alunos,
     frequencias: banco.frequencias,
     visitantes: banco.visitantes,
+    chamadas: banco.chamadas,
   } as const;
   return mapa[nome] as unknown as Table<Base, string>;
 }
@@ -59,6 +60,71 @@ export async function salvar<T extends Base>(
     } as Base;
 
     await tabela.put(registro);
+    await banco.fila.add({
+      tabela: nome,
+      operacao,
+      uid,
+      dados: registro,
+      criadoEm: Date.now(),
+      tentativas: 0,
+    });
+
+    return uid;
+  });
+}
+
+/**
+ * Grava um INSTANTANEO completo e deixa UM item na fila para ele.
+ *
+ * ============================================================================
+ * A DIFERENCA PARA `salvar`, QUE E O PONTO DESTA FUNCAO
+ *
+ * `salvar` enfileira INTENCOES: "mudei o nome", depois "mudei o telefone". As
+ * duas precisam subir, na ordem, porque cada uma diz o que mudou.
+ *
+ * A chamada nao e assim. Cada gravacao e a lista inteira da classe naquele
+ * domingo — o estado completo, e nao um pedaco. Uma gravacao nova torna a
+ * anterior irrelevante: se o professor marca dez alunos, grava sem sinal,
+ * marca mais cinco e grava de novo, subir os dois pacotes faria o servidor
+ * receber a versao velha e logo em seguida a nova, por nada.
+ *
+ * Entao o pacote novo SUBSTITUI o antigo na fila. Na mesma transacao, como
+ * sempre: com duas operacoes separadas, um app fechado no meio deixaria a
+ * chamada gravada e sem nada na fila — ela apareceria certa na tela e nunca
+ * chegaria a secretaria.
+ * ============================================================================
+ */
+export async function salvarPacote<T extends Base>(
+  nome: NomeTabela,
+  uid: string,
+  dados: Omit<T, "uid" | "estado" | "alteradoEm">,
+): Promise<string> {
+  const banco = db();
+  const tabela = tabelaDe(nome);
+
+  return banco.transaction("rw", [tabela, banco.fila], async () => {
+    const existente = await tabela.get(uid);
+    const operacao: Operacao = existente?.idRemoto ? "atualizar" : "criar";
+
+    const registro = {
+      // O instantaneo SUBSTITUI o conteudo anterior — nao ha `...existente`
+      // aqui de proposito, senao um aluno desmarcado continuaria marcado pelo
+      // resto que sobrou do pacote velho. So o `idRemoto` atravessa, porque
+      // e do servidor e nao do instantaneo.
+      ...(existente?.idRemoto !== undefined ? { idRemoto: existente.idRemoto } : {}),
+      ...dados,
+      uid,
+      estado: "pendente" as const,
+      alteradoEm: Date.now(),
+    } as Base;
+
+    await tabela.put(registro);
+
+    // Fora o pacote velho — inclusive o que ja falhou e estava bloqueado, cuja
+    // causa (senha herdada, por exemplo) pode ter sido resolvida desde entao.
+    const anteriores = await banco.fila.where("uid").equals(uid).toArray();
+    await banco.fila.bulkDelete(anteriores.map((i) => i.id!).filter(Boolean));
+
     await banco.fila.add({
       tabela: nome,
       operacao,

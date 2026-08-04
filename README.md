@@ -25,7 +25,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 05 | Chamada, Alunos, Professores, Classes, Visitantes | pronto |
 | 05 | Relatórios, Agenda, Configurações | pronto |
 | 06 | Autenticação real (login, sessão, proteção das rotas) | pronto |
-| 06 | Sincronização offline ligada na Chamada | **próxima etapa** |
+| 07 | Sincronização offline ligada na Chamada | pronto |
 
 ---
 
@@ -352,8 +352,12 @@ quando der.
 |---|---|
 | `lib/db/schema.ts` | tipos das tabelas locais e da fila |
 | `lib/db/local.ts` | banco Dexie/IndexedDB e índices |
-| `lib/db/repositorio.ts` | `salvar` · `remover` · `receberDoServidor` · `confirmarEnvio` |
+| `lib/db/repositorio.ts` | `salvar` · `salvarPacote` · `remover` · `receberDoServidor` · `confirmarEnvio` |
+| `lib/db/chamadas.ts` | a chamada no aparelho: guardar, ler, saber se subiu |
 | `lib/sync/motor.ts` | esvazia a fila contra o servidor |
+| `lib/sync/transporte.ts` | quem de fato fala com `/api/chamada` |
+| `lib/sync/erros.ts` | a diferença entre "tente de novo" e "não adianta" |
+| `components/sync/SincronizacaoProvider.tsx` | apresenta o motor ao transporte, no navegador |
 
 ### `uid` local e `idRemoto`
 
@@ -383,11 +387,84 @@ acabou de falhar — "marcar presença" antes de "criar aluno". A espera entre
 tentativas cresce (2s, 4s, 8s… até 5 min): sem isso, um servidor fora do ar vira
 um martelo que só gasta bateria e dados de quem está na igreja.
 
-O **transporte** é injetado de fora (`configurarTransporte`), porque as rotas de
-API só existem na Fase 05. Sem transporte o motor fica parado em vez de dar
-erro: a fila enche normalmente e sobe inteira quando as rotas existirem.
+O **transporte** é injetado de fora (`configurarTransporte`) em vez de estar
+escrito dentro do motor. É por isso que o motor pode ser exercitado no Node, sem
+rede nenhuma, com um servidor de mentira que recusa, aceita ou some no meio.
 
-Verificado com `npm run verificar:offline`: 20 asserções, todas passando.
+### A Chamada, ligada na fila
+
+O botão "Gravar chamada" **não fala com o servidor**. Ele escreve no IndexedDB e
+enfileira; quem fala com o servidor é o motor, que insiste sozinho até
+conseguir.
+
+A ordem é o ponto. Enviando primeiro, existe uma janela — do toque no botão até
+a resposta chegar — em que a chamada só existe na memória da aba. É ali que ela
+se perdia: sinal que cai no meio, tela que bloqueia e o sistema descarta a
+página, alguém que fecha a aba sem esperar. Escrevendo primeiro, essa janela não
+existe; no pior caso a chamada está guardada e ainda não subiu, que é uma
+situação com conserto.
+
+### A chamada é UM pacote na fila, não trinta
+
+O resto do banco local enfileira **intenções** ("mudei o nome", depois "mudei o
+telefone") e todas precisam subir, na ordem. A chamada não é assim: cada
+gravação é a lista inteira da classe naquele domingo — o estado completo. Uma
+gravação nova torna a anterior irrelevante.
+
+Por isso existe `salvarPacote`, ao lado de `salvar`: o pacote novo **substitui**
+o antigo na fila, na mesma transação. Sem isso, marcar dez alunos, gravar sem
+sinal, marcar mais cinco e gravar de novo mandaria a versão velha e logo em
+seguida a nova, à toa.
+
+A rota `POST /api/chamada` grava a classe toda numa transação e é idempotente,
+então reenviar o mesmo pacote atualiza em vez de duplicar. É o que permite ao
+motor insistir sem medo de dobrar a presença de ninguém.
+
+**Os três estados atravessam a fila.** `marcas` só carrega quem foi marcado;
+quem não está na lista continua sem registro nenhum no banco, que é o terceiro
+estado. Mandar `presente: false` para eles transformaria chamada inacabada em
+faltas — e faltas inventadas entram no relatório do mês como se fossem reais.
+
+### Erro que não adianta repetir
+
+O motor foi feito para insistir, e insistir é o certo para rede que cai. Mas há
+recusas que não passam sozinhas — a principal é o `403` de quem ainda usa a
+senha herdada: o servidor vai recusar hoje, daqui a uma hora e amanhã, até a
+pessoa trocar a senha. Insistir aí é uma requisição a cada 30 segundos, a manhã
+inteira, sem uma única chance de sucesso.
+
+`ErroPermanente` marca esses casos (401, 403, 400, 422). O item **não é
+descartado** — apagar a chamada de domingo por causa de uma senha seria o pior
+resultado possível. Ele fica parado, contado no indicador do painel, e o motor
+nem chega a tentar enviá-lo. Quando a pessoa troca a senha,
+`liberarBloqueios()` destrava a fila e a chamada sobe.
+
+O reconhecimento é por uma marca no próprio objeto, e não por `instanceof`: o
+mesmo arquivo pode ser carregado duas vezes num processo (aconteceu ao rodar o
+motor no Node, onde o script de verificação é ESM e o portal é CommonJS), e duas
+classes de mesmo nome fariam o motor tratar "troque a senha" como falha de rede.
+
+### O indicador deixou de chamar fila cheia de "falha"
+
+Antes, qualquer coisa na fila pintava o `SystemStatus` de vermelho com "Falha ao
+enviar" — inclusive um item que estava apenas esperando o próximo intervalo.
+Agora são três coisas diferentes: **Reenviando…** (dourado, passa sozinho),
+**Envio bloqueado** (vermelho, alguém precisa agir, e a tela diz o quê) e
+**Trabalhando offline**. Vermelho para tudo ensina a ignorar o vermelho.
+
+### O que ainda depende de conexão
+
+Abrir a Chamada numa classe pela **primeira vez** precisa de servidor: a lista de
+alunos vem de `/api/chamada`. Depois disso, a classe fica guardada no aparelho e
+a tela abre sem sinal, com a última lista carregada.
+
+Desmarcar um aluno **já gravado no servidor** não apaga o registro de lá — a rota
+não tem remoção, e inventar uma aqui mexeria em dado do sistema antigo sem
+autorização. Marcar como ausente funciona normalmente.
+
+Verificado com `npm run verificar:offline`: **54 asserções**, todas passando,
+inclusive o domingo inteiro — sinal cai, chamada é feita, aplicativo é fechado,
+sinal volta e a chamada sobe sozinha, numa requisição só.
 
 ---
 
@@ -798,14 +875,14 @@ lib/
   media.ts                o vídeo: recorte, tempos e a conta da desaceleração
   brand.ts                caminhos e regras de uso da logomarca
   verses.ts               os 51 versículos, vindos do export da igreja
-  db/                     banco local (Dexie/IndexedDB) e fila
-  sync/                   motor de sincronização
+  db/                     banco local (Dexie/IndexedDB), fila e a chamada
+  sync/                   motor, transporte e os erros da sincronização
   dashboard/              tipos, dados, formatação pt-BR e o menu
 public/
   sw.js                   Service Worker
   icons/                  ícones do aplicativo instalado
 scripts/
-  verificar-offline.mts   20 asserções da camada offline
+  verificar-offline.mts   54 asserções da camada offline
   verificar-pwa.mjs       15 verificações num navegador de verdade
   verificar-dashboard.mjs 46 checagens em 4 tamanhos de tela
 prisma/                   schema + importador

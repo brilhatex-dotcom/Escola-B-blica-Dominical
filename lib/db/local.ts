@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from "dexie";
 import type {
   Aluno,
+  ChamadaLocal,
   Classe,
   Config,
   Congregacao,
@@ -29,6 +30,7 @@ export class BancoLocal extends Dexie {
   alunos!: EntityTable<Aluno, "uid">;
   frequencias!: EntityTable<Frequencia, "uid">;
   visitantes!: EntityTable<Visitante, "uid">;
+  chamadas!: EntityTable<ChamadaLocal, "uid">;
   fila!: EntityTable<ItemFila, "id">;
   config!: EntityTable<Config, "chave">;
 
@@ -45,6 +47,18 @@ export class BancoLocal extends Dexie {
       visitantes: "uid, idRemoto, classeId, data, estado",
       fila: "++id, tabela, uid, criadoEm",
       config: "chave",
+    });
+
+    /*
+     * Versao 2 — a chamada como pacote.
+     *
+     * Acrescentar uma tabela exige uma versao nova: o IndexedDB de quem ja usa
+     * o portal foi criado com a versao 1 e nao tem esta store. Declarar so a
+     * tabela nova e proposital — o Dexie mantem as anteriores e faz o upgrade
+     * sozinho, sem tocar no que ja esta gravado no aparelho.
+     */
+    this.version(2).stores({
+      chamadas: "uid, [classeId+data], data, estado",
     });
   }
 }
@@ -105,7 +119,16 @@ export async function limparBancoLocal(): Promise<void> {
   const banco = db();
   await banco.transaction(
     "rw",
-    [banco.congregacoes, banco.classes, banco.alunos, banco.frequencias, banco.visitantes, banco.fila, banco.config],
+    [
+      banco.congregacoes,
+      banco.classes,
+      banco.alunos,
+      banco.frequencias,
+      banco.visitantes,
+      banco.chamadas,
+      banco.fila,
+      banco.config,
+    ],
     async () => {
       await Promise.all([
         banco.congregacoes.clear(),
@@ -113,6 +136,7 @@ export async function limparBancoLocal(): Promise<void> {
         banco.alunos.clear(),
         banco.frequencias.clear(),
         banco.visitantes.clear(),
+        banco.chamadas.clear(),
         banco.fila.clear(),
         banco.config.clear(),
       ]);
@@ -130,6 +154,7 @@ export async function pendencias(): Promise<Record<Tabela | "total", number>> {
     alunos: 0,
     frequencias: 0,
     visitantes: 0,
+    chamadas: 0,
     total: itens.length,
   } as Record<Tabela | "total", number>;
   for (const item of itens) contagem[item.tabela]++;

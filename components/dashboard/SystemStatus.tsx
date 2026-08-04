@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, CloudUpload, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Check, CloudUpload, RefreshCw, TriangleAlert, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { aoMudar, sincronizar, type EstadoMotor } from "@/lib/sync/motor";
 import { temBancoLocal } from "@/lib/db/local";
@@ -43,6 +43,7 @@ export function SystemStatus({ variante = "compacto", className }: SystemStatusP
   const [online, setOnline] = useState(true);
   const [estado, setEstado] = useState<EstadoMotor>("ocioso");
   const [pendentes, setPendentes] = useState(0);
+  const [motivo, setMotivo] = useState<string | null>(null);
   const [fase, setFase] = useState<Fase>("parado");
   const [ultimaSync, setUltimaSync] = useState<number | null>(null);
 
@@ -63,13 +64,15 @@ export function SystemStatus({ variante = "compacto", className }: SystemStatusP
       };
     }
 
-    const parar = aoMudar((novoEstado, restantes) => {
+    const parar = aoMudar((novoEstado, restantes, porQue) => {
       setEstado(novoEstado);
       setPendentes(restantes);
+      setMotivo(porQue ?? null);
     });
 
-    // Uma passada inicial: sem transporte configurado (as rotas de API entram
-    // na Fase 05) ela volta "ocioso" na hora, sem erro nem requisicao.
+    // Uma passada inicial. Se o transporte ainda nao tiver sido configurado
+    // (o SincronizacaoProvider monta no mesmo instante), ela volta "ocioso" na
+    // hora, sem erro nem requisicao — e o intervalo do motor pega a seguinte.
     void sincronizar();
 
     return () => {
@@ -110,19 +113,34 @@ export function SystemStatus({ variante = "compacto", className }: SystemStatusP
   const trabalhandoOffline = !online;
   const sincronizando = fase === "sincronizando";
 
+  /*
+   * "Bloqueado" tem cor propria, e nao a de erro.
+   *
+   * Falha de envio passa sozinha — o motor tenta de novo e o usuario nao
+   * precisa fazer nada. Bloqueio nao passa: alguem tem de agir (trocar a senha
+   * herdada, entrar de novo). Pintar os dois de vermelho ensinaria a ignorar os
+   * dois, e o unico que exige atencao e justamente o que ficaria escondido no
+   * meio dos falsos alarmes de rede instavel.
+   */
+  const bloqueado = !trabalhandoOffline && estado === "bloqueado";
+
   const cor = trabalhandoOffline
     ? { ponto: "bg-gold-400", texto: "text-gold-200", anel: "ring-gold-400/30", fundo: "bg-gold-400/10" }
-    : estado === "erro"
-      ? { ponto: "bg-flame-500", texto: "text-flame-400", anel: "ring-flame-500/30", fundo: "bg-flame-500/10" }
-      : { ponto: "bg-emerald-400", texto: "text-emerald-300", anel: "ring-emerald-400/25", fundo: "bg-emerald-500/10" };
+    : bloqueado
+      ? { ponto: "bg-flame-500", texto: "text-flame-400", anel: "ring-flame-500/40", fundo: "bg-flame-500/15" }
+      : estado === "erro"
+        ? { ponto: "bg-gold-400", texto: "text-gold-200", anel: "ring-gold-400/30", fundo: "bg-gold-400/10" }
+        : { ponto: "bg-emerald-400", texto: "text-emerald-300", anel: "ring-emerald-400/25", fundo: "bg-emerald-500/10" };
 
   const rotulo = trabalhandoOffline
     ? "Trabalhando offline"
-    : sincronizando
-      ? "Sincronizando…"
-      : estado === "erro"
-        ? "Falha ao enviar"
-        : "Online";
+    : bloqueado
+      ? "Envio bloqueado"
+      : sincronizando
+        ? "Sincronizando…"
+        : estado === "erro"
+          ? "Reenviando…"
+          : "Online";
 
   /* ---------------------------------------------------------------- *
    * Compacto — cabe no header, ao lado das notificacoes
@@ -176,6 +194,8 @@ export function SystemStatus({ variante = "compacto", className }: SystemStatusP
         <span className={cn("flex h-8 w-8 items-center justify-center rounded-xl ring-1", cor.fundo, cor.anel)}>
           {trabalhandoOffline ? (
             <WifiOff className={cn("h-4 w-4", cor.texto)} />
+          ) : bloqueado ? (
+            <TriangleAlert className={cn("h-4 w-4", cor.texto)} />
           ) : sincronizando ? (
             <RefreshCw className={cn("h-4 w-4 animate-spin", cor.texto)} />
           ) : (
@@ -191,6 +211,22 @@ export function SystemStatus({ variante = "compacto", className }: SystemStatusP
           </p>
         </div>
       </div>
+
+      {/*
+        O motivo do bloqueio, por extenso.
+        "Envio bloqueado" sozinho e uma parede: o professor le, nao tem o que
+        fazer com aquilo e conclui que o sistema quebrou. A frase completa diz o
+        que aconteceu e o que resolve.
+      */}
+      {bloqueado && motivo && (
+        <p className="mt-3 rounded-lg border border-flame-500/25 bg-flame-500/[0.07] px-3 py-2 text-[0.76rem] leading-relaxed text-flame-100/90">
+          {motivo}{" "}
+          <span className="text-brand-100/70">
+            O que está guardado no aparelho não se perde — sobe assim que isto for
+            resolvido.
+          </span>
+        </p>
+      )}
 
       {/*
         A frase que a spec pede, palavra por palavra. Ela e a diferenca entre o

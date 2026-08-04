@@ -7,6 +7,8 @@ import { Check, KeyRound, Loader2, Lock } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo } from "@/components/dashboard/PaginaModulo";
+import { temBancoLocal } from "@/lib/db/local";
+import { liberarBloqueios, sincronizar } from "@/lib/sync/motor";
 
 /**
  * Troca de senha.
@@ -55,6 +57,23 @@ export default function TrocarSenhaPage() {
         return;
       }
       setPronto(true);
+
+      /*
+       * O que ficou preso por causa da senha herdada sobe AGORA.
+       *
+       * Enquanto a senha antiga estava em uso, `POST /api/chamada` respondia
+       * 403 e o motor marcava os pacotes como bloqueados para nao martelar o
+       * servidor a manha inteira. Trocar a senha e exatamente o que desfaz essa
+       * condicao — e este e o unico instante em que o portal sabe disso. Sem
+       * liberar aqui, a chamada de domingo ficaria parada, com tudo ja
+       * resolvido, ate alguem fechar e reabrir o aplicativo sem entender por
+       * que.
+       */
+      if (temBancoLocal()) {
+        await liberarBloqueios();
+        void sincronizar();
+      }
+
       window.setTimeout(() => router.replace("/dashboard"), 1600);
     } catch {
       setErro("Sem resposta do servidor. Verifique a conexão.");
