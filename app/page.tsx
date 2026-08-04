@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { SplashScreen } from "@/components/splash/SplashScreen";
 import { LoginScreen } from "@/components/login/LoginScreen";
+import { TravaDeRolagem } from "@/components/system/TravaDeRolagem";
 import {
   DroneBackdrop,
   type BackdropPhase,
@@ -67,6 +68,9 @@ export default function Home() {
 
   return (
     <>
+      {/* Estas duas telas nao rolam; o Dashboard rola. Ver o componente. */}
+      <TravaDeRolagem />
+
       {/* Fundo persistente: atravessa a troca de telas sem desmontar */}
       <DroneBackdrop ref={backdrop} phase={backdropPhase} />
 

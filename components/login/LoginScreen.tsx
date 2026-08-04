@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { LoginCard } from "./LoginCard";
 import { AuthSuccessOverlay } from "./AuthSuccessOverlay";
@@ -18,7 +19,20 @@ import { SPLASH_TO_LOGIN_MS } from "@/lib/config";
  * botao Entrar nunca ficar inalcancavel.
  */
 export function LoginScreen() {
+  const router = useRouter();
   const [autenticado, setAutenticado] = useState<string | null>(null);
+
+  /*
+   * Adianta o carregamento do Dashboard enquanto o usuario digita.
+   *
+   * O selo de entrada dura 3s, e sem isso os 3s sao gastos no ar: so quando ele
+   * termina e que o navegador comeca a buscar o JavaScript do painel, e o
+   * usuario ve um segundo tempo de espera logo depois da animacao. Com o
+   * `prefetch` feito aqui, a troca de tela e imediata.
+   */
+  useEffect(() => {
+    router.prefetch("/dashboard");
+  }, [router]);
 
   return (
     <motion.main
@@ -50,19 +64,15 @@ export function LoginScreen() {
         {autenticado && (
           <AuthSuccessOverlay
             nome={autenticado}
-            onDone={() => {
-              /* ----------------------------------------------------------
-               * Aqui entra o Dashboard.
-               *
-               * A spec pediu apenas a experiencia inicial, entao a navegacao
-               * fica comentada de proposito — apontar para uma rota
-               * inexistente daria 404 logo depois de uma animacao bonita.
-               *
-               * Quando o painel existir:
-               *   const router = useRouter();   // next/navigation
-               *   router.replace("/dashboard");
-               * ---------------------------------------------------------- */
-            }}
+            /* ------------------------------------------------------------
+             * Terminado o selo de entrada, o Dashboard assume.
+             *
+             * `replace` e nao `push`: com `push`, o botao "voltar" do navegador
+             * traria de volta a tela de login com a sessao ja aberta — o que
+             * parece um sistema que "deslogou sozinho" e, num aparelho
+             * emprestado, e uma porta aberta para o proximo que pegar.
+             * ------------------------------------------------------------ */
+            onDone={() => router.replace("/dashboard")}
           />
         )}
       </AnimatePresence>

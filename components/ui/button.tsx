@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
+import { Slot, Slottable } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,18 @@ export const buttonVariants = cva(
     "font-medium transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-brand-990",
     "disabled:pointer-events-none disabled:opacity-55",
-    "select-none overflow-hidden",
+    /*
+     * `isolate` faz o botao criar o proprio contexto de empilhamento, e e o que
+     * permite as camadas decorativas usarem z-index negativo: elas ficam ACIMA
+     * do fundo do botao e ABAIXO do texto, sem escapar para tras dos elementos
+     * em volta.
+     *
+     * Isso substitui o antigo `<span>` que envolvia o conteudo so para
+     * carregar um `z-10`. Aquele span era o que quebrava o `asChild`: o Slot do
+     * Radix exige UM filho, e o span deixava o elemento do chamador enterrado
+     * dentro dele em vez de virar o proprio botao.
+     */
+    "select-none overflow-hidden isolate",
   ],
   {
     variants: {
@@ -64,16 +75,23 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
             {/* Camada dourada que sobe no hover */}
             <span
               aria-hidden="true"
-              className="absolute inset-0 rounded-xl bg-gradient-to-b from-gold-300 via-gold-400 to-gold-600 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+              className="absolute inset-0 -z-10 rounded-xl bg-gradient-to-b from-gold-300 via-gold-400 to-gold-600 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
             />
             {/* Reflexo que atravessa o botao no hover */}
             <span
               aria-hidden="true"
-              className="absolute inset-y-0 -left-full w-1/2 skew-x-[-18deg] bg-white/25 blur-md transition-all duration-700 group-hover:left-[140%]"
+              className="absolute inset-y-0 -left-full -z-10 w-1/2 skew-x-[-18deg] bg-white/25 blur-md transition-all duration-700 group-hover:left-[140%]"
             />
           </>
         )}
-        <span className="relative z-10 flex items-center gap-2.5">{children}</span>
+
+        {/*
+          `Slottable` marca QUAL destes filhos e o conteudo de verdade. Sem ele,
+          o Slot ve tres filhos (duas camadas decorativas e o conteudo) e falha
+          com "Expected a single React element child" — que era exatamente o
+          erro ao usar `<Button asChild><Link/></Button>`.
+        */}
+        {asChild ? <Slottable>{children}</Slottable> : children}
       </Comp>
     );
   },

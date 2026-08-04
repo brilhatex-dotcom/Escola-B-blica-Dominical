@@ -4,10 +4,12 @@
  * Ponto unico de importacao: `import { Button, Card, Input } from "@/components/ui"`.
  * Assim uma mudanca de arquivo nao obriga a caçar imports por todo o projeto.
  *
- * Sidebar e Menu NAO estao aqui de proposito. Eles dependem da navegacao e da
- * hierarquia de permissoes, que so ficam definidas na Fase 04 — construi-los
- * agora seria adivinhar, e adivinhacao em componente compartilhado e o tipo de
- * coisa que depois ninguem consegue mudar.
+ * Sidebar e Menu ficaram de fora ate a navegacao existir, e agora que ela
+ * existe eles moraram em `components/dashboard/` — nao aqui. O criterio e o que
+ * separa este diretorio do resto: aqui ficam pecas que nao sabem nada sobre o
+ * sistema (um `Button` serve a qualquer tela), enquanto a Sidebar conhece o
+ * MENU, as rotas e a rota ativa. Trazer isso para ca amarraria o Design System
+ * a navegacao do portal.
  */
 export { Button, buttonVariants, type ButtonProps } from "./button";
 export { Checkbox } from "./checkbox";

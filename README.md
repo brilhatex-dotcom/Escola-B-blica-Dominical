@@ -19,7 +19,9 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 01 | PWA instalável (manifesto, ícones, Service Worker) | pronta |
 | 01 | Camada offline (Dexie/IndexedDB + fila de sincronização) | pronta |
 | 01 | Design System base (`components/ui`) | pronto |
-| 04 | Dashboard, módulos, API, autenticação | **próxima fase** |
+| 04 | Dashboard Principal | pronto |
+| 05 | Módulos internos (Chamada, Alunos, Classes…) | **próxima fase** |
+| 05 | Rotas de API e autenticação real | próxima fase |
 
 O login **não autentica de verdade ainda** — a chamada está simulada, com o
 ponto exato de troca marcado em `components/login/LoginCard.tsx`.
@@ -60,6 +62,7 @@ npm run verificar:offline    # camada offline, no Node (fake-indexeddb)
 ```bash
 npm run build && npm start   # num terminal
 npm run verificar:pwa        # noutro — precisa de Chromium
+npm run verificar:dashboard  # idem; salva capturas em ./capturas
 ```
 
 O `verificar:pwa` abre um navegador de verdade e confere manifesto, Service
@@ -331,6 +334,96 @@ Verificado com `npm run verificar:offline`: 20 asserções, todas passando.
 
 ---
 
+## Dashboard
+
+`/dashboard` — cabeçalho fixo, menu lateral recolhível e área principal. O
+`AuthSuccessOverlay` do login finalmente aponta para uma tela de verdade.
+
+| Componente | O quê |
+|---|---|
+| `Header` | identidade, busca global, estado do sistema, menu do usuário |
+| `Sidebar` | menu — o mesmo componente serve à barra fixa e à gaveta do celular |
+| `SearchBar` | busca com `Ctrl/Cmd + K`, teclado e navegação |
+| `UserMenu` | nome, cargo, congregação e sair |
+| `SystemStatus` | online / offline / sincronizando |
+| `DashboardCard` | os quatro números do topo |
+| `ChartCard` | frequência mensal (Recharts) |
+| `SummaryCard` | resumo do domingo |
+| `RecentActivity` | linha do tempo das últimas ações |
+| `BirthdayCard` | aniversariantes |
+| `AgendaCard` | próximos culto, EBD e evento |
+
+### Uma porta só para os dados
+
+Nenhum componente tem número escrito dentro. Todos recebem os tipos de
+`lib/dashboard/tipos.ts`, e tudo entra por `carregarPainel()`, em
+`lib/dashboard/dados.ts`. Quando as rotas existirem, essa função passa a chamar
+`fetch("/api/painel")` e **nada mais muda** — um "323" digitado no meio do JSX
+parece inofensivo e vira caça ao tesouro na hora de ligar o banco.
+
+Os números de cadastro são os **reais** da igreja (323 alunos, 53 classes, 19
+usuários, vindos do export). O que é inventado são os números do dia — presentes,
+visitantes, atividades —, que só a chamada de domingo produz.
+
+### O estado do sistema não é demonstração
+
+Enquanto o resto do painel mostra exemplo, o `SystemStatus` é real: lê o
+`navigator.onLine` e o motor de sincronização da Fase 01, com a fila do
+IndexedDB de verdade. É o único indicador em que uma informação errada tem
+consequência — se ele disser "tudo enviado" com trinta presenças presas no
+celular, a secretaria fecha o relatório sem elas.
+
+Ele aparece duas vezes de propósito: em miniatura no cabeçalho, sempre visível
+("estou online?"), e por extenso no painel ("o que está acontecendo com os meus
+dados?"). São perguntas diferentes.
+
+### Tudo o que depende da hora é calculado no navegador
+
+Saudação, data por extenso, "hoje"/"amanhã" na agenda e o aniversariante do dia.
+O servidor roda em UTC, num data center; o usuário está em Pernambuco (UTC−3).
+Às 22h de um sábado em Recife o servidor já está no domingo — o painel diria
+"Bom dia, Domingo" para quem ainda está na noite de sábado. Renderizar isso no
+servidor também produziria divergência de hidratação, com o React descartando a
+árvore e a tela saltando no primeiro quadro.
+
+Por isso esses valores entram depois da montagem, sempre com o espaço
+**reservado** nas mesmas medidas — senão o título aparece do nada e empurra os
+quatro cartões para baixo justo quando a mão já está indo clicar.
+
+### Três séries, três formas
+
+No gráfico de frequência: **presentes** é área preenchida (a série principal),
+**matriculados** é linha tracejada (é o teto, um cadastro e não uma medição do
+domingo) e **visitantes** é linha fina (números uma ordem de grandeza menores;
+como área, sumiriam rente ao eixo).
+
+Empilhadas, a única conta que interessa à secretaria — "218 de 323" — teria de
+ser feita de cabeça, somando faixas coloridas.
+
+O Recharts entra por `dynamic(..., { ssr: false })`: pesa mais que todo o resto
+do painel somado e nada nele é necessário para a primeira leitura da tela.
+
+### Módulos que ainda não existem continuam navegáveis
+
+`app/dashboard/[...modulo]` responde "em construção" em vez de 404. Esconder os
+itens do menu deixaria o usuário sem ideia do que o sistema vai ter, e cada
+entrega pareceria um produto diferente; o 404 do Next, num sistema recém-instalado,
+é lido como defeito. A rota curinga sai sozinha — assim que
+`app/dashboard/alunos/page.tsx` existir, a rota específica vence.
+
+### No celular
+
+A barra lateral vira gaveta, os cartões passam a uma coluna e a busca ganha uma
+linha própria abaixo do cabeçalho. Espremer campo de busca, logo, sino e avatar
+em 360px produz alvos de toque menores que o mínimo utilizável, e o campo vira
+decorativo.
+
+Verificado com `npm run verificar:dashboard`: 46 checagens em 1920×1080,
+1366×768, 820×1180 e 390×844 — sem rolagem horizontal, sem erro de console, com
+o gráfico desenhado em todas.
+
+---
+
 ## Design System
 
 `components/ui/` — Button, Checkbox, Input, Badge, Alert, Skeleton, Card, Table,
@@ -340,10 +433,11 @@ Dialog. Importação por um ponto único:
 import { Button, Card, Input } from "@/components/ui";
 ```
 
-**Sidebar e Menu não estão aqui** de propósito: dependem da navegação e da
-hierarquia de permissões, que só ficam definidas na Fase 04. Construí-los agora
-seria adivinhar — e adivinhação em componente compartilhado é o tipo de coisa
-que depois ninguém consegue mudar.
+**Sidebar e Menu não estão aqui**, e sim em `components/dashboard/`. O critério
+é o que separa os dois diretórios: em `ui/` ficam peças que não sabem nada sobre
+o sistema (um `Button` serve a qualquer tela), enquanto a Sidebar conhece o menu,
+as rotas e a rota ativa. Trazê-la para cá amarraria o Design System à navegação
+do portal.
 
 O `Card` tem dois tons: `glass` (vidro fosco sobre foto ou vídeo, como o card de
 login) e `solido` (fundo chapado, onde o vidro não tem o que refratar e só
@@ -398,6 +492,10 @@ app/
   page.tsx                orquestra splash → login e hospeda o vídeo
   manifest.ts             manifesto do PWA
   globals.css             tokens do design system
+  dashboard/
+    layout.tsx            header + sidebar + gaveta (não remonta ao navegar)
+    page.tsx              o painel
+    [...modulo]/          "em construção" para o que ainda não existe
 components/
   brand/BrandMark         a logomarca oficial (+ selo claro)
   media/DroneBackdrop     o vídeo persistente: start / decelerate / freeze
@@ -406,6 +504,8 @@ components/
   login/                  LoginScreen, LoginCard, FormField, VerseOfTheDay,
                           AuthSuccessOverlay
   pwa/                    registro do Service Worker e troca de versão
+  dashboard/              os 11 componentes do painel
+  system/                 TravaDeRolagem (a abertura não rola; o painel sim)
   ui/                     Design System (Button, Card, Input, Table, Dialog…)
 lib/
   config.ts               ajustes da abertura
@@ -414,12 +514,14 @@ lib/
   verses.ts               os 51 versículos, vindos do export da igreja
   db/                     banco local (Dexie/IndexedDB) e fila
   sync/                   motor de sincronização
+  dashboard/              tipos, dados, formatação pt-BR e o menu
 public/
   sw.js                   Service Worker
   icons/                  ícones do aplicativo instalado
 scripts/
   verificar-offline.mts   20 asserções da camada offline
   verificar-pwa.mjs       15 verificações num navegador de verdade
+  verificar-dashboard.mjs 46 checagens em 4 tamanhos de tela
 prisma/                   schema + importador
 ```
 
@@ -449,15 +551,16 @@ API entrarem — `postinstall` já roda `prisma generate`.
 
 ## Próximos passos
 
-**Fase 04 — Dashboard.** Construir o painel e apontar o `onDone` do
-`AuthSuccessOverlay` para ele; com a navegação definida, aí sim entram Sidebar e
-Menu no Design System.
+**Fase 05 — módulos internos e API.** Chamada, Alunos, Professores, Classes,
+Visitantes, Relatórios, Agenda e Configurações. Cada `page.tsx` criado substitui
+automaticamente a tela de "em construção".
 
-Depois:
+Junto com eles:
 
-1. Ligar a autenticação real (`/api/auth/login`), conferindo o SHA-256 herdado
+1. As rotas de API e, com elas, o transporte do motor de sincronização
+   (`configurarTransporte`) — o motor já está pronto esperando.
+2. `carregarPainel()` passa a buscar do servidor em vez de devolver o exemplo.
+3. Ligar a autenticação real (`/api/auth/login`), conferindo o SHA-256 herdado
    da planilha e re-gravando em bcrypt/argon2 no primeiro login correto — assim
    a base migra sozinha, sem forçar ninguém a trocar de senha.
-2. Ler os versículos do banco em vez do arquivo estático.
-3. Fase 05: rotas de API e, com elas, o transporte do motor de sincronização
-   (`configurarTransporte`) — o motor já está pronto esperando.
+4. Ler os versículos do banco em vez do arquivo estático.

@@ -96,9 +96,24 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    /* Trava o scroll: as duas telas sao viewport-fixed. */
-    overflow: hidden;
+    /* Sem "puxar para atualizar" e sem repique no fim da lista: dentro de um
+       app instalado, esses gestos do navegador parecem defeito. */
     overscroll-behavior: none;
+  }
+
+  /* ------------------------------------------------------------------
+     Trava de rolagem.
+
+     A abertura e o login sao viewport-fixed: nada rola, e o `overflow`
+     travado evita que o dedo arraste a tela toda no celular.
+
+     O Dashboard e o oposto — ele PRECISA rolar. Por isso a trava deixou de
+     ser regra fixa do `body` e virou uma classe que a tela de entrada liga
+     ao montar e desliga ao sair (`components/system/TravaDeRolagem.tsx`).
+     ------------------------------------------------------------------ */
+  html.ebd-sem-rolagem,
+  html.ebd-sem-rolagem body {
+    overflow: hidden;
   }
 
   /* iOS: evita "pulo" da barra de endereco em 100vh */
