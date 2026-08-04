@@ -21,6 +21,7 @@ import { SPLASH_TO_LOGIN_MS } from "@/lib/config";
 export function LoginScreen() {
   const router = useRouter();
   const [autenticado, setAutenticado] = useState<string | null>(null);
+  const [precisaTrocar, setPrecisaTrocar] = useState(false);
 
   /*
    * Adianta o carregamento do Dashboard enquanto o usuario digita.
@@ -57,7 +58,12 @@ export function LoginScreen() {
       />
 
       <div className="relative z-10 flex h-full w-full items-center justify-center overflow-y-auto overscroll-contain px-4 py-8 sm:px-6 short:py-3 shorter:py-2">
-        <LoginCard onAuthenticated={(u) => setAutenticado(u)} />
+        <LoginCard
+          onAuthenticated={(u, trocar) => {
+            setPrecisaTrocar(trocar);
+            setAutenticado(u);
+          }}
+        />
       </div>
 
       <AnimatePresence>
@@ -72,7 +78,17 @@ export function LoginScreen() {
              * parece um sistema que "deslogou sozinho" e, num aparelho
              * emprestado, e uma porta aberta para o proximo que pegar.
              * ------------------------------------------------------------ */
-            onDone={() => router.replace("/dashboard")}
+            /*
+             * Quem entrou com a senha herdada vai direto para a troca.
+             *
+             * Nao e uma tela extra por capricho: as 19 contas do sistema antigo
+             * compartilham o mesmo hash, ou seja, a mesma senha. Deixar entrar
+             * sem trocar seria manter o sistema aberto a quem conhece uma senha
+             * que meia igreja sabe.
+             */
+            onDone={() =>
+              router.replace(precisaTrocar ? "/dashboard/trocar-senha" : "/dashboard")
+            }
           />
         )}
       </AnimatePresence>

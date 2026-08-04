@@ -24,10 +24,64 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 05 | Rotas de API sobre o Postgres | pronto |
 | 05 | Chamada, Alunos, Professores, Classes, Visitantes | pronto |
 | 05 | Relatórios, Agenda, Configurações | pronto |
-| 06 | Autenticação real e sincronização offline ligada | **próxima etapa** |
+| 06 | Autenticação real (login, sessão, proteção das rotas) | pronto |
+| 06 | Sincronização offline ligada na Chamada | **próxima etapa** |
 
-O login **não autentica de verdade ainda** — a chamada está simulada, com o
-ponto exato de troca marcado em `components/login/LoginCard.tsx`.
+---
+
+## Autenticação
+
+### O que herdamos, e por que é grave
+
+As 19 contas do sistema antigo têm **o mesmo hash SHA-256** — ou seja, **a mesma
+senha**. E SHA-256 puro, sem sal, é fraco por construção: foi feito para ser
+*rápido*, e é essa velocidade que permite testar bilhões de palpites por segundo
+numa placa de vídeo comum.
+
+### A migração acontece sozinha, sem ninguém perder acesso
+
+A regra da igreja é não alterar registro do sistema antigo, e ela é respeitada:
+nada é reescrito por conta própria. Quem troca é **a pessoa** — ao entrar com a
+senha herdada, o portal pede uma nova, e é a nova que é gravada em **bcrypt**
+(fator 12, ~250 ms por tentativa, com sal próprio em cada hash).
+
+Enquanto a senha herdada estiver em uso: **ler é liberado, gravar não**.
+Permitir gravar chamada com uma senha que meia igreja conhece é o mesmo que não
+ter autenticação.
+
+### Decisões que valem explicar
+
+| Decisão | Por quê |
+|---|---|
+| Mesma mensagem para "usuário não existe" e "senha errada" | Distinguir entrega a lista de logins válidos a quem estiver testando |
+| Verifica senha mesmo quando o login não existe | Sem isso, a resposta instantânea denuncia "este login não existe" apesar da mensagem idêntica |
+| `timingSafeEqual` na comparação | `a === b` para no primeiro caractere diferente, e a diferença de tempo é mensurável pela rede |
+| Cookie `httpOnly` em vez de `localStorage` | JavaScript não lê cookie `httpOnly`; um script de terceiro não leva a sessão embora |
+| JWT em vez de sessão no banco | Cada navegação seria uma ida ao Postgres, de todo aparelho, num domingo de manhã |
+| Validade de 8 horas | JWT não dá para revogar antes de expirar — 8h é um domingo, não os 30 dias comuns |
+| `sameSite: lax` | O cookie não viaja numa requisição disparada por outro site (defesa contra CSRF) |
+| Sair é `POST`, não `GET` | Um `GET` pode ser disparado por um `<img>` de qualquer site, deslogando alguém no meio da chamada |
+| A senha atual é pedida na troca, mesmo com sessão aberta | Sem isso, um celular desbloqueado em cima do banco permite tomar a conta |
+
+### Sem `AUTH_SECRET`, o portal continua aberto — e diz isso
+
+Não há valor padrão no código: um padrão seria idêntico a não ter segredo, com a
+agravante de parecer seguro. Enquanto a variável não existir no servidor, as
+rotas de escrita continuam liberadas (o mesmo grau de abertura de antes desta
+fase) e o painel exibe uma **tarja vermelha** de "Portal sem proteção".
+
+Trancar tudo seria pior: a igreja ficaria sem sistema, sem ninguém entender por
+quê e sem caminho de volta.
+
+```
+AUTH_SECRET   (mínimo 32 caracteres, aleatório)
+```
+
+Verificado com servidor de verdade, 13 cenários: senha errada, usuário
+inexistente, senha herdada, gravação bloqueada, troca recusada para a senha
+antiga e para só-números, troca aceita, hash virando `$2b$12$…`, gravação
+liberada, login com a senha nova, senha antiga deixando de funcionar, logout,
+gravação após logout e cookie forjado.
 
 ### Sobre a Landing Page
 

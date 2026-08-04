@@ -11,7 +11,8 @@ import { BrandMark } from "@/components/brand/BrandMark";
 import { APP_VERSION, ORG_NAME } from "@/lib/config";
 
 interface LoginCardProps {
-  onAuthenticated: (usuario: string) => void;
+  /** `precisaTrocar` chega `true` quando a senha ainda e a herdada da planilha. */
+  onAuthenticated: (usuario: string, precisaTrocar: boolean) => void;
 }
 
 /** Entrada escalonada dos blocos do card. */
@@ -48,26 +49,28 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
 
     setLoading(true);
     try {
-      /* ------------------------------------------------------------------
-       * AUTENTICACAO AINDA NAO LIGADA.
-       *
-       * A spec pediu somente as duas telas, entao aqui ha uma simulacao.
-       * Quando a rota existir, troque este bloco por:
-       *
-       *   const res = await fetch("/api/auth/login", {
-       *     method: "POST",
-       *     headers: { "Content-Type": "application/json" },
-       *     body: JSON.stringify({ login: usuario, senha, lembrar }),
-       *   });
-       *   if (!res.ok) { setErros({ geral: "Usuário ou senha inválidos." }); return; }
-       *
-       * Do lado do servidor, confira o SHA-256 herdado da planilha (campo
-       * `senha` do model Usuario) e, no primeiro login correto, re-grave o
-       * hash em bcrypt/argon2 — assim a base migra sozinha, sem forcar
-       * ninguem a trocar de senha.
-       * ------------------------------------------------------------------ */
-      await new Promise((r) => setTimeout(r, 1500));
-      onAuthenticated(usuario.trim());
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ login: usuario.trim(), senha }),
+      });
+      const dados = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        /*
+         * A mensagem do servidor e usada como veio.
+         *
+         * Ela e deliberadamente igual para "usuario nao existe" e "senha
+         * errada": distinguir os dois entrega a lista de logins validos a quem
+         * estiver testando. Trocar aqui por algo "mais util" desfaria isso.
+         */
+        setErros({ geral: dados.erro ?? "Não foi possível entrar." });
+        return;
+      }
+
+      onAuthenticated(dados.nome || usuario.trim(), Boolean(dados.precisaTrocar));
+    } catch {
+      setErros({ geral: "Sem resposta do servidor. Verifique a conexão." });
     } finally {
       setLoading(false);
     }

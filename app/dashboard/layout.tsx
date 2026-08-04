@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { AvisoDeSeguranca } from "@/components/dashboard/AvisoDeSeguranca";
 import { Header } from "@/components/dashboard/Header";
 import { Sidebar } from "@/components/dashboard/Sidebar";
 import { carregarPainel } from "@/lib/dashboard/dados";
@@ -161,6 +162,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         )}
 
         <main className="mx-auto w-full max-w-[110rem] px-4 pb-12 pt-6 sm:px-6 lg:px-8">
+          {/*
+            O aviso vive no LAYOUT, e nao na pagina do painel: o estado de
+            protecao do portal vale em toda tela, e quem entra direto em
+            /dashboard/chamada precisa ve-lo tanto quanto quem passa pelo painel.
+          */}
+          <AvisoDeSeguranca />
           {children}
         </main>
       </div>

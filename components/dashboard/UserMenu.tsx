@@ -141,8 +141,12 @@ export function UserMenu({ usuario, className }: UserMenuProps) {
                  * banco local NAO deve ser apagado aqui sem antes checar a
                  * fila, ou uma chamada ainda nao enviada iria embora.
                  */
-                onClick={() => {
+                onClick={async () => {
                   setAberto(false);
+                  // Encerra a sessao no SERVIDOR antes de navegar. Sem isto o
+                  // cookie continuaria valido: bastaria digitar /dashboard para
+                  // voltar, e "Sair" seria so uma troca de tela.
+                  await fetch("/api/auth/sair", { method: "POST" }).catch(() => {});
                   router.replace("/");
                 }}
                 className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[0.82rem] text-flame-400/90 transition-colors duration-200 hover:bg-flame-500/10 hover:text-flame-400"

@@ -1,0 +1,87 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { verificarSenha } from "@/lib/auth/senha";
+import { criarSessao, temSegredo } from "@/lib/auth/sessao";
+
+/**
+ * Entrada no sistema.
+ *
+ * ============================================================================
+ * A RESPOSTA É A MESMA PARA "USUÁRIO NÃO EXISTE" E "SENHA ERRADA"
+ *
+ * Distinguir os dois entrega a lista de logins válidos a quem estiver testando:
+ * "usuário não encontrado" confirma que aquele nome NÃO existe, e "senha
+ * incorreta" confirma que existe. Com isso se descobre quem tem conta antes de
+ * tentar qualquer senha.
+ *
+ * Pelo mesmo motivo, quando o usuário não existe o código ainda assim gasta o
+ * tempo de uma verificação de senha. Sem isso, a resposta instantânea denuncia
+ * "este login não existe" mesmo com a mensagem sendo idêntica.
+ * ============================================================================
+ */
+export const dynamic = "force-dynamic";
+
+/** Hash descartável, só para consumir o mesmo tempo quando o login não existe. */
+const HASH_FALSO = "$2b$12$0000000000000000000000u1KcFEGnJdMLo6RRuNhwOaCcAqDCLzS";
+
+export async function POST(req: Request) {
+  if (!temSegredo()) {
+    return NextResponse.json(
+      {
+        erro:
+          "A autenticação ainda não foi configurada neste servidor. " +
+          "Falta a variável AUTH_SECRET.",
+      },
+      { status: 503 },
+    );
+  }
+
+  let corpo: { login?: string; senha?: string };
+  try {
+    corpo = await req.json();
+  } catch {
+    return NextResponse.json({ erro: "Requisição inválida." }, { status: 400 });
+  }
+
+  const login = corpo.login?.trim() ?? "";
+  const senha = corpo.senha ?? "";
+  if (!login || !senha) {
+    return NextResponse.json({ erro: "Informe usuário e senha." }, { status: 400 });
+  }
+
+  try {
+    const usuario = await prisma.usuario.findUnique({ where: { login } });
+
+    const { ok, precisaTrocar } = await verificarSenha(
+      senha,
+      usuario?.senha ?? HASH_FALSO,
+    );
+
+    if (!usuario || !usuario.ativo || !ok) {
+      return NextResponse.json({ erro: "Usuário ou senha inválidos." }, { status: 401 });
+    }
+
+    await criarSessao({
+      id: usuario.id,
+      login: usuario.login,
+      nome: usuario.nome,
+      perfil: usuario.perfil,
+      congId: usuario.congId,
+      precisaTrocar,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      nome: usuario.nome,
+      perfil: usuario.perfil,
+      // A tela usa isto para levar direto à troca de senha em vez do painel.
+      precisaTrocar,
+    });
+  } catch (erro) {
+    console.error("[auth/login]", erro);
+    return NextResponse.json(
+      { erro: "Não foi possível entrar agora. Tente de novo em instantes." },
+      { status: 500 },
+    );
+  }
+}
