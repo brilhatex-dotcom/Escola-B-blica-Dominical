@@ -94,9 +94,40 @@ export default function DashboardPage() {
       */}
       {dados.origem === "exemplo" && (
         <Alert tipo="alerta" titulo="Dados de demonstração" className="mb-4">
-          O banco não respondeu, então estes números são de exemplo — não são a
-          chamada de hoje. Assim que a conexão voltar, o painel passa a mostrar
-          os dados reais sozinho.
+          <p>
+            Estes números são de exemplo — <strong>não são a chamada de hoje</strong>.
+          </p>
+          {/*
+            O QUE FAZER, e nao so o que aconteceu.
+
+            "O banco não respondeu" e verdadeiro e inutil: as duas causas
+            possiveis se resolvem em lugares diferentes — uma no painel da
+            Vercel, outra no SQL Editor do Neon. Sem distinguir, so resta
+            tentar as duas as cegas.
+          */}
+          {dados.causa === "sem-variavel" && (
+            <p className="mt-1.5">
+              O endereço do banco não foi encontrado. Confira, nas variáveis de
+              ambiente da Vercel, se existe alguma terminando em{" "}
+              <code className="rounded bg-white/8 px-1">DATABASE_URL</code> ou{" "}
+              <code className="rounded bg-white/8 px-1">POSTGRES_PRISMA_URL</code>.
+            </p>
+          )}
+          {dados.causa === "sem-tabelas" && (
+            <p className="mt-1.5">
+              O banco respondeu, mas as tabelas de pessoas e cargos ainda não
+              existem. Aplique{" "}
+              <code className="rounded bg-white/8 px-1">prisma/aplicar-fase-05.sql</code>{" "}
+              no SQL Editor do Neon — leva um minuto e pode ser feito com o
+              sistema no ar.
+            </p>
+          )}
+          {(dados.causa === "outro" || dados.causa === undefined) && (
+            <p className="mt-1.5">
+              A conexão com o banco falhou. Assim que ela voltar, o painel passa
+              a mostrar os dados reais sozinho.
+            </p>
+          )}
         </Alert>
       )}
 

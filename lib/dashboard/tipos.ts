@@ -175,6 +175,20 @@ export interface Usuario {
   foto: string | null;
 }
 
+/**
+ * Por que o painel caiu na demonstracao.
+ *
+ *   sem-variavel · a string de conexao nao foi encontrada nas variaveis de
+ *                  ambiente — resolve-se no painel da Vercel.
+ *   sem-tabelas  · o banco respondeu, mas as tabelas da Fase 05 ainda nao
+ *                  existem — resolve-se aplicando o SQL no Neon.
+ *   outro        · qualquer outra coisa; a mensagem tecnica fica no log.
+ *
+ * As duas primeiras pedem acoes em lugares diferentes. Um aviso que nao as
+ * distingue obriga a tentar as duas as cegas.
+ */
+export type CausaDaDemonstracao = "sem-variavel" | "sem-tabelas" | "outro";
+
 export interface DadosPainel {
   /**
    * De onde vieram estes numeros.
@@ -184,6 +198,10 @@ export interface DadosPainel {
    * vazio: a secretaria fecha o relatorio do domingo com dados inventados.
    */
   origem: "banco" | "exemplo";
+  /** Presente apenas quando `origem` e "exemplo". */
+  causa?: CausaDaDemonstracao;
+  /** Nome da variavel de conexao encontrada, ou `null`. Nunca a URL. */
+  variavel?: string | null;
   usuario: Usuario;
   versiculo: { texto: string; referencia: string };
   indicadores: Indicador[];
