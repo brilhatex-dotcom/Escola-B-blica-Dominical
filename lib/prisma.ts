@@ -31,7 +31,24 @@ import { PrismaClient } from "@prisma/client";
  */
 const SUFIXOS = ["POSTGRES_PRISMA_URL", "DATABASE_URL", "POSTGRES_URL"];
 
+/**
+ * Escolha manual, acima de tudo.
+ *
+ * A integracao Neon+Vercel CRIA e mantem as variaveis dela, e pode criar um
+ * projeto Neon novo e vazio no processo — foi o que aconteceu aqui: o app
+ * apontava para um banco em sa-east-1 sem uma linha sequer, enquanto os dados
+ * estavam noutro projeto, em us-east-1.
+ *
+ * Disputar o nome com a integracao e perder: ela reescreve. `EBD_DATABASE_URL`
+ * e uma variavel que so nos usamos, entao ela sobrevive a qualquer atualizacao
+ * da integracao — e diz, em uma linha, "e este banco, e nao o que voce achou".
+ */
+const OVERRIDE = "EBD_DATABASE_URL";
+
 function acharUrl(): string | undefined {
+  const manual = process.env[OVERRIDE];
+  if (manual?.startsWith("postgres")) return manual;
+
   for (const sufixo of SUFIXOS) {
     if (process.env[sufixo]?.startsWith("postgres")) return process.env[sufixo];
 
@@ -43,7 +60,34 @@ function acharUrl(): string | undefined {
   return undefined;
 }
 
-const url = acharUrl();
+/**
+ * Marca a conexao como vinda de um pooler.
+ *
+ * O endereco do Neon terminado em `-pooler` e um PgBouncer em modo transacao,
+ * que NAO mantem estado entre comandos. O Prisma, por padrao, cria prepared
+ * statements — e o segundo uso de um deles cai em "prepared statement s0
+ * already exists", um erro que aparece de forma intermitente, sob carga, e
+ * some quando se vai investigar.
+ *
+ * `pgbouncer=true` desliga isso. So e acrescentado quando o host realmente e um
+ * pooler e quando o parametro ainda nao esta la.
+ */
+function prepararUrl(bruta: string | undefined): string | undefined {
+  if (!bruta) return undefined;
+  try {
+    const u = new URL(bruta);
+    if (u.host.includes("-pooler") && !u.searchParams.has("pgbouncer")) {
+      u.searchParams.set("pgbouncer", "true");
+    }
+    return u.toString();
+  } catch {
+    // String estranha: devolve como veio e deixa o Prisma reclamar com a
+    // mensagem dele, que e mais util do que uma nossa.
+    return bruta;
+  }
+}
+
+const url = prepararUrl(acharUrl());
 
 const global_ = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -72,6 +116,7 @@ export function temBanco(): boolean {
 
 /** Nome da variavel que foi usada. So para diagnostico — nunca expor a URL. */
 export function nomeDaVariavel(): string | null {
+  if (process.env[OVERRIDE]?.startsWith("postgres")) return OVERRIDE;
   for (const sufixo of SUFIXOS) {
     if (process.env[sufixo]?.startsWith("postgres")) return sufixo;
     const comPrefixo = Object.keys(process.env).find(

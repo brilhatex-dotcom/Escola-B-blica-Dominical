@@ -33,6 +33,17 @@ function urlEmUso(): string | undefined {
   return nome ? process.env[nome] : undefined;
 }
 
+/**
+ * Instrucao de conserto para o caso mais comum e mais confuso: o app conectado
+ * num banco vazio porque a integracao criou um projeto Neon novo.
+ */
+const COMO_CORRIGIR =
+  "CONECTADO NO BANCO ERRADO. O app está falando com um banco que não tem os " +
+  "dados. Compare o `host` acima com o endereço em Neon → Connect: se forem " +
+  "diferentes, são dois projetos Neon. Para corrigir, crie na Vercel a " +
+  "variável EBD_DATABASE_URL com a string de conexão do projeto certo — ela " +
+  "tem prioridade sobre tudo o que a integração criar.";
+
 export async function GET() {
   const variavel = nomeDaVariavel();
   const host = hostDaUrl(urlEmUso());
@@ -104,9 +115,10 @@ export async function GET() {
       tabelas: encontradas,
       diagnostico: temPessoas
         ? "Tudo certo: o app está no mesmo banco onde a Fase 05 foi aplicada."
-        : "CONECTADO NO BANCO ERRADO (ou o SQL da Fase 05 não foi aplicado NESTE banco). " +
-          "Compare o `host` acima com o endereço que aparece em Neon → Connect. " +
-          "Se forem diferentes, o SQL foi colado numa branch e o app está lendo outra.",
+        : encontradas["Alunos"] === "não existe" || encontradas["Alunos"] === 0
+          ? COMO_CORRIGIR
+          : "O banco é o certo, mas o SQL da Fase 05 ainda não foi aplicado NELE. " +
+            "Cole prisma/aplicar-fase-05.sql no SQL Editor deste banco.",
     });
   } catch (erro) {
     return NextResponse.json({

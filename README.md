@@ -523,6 +523,24 @@ pela metade.
 Verificado: três aplicações seguidas, mesmo resultado, com os 319 alunos e as
 2.592 frequências intactos.
 
+### Quando há dois projetos Neon
+
+A integração Neon+Vercel pode **criar um projeto Neon novo e vazio** ao ser
+instalada. O resultado é silencioso e confuso: o SQL é aplicado no projeto que
+você criou, o app fala com o projeto que a integração criou, e os dois lados
+parecem certos.
+
+Foi o que aconteceu aqui — o app lia um banco vazio em `sa-east-1` enquanto os
+dados estavam em `us-east-1`.
+
+**Como resolver:** crie na Vercel a variável `EBD_DATABASE_URL` com a string de
+conexão do projeto certo. Ela tem prioridade sobre tudo o que a integração
+criar, e sobrevive às atualizações dela — disputar o nome com a integração é
+perder, porque ela reescreve as variáveis dela.
+
+`/api/diagnostico` mostra qual host, qual banco e quais tabelas o app está
+enxergando, sem expor usuário nem senha.
+
 ### A variável de conexão pode ter outro nome
 
 A integração Neon+Vercel nomeia a variável conforme o tipo de conexão
