@@ -35,16 +35,20 @@ const INTERMEDIARIO = ".env.vercel.local";
 const SAIDA = ".env";
 const manter = process.argv.includes("--keep");
 
-/** Candidatas a conexao POOLED, da mais especifica para a mais generica. */
+/**
+ * Sufixos das variaveis, da mais especifica para a mais generica.
+ *
+ * Sao SUFIXOS e nao nomes exatos porque a integracao da Vercel permite um
+ * "Custom Prefix" na hora de conectar o banco. Com prefixo "STORAGE", a
+ * variavel chega como STORAGE_DATABASE_URL — e um script que procurasse o nome
+ * exato nao acharia nada, sem dizer o porque.
+ *
+ * Os sufixos nao se confundem entre si: "DATABASE_URL" nao casa com
+ * "DATABASE_URL_UNPOOLED", e "POSTGRES_URL" nao casa com
+ * "POSTGRES_URL_NON_POOLING", porque a comparacao e pelo fim do nome.
+ */
 const POOLED = ["POSTGRES_PRISMA_URL", "DATABASE_URL", "POSTGRES_URL"];
-
-/** Candidatas a conexao DIRETA (sem pooler). */
-const DIRETA = [
-  "DATABASE_URL_UNPOOLED",
-  "POSTGRES_URL_NON_POOLING",
-  "DIRECT_URL",
-  "PGHOST_UNPOOLED", // so para detectar a integracao; nao e uma URL
-];
+const DIRETA = ["DATABASE_URL_UNPOOLED", "POSTGRES_URL_NON_POOLING", "DIRECT_URL"];
 
 function parseEnv(texto) {
   const out = {};
@@ -63,10 +67,32 @@ function parseEnv(texto) {
   return out;
 }
 
-function primeiraUrl(vars, nomes) {
-  for (const n of nomes) {
-    const v = vars[n];
-    if (v && /^postgres(ql)?:\/\//.test(v)) return { nome: n, url: v };
+const ehUrlPostgres = (v) => typeof v === "string" && /^postgres(ql)?:\/\//.test(v);
+
+/**
+ * Acha a variavel cujo nome termina no sufixo pedido, aceitando prefixo.
+ * O nome exato tem preferencia sobre a versao prefixada.
+ */
+function acharPorSufixo(vars, sufixo) {
+  if (ehUrlPostgres(vars[sufixo])) return { nome: sufixo, url: vars[sufixo] };
+  const candidatos = Object.keys(vars).filter(
+    (k) => k.endsWith(`_${sufixo}`) && ehUrlPostgres(vars[k]),
+  );
+  if (candidatos.length === 0) return null;
+  if (candidatos.length > 1) {
+    console.warn(
+      `  ! mais de uma variavel termina em ${sufixo}: ${candidatos.join(", ")}\n` +
+        `    usando ${candidatos[0]} — se for a errada, e sinal de que ha dois bancos\n` +
+        `    conectados ao mesmo projeto na Vercel.`,
+    );
+  }
+  return { nome: candidatos[0], url: vars[candidatos[0]] };
+}
+
+function primeiraUrl(vars, sufixos) {
+  for (const s of sufixos) {
+    const achado = acharPorSufixo(vars, s);
+    if (achado) return achado;
   }
   return null;
 }
