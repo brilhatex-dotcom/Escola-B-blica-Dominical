@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { erro, lerInt, responder } from "@/lib/api";
-import { exigirSessao } from "@/lib/auth/guarda";
+import { exigirEscrita } from "@/lib/auth/guarda";
 
 /**
  * A chamada de uma classe num domingo.
@@ -89,8 +89,8 @@ interface CorpoChamada {
 }
 
 export async function POST(req: Request) {
-  // Gravar chamada exige sessao — e senha ja trocada. Ver lib/auth/guarda.ts.
-  const { recusa } = await exigirSessao();
+  // Gravar chamada exige sessao com permissao no modulo. Ver lib/auth/guarda.ts.
+  const { recusa } = await exigirEscrita("chamada");
   if (recusa) return recusa;
 
   let corpo: CorpoChamada;

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma, temBanco } from "@/lib/prisma";
 import type {
   Aniversariante,
@@ -53,23 +54,60 @@ function soData(d: Date): Date {
 const MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 /* ------------------------------------------------------------------ *
+ * O recorte por congregação
+ * ------------------------------------------------------------------ */
+
+/**
+ * As congregações que este painel pode mostrar.
+ *
+ * ============================================================================
+ * `undefined` SIGNIFICA "NÃO FILTRE" — E ISSO É A PEÇA CENTRAL
+ *
+ * Passado a um `where` do Prisma, `congId: undefined` simplesmente não entra na
+ * consulta. Quem enxerga o campo inteiro recebe `undefined` e vê tudo, sem que
+ * exista em lugar nenhum uma lista de "todas as congregações" para alguém
+ * esquecer de atualizar no dia em que uma congregação nova for cadastrada.
+ *
+ * O contrário — montar a lista completa para quem vê tudo — daria o mesmo
+ * resultado hoje e o resultado ERRADO amanhã, escondendo a congregação nova de
+ * quem justamente precisa vê-la.
+ * ============================================================================
+ */
+export type Recorte = { in: number[] } | undefined;
+
+/**
+ * O mesmo recorte, em SQL, para as duas consultas que não passam pelo Prisma.
+ *
+ * `Prisma.empty` é a tradução exata de "não filtre": some da consulta sem
+ * deixar um `AND true` para trás. E a lista entra como PARÂMETRO (`Prisma.join`),
+ * nunca interpolada como texto — número vindo de fora concatenado numa consulta
+ * é a definição de injeção de SQL, mesmo quando hoje ele vem de um lugar
+ * confiável.
+ */
+function recorteSql(coluna: Prisma.Sql, recorte: Recorte): Prisma.Sql {
+  if (!recorte) return Prisma.empty;
+  if (recorte.in.length === 0) return Prisma.sql` AND false`;
+  return Prisma.sql` AND ${coluna} IN (${Prisma.join(recorte.in)})`;
+}
+
+/* ------------------------------------------------------------------ *
  * Indicadores
  * ------------------------------------------------------------------ */
 
-async function lerIndicadores(domingo: Date): Promise<Indicador[]> {
+async function lerIndicadores(domingo: Date, recorte: Recorte): Promise<Indicador[]> {
   const inicio = soData(domingo);
 
   const [alunos, classes, presentes, visitantes, domingoAnterior] = await Promise.all([
-    prisma.aluno.count({ where: { ativo: true } }),
-    prisma.classe.count({ where: { ativa: true } }),
-    prisma.frequencia.count({ where: { data: inicio, presente: true } }),
-    prisma.visitante.count({ where: { data: inicio } }),
+    prisma.aluno.count({ where: { ativo: true, congId: recorte } }),
+    prisma.classe.count({ where: { ativa: true, congId: recorte } }),
+    prisma.frequencia.count({ where: { data: inicio, presente: true, congId: recorte } }),
+    prisma.visitante.count({ where: { data: inicio, congId: recorte } }),
     (async () => {
       const anterior = new Date(inicio);
       anterior.setUTCDate(anterior.getUTCDate() - 7);
       const [p, v] = await Promise.all([
-        prisma.frequencia.count({ where: { data: anterior, presente: true } }),
-        prisma.visitante.count({ where: { data: anterior } }),
+        prisma.frequencia.count({ where: { data: anterior, presente: true, congId: recorte } }),
+        prisma.visitante.count({ where: { data: anterior, congId: recorte } }),
       ]);
       return { presentes: p, visitantes: v };
     })(),
@@ -127,21 +165,41 @@ async function lerIndicadores(domingo: Date): Promise<Indicador[]> {
  * Estrutura: pessoas, cargos, classes, congregacoes
  * ------------------------------------------------------------------ */
 
-async function lerEstrutura(): Promise<Estrutura> {
+async function lerEstrutura(recorte: Recorte): Promise<Estrutura> {
+  /*
+   * Pessoa não tem congregação — o CARGO é que tem.
+   *
+   * Uma pessoa pode ser Professora numa congregação e Secretária noutra, e
+   * continua sendo uma pessoa só. Por isso o recorte entra pelos vínculos: são
+   * as pessoas que exercem ALGUMA função nas congregações permitidas.
+   */
+  const daCongregacao = recorte ? { cargos: { some: { congId: recorte, ativo: true } } } : {};
+
   const [pessoas, cargosOcupados, acumulam, classes, congregacoes, revisar] = await Promise.all([
-    prisma.pessoa.count({ where: { ativo: true } }),
-    prisma.pessoaCargo.count({ where: { ativo: true } }),
+    prisma.pessoa.count({ where: { ativo: true, ...daCongregacao } }),
+    prisma.pessoaCargo.count({ where: { ativo: true, congId: recorte } }),
     // Quantas pessoas exercem mais de uma funcao. E este numero que explica por
     // que "pessoas" e "cargos" nao batem — sem ele, a diferenca parece erro.
     prisma.pessoaCargo
-      .groupBy({ by: ["pessoaId"], where: { ativo: true }, _count: { _all: true } })
+      .groupBy({
+        by: ["pessoaId"],
+        where: { ativo: true, congId: recorte },
+        _count: { _all: true },
+      })
       .then((linhas) => linhas.filter((l) => l._count._all > 1).length),
-    prisma.classe.count({ where: { ativa: true } }),
+    prisma.classe.count({ where: { ativa: true, congId: recorte } }),
     // So congregacoes que de fato tem alguma coisa: o model foi DERIVADO dos
     // congId encontrados no export, e duas delas (11 e 14) nao tem classe nem
     // aluno nenhum. Conta-las infla o numero com congregacao vazia.
-    prisma.congregacao
-      .count({ where: { OR: [{ classes: { some: {} } }, { alunos: { some: {} } }] } }),
+    prisma.congregacao.count({
+      where: {
+        id: recorte,
+        OR: [{ classes: { some: {} } }, { alunos: { some: {} } }],
+      },
+    }),
+    // "A conferir" é sempre do campo: uma possível duplicata entre duas pessoas
+    // de congregações diferentes é justamente o caso que o recorte esconderia
+    // de todo mundo, ficando sem ninguém para resolver.
     prisma.pessoa.count({ where: { revisar: true } }),
   ]);
 
@@ -200,8 +258,10 @@ async function lerLideranca(): Promise<Lider[]> {
  * Frequencia mensal
  * ------------------------------------------------------------------ */
 
-async function lerFrequencia(hoje: Date): Promise<PontoFrequencia[]> {
+async function lerFrequencia(hoje: Date, recorte: Recorte): Promise<PontoFrequencia[]> {
   const inicio = new Date(Date.UTC(hoje.getFullYear(), hoje.getMonth() - 11, 1));
+  const soFrequencias = recorteSql(Prisma.sql`f."congId"`, recorte);
+  const soVisitantes = recorteSql(Prisma.sql`v."congId"`, recorte);
 
   /*
    * MEDIA POR DOMINGO, e nao soma do mes.
@@ -234,20 +294,20 @@ async function lerFrequencia(hoje: Date): Promise<PontoFrequencia[]> {
           / NULLIF(count(DISTINCT f.data), 0)
         )
         FROM "Frequencias" f
-        WHERE date_trunc('month', f.data) = m.mes
+        WHERE date_trunc('month', f.data) = m.mes${soFrequencias}
       ), 0) AS presentes,
       COALESCE((
         SELECT round(
           count(*)::numeric / NULLIF(count(DISTINCT v.data), 0)
         )
         FROM "Visitantes" v
-        WHERE date_trunc('month', v.data) = m.mes
+        WHERE date_trunc('month', v.data) = m.mes${soVisitantes}
       ), 0) AS visitantes
     FROM meses m
     ORDER BY m.mes
   `;
 
-  const matriculados = await prisma.aluno.count({ where: { ativo: true } });
+  const matriculados = await prisma.aluno.count({ where: { ativo: true, congId: recorte } });
 
   return linhas.map((l) => ({
     mes: MESES[new Date(l.mes).getUTCMonth()],
@@ -298,22 +358,23 @@ function separarLicao(licao: { titulo: string; trim: string; tipoClasse: string 
   };
 }
 
-async function lerResumo(domingo: Date) {
+async function lerResumo(domingo: Date, recorte: Recorte) {
   const inicio = soData(domingo);
 
   const [licao, classesTotal, iniciadas, presentes, visitantes, professores] = await Promise.all([
+    // A lição do domingo é a mesma em todo o campo — ela não se recorta.
     prisma.licao.findFirst({ where: { data: { lte: inicio } }, orderBy: { data: "desc" } }),
-    prisma.classe.count({ where: { ativa: true } }),
+    prisma.classe.count({ where: { ativa: true, congId: recorte } }),
     prisma.frequencia
-      .groupBy({ by: ["classeId"], where: { data: inicio } })
+      .groupBy({ by: ["classeId"], where: { data: inicio, congId: recorte } })
       .then((l) => l.length),
-    prisma.frequencia.count({ where: { data: inicio, presente: true } }),
-    prisma.visitante.count({ where: { data: inicio } }),
+    prisma.frequencia.count({ where: { data: inicio, presente: true, congId: recorte } }),
+    prisma.visitante.count({ where: { data: inicio, congId: recorte } }),
     // Professores DISTINTOS, e nao classes com professor: a mesma pessoa em
     // duas classes e uma pessoa.
     prisma.pessoaCargo
       .findMany({
-        where: { ativo: true, cargo: { nome: "Professor" } },
+        where: { ativo: true, cargo: { nome: "Professor" }, congId: recorte },
         select: { pessoaId: true },
         distinct: ["pessoaId"],
       })
@@ -340,7 +401,30 @@ const ACAO_PARA_TIPO: Record<string, TipoAtividade> = {
   aluno: "cadastro",
 };
 
-async function lerAtividades(): Promise<Atividade[]> {
+/**
+ * As últimas ações registradas.
+ *
+ * ============================================================================
+ * PARA QUEM VÊ SÓ UMA CONGREGAÇÃO, ESTA LISTA VEM VAZIA — DE PROPÓSITO
+ *
+ * `Auditoria` é a tabela do sistema antigo e NÃO tem coluna de congregação: as
+ * 1.679 linhas guardam quem, quando, o quê e sobre qual entidade, e nada mais.
+ * Não há como recortá-la sem inventar o dado que falta.
+ *
+ * Restavam três saídas, e duas são piores. Mostrar tudo entregaria ao Dirigente
+ * de uma congregação o que a secretaria de outra andou alterando. Adivinhar a
+ * congregação pelo texto de `desc` seria decidir por conta própria sobre
+ * registro do sistema antigo, que é exatamente o que a regra da igreja proíbe.
+ *
+ * Fica a terceira: quem enxerga o campo vê a lista; quem enxerga uma
+ * congregação não vê nenhuma. Quando a auditoria nova (Fase 12) passar a
+ * gravar a congregação, o recorte deixa de ser impossível e esta função muda
+ * numa linha.
+ * ============================================================================
+ */
+async function lerAtividades(recorte: Recorte): Promise<Atividade[]> {
+  if (recorte) return [];
+
   const linhas = await prisma.auditoria.findMany({ orderBy: { when: "desc" }, take: 8 });
 
   return linhas.map((a) => ({
@@ -352,7 +436,7 @@ async function lerAtividades(): Promise<Atividade[]> {
   }));
 }
 
-async function lerAniversariantes(hoje: Date): Promise<Aniversariante[]> {
+async function lerAniversariantes(hoje: Date, recorte: Recorte): Promise<Aniversariante[]> {
   /*
    * Aniversario nao tem ano, entao a comparacao e por mes e dia. A janela de 15
    * dias atravessa a virada do mes — daí o OR: em 28 de agosto, quem faz
@@ -367,7 +451,7 @@ async function lerAniversariantes(hoje: Date): Promise<Aniversariante[]> {
     SELECT a.id, a.nome, a.nasc, c.nome AS classe
     FROM "Alunos" a
     LEFT JOIN "Classes" c ON c.id = a."classeId"
-    WHERE a.ativo AND a.nasc IS NOT NULL
+    WHERE a.ativo AND a.nasc IS NOT NULL${recorteSql(Prisma.sql`a."congId"`, recorte)}
       AND (
         to_char(a.nasc, 'MM-DD') BETWEEN to_char(${hoje}::date, 'MM-DD') AND to_char(${limite}::date, 'MM-DD')
         OR (
@@ -400,9 +484,20 @@ const TIPO_EVENTO: Record<string, TipoCompromisso> = {
   ebd: "ebd",
 };
 
-async function lerAgenda(hoje: Date): Promise<Compromisso[]> {
+async function lerAgenda(hoje: Date, recorte: Recorte): Promise<Compromisso[]> {
   const eventos = await prisma.evento.findMany({
-    where: { data: { gte: soData(hoje) } },
+    where: {
+      data: { gte: soData(hoje) },
+      /*
+       * Evento SEM congregação é do campo — e o campo inteiro precisa vê-lo.
+       *
+       * Recortar só por `congId in (...)` esconderia a Assembleia Geral e o
+       * Congresso do Campo de todas as congregações, que são justamente os
+       * compromissos que ninguém pode perder. Por isso o `OR` com `congId:
+       * null`, e não uma lista simples.
+       */
+      ...(recorte ? { OR: [{ congId: recorte }, { congId: null }] } : {}),
+    },
     orderBy: { data: "asc" },
     take: 4,
     include: { congregacao: { select: { nome: true } } },
@@ -421,30 +516,64 @@ async function lerAgenda(hoje: Date): Promise<Compromisso[]> {
  * Entrada
  * ------------------------------------------------------------------ */
 
-export async function lerPainel(hoje = new Date()): Promise<DadosPainel> {
+/** Quem está olhando o painel. `null` quando não há autenticação configurada. */
+export interface QuemOlha {
+  nome: string;
+  cargo: string;
+  /** Congregações que este acesso enxerga. Vazio = o campo inteiro. */
+  congIds: number[];
+  escopo: "campo" | "congregacao";
+}
+
+export async function lerPainel(
+  hoje = new Date(),
+  quem: QuemOlha | null = null,
+): Promise<DadosPainel> {
   if (!temBanco()) throw new Error("DATABASE_URL não configurada");
 
   const domingo = domingoDaSemana(hoje);
 
+  /*
+   * O recorte é aplicado no SERVIDOR, dentro das consultas.
+   *
+   * A alternativa preguiçosa — buscar tudo e filtrar na tela — enviaria ao
+   * navegador de um professor os números de todas as congregações do campo.
+   * Bastaria abrir as ferramentas do navegador para ler o que a tela decidiu
+   * não desenhar. Dado que não pode ser visto não é enviado.
+   */
+  const recorte: Recorte =
+    quem && quem.escopo === "congregacao" ? { in: quem.congIds } : undefined;
+
   const [indicadores, estrutura, lideranca, frequencia, resumo, atividades, aniversariantes, agenda] =
     await Promise.all([
-      lerIndicadores(domingo),
-      lerEstrutura(),
+      lerIndicadores(domingo, recorte),
+      lerEstrutura(recorte),
+      // A liderança do campo NÃO se recorta: é institucional, e saber quem é o
+      // Pastor Presidente é de toda a igreja, não de uma congregação.
       lerLideranca(),
-      lerFrequencia(hoje),
-      lerResumo(domingo),
-      lerAtividades(),
-      lerAniversariantes(hoje),
-      lerAgenda(hoje),
+      lerFrequencia(hoje, recorte),
+      lerResumo(domingo, recorte),
+      lerAtividades(recorte),
+      lerAniversariantes(hoje, recorte),
+      lerAgenda(hoje, recorte),
     ]);
+
+  const congregacaoDoTitulo =
+    recorte && recorte.in.length === 1
+      ? ((await prisma.congregacao.findUnique({
+          where: { id: recorte.in[0] },
+          select: { nome: true },
+        }))?.nome ?? "Campo de Betânia")
+      : recorte
+        ? `${recorte.in.length} congregações`
+        : "Campo de Betânia";
 
   return {
     origem: "banco",
     usuario: {
-      // Trocado pelo usuario da sessao quando a autenticacao entrar.
-      nome: "Secretaria da EBD",
-      cargo: "Secretário Geral",
-      congregacao: "Campo de Betânia",
+      nome: quem?.nome ?? "Secretaria da EBD",
+      cargo: quem?.cargo ?? "Secretário Geral",
+      congregacao: congregacaoDoTitulo,
       foto: null,
     },
     versiculo: await lerVersiculo(hoje),

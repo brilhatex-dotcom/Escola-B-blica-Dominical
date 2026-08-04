@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { lerPainel } from "@/lib/dashboard/consultas";
 import { painelDeExemplo } from "@/lib/dashboard/dados";
 import { nomeDaVariavel, temBanco } from "@/lib/prisma";
+import { lerSessao } from "@/lib/auth/sessao";
+import { papelPrincipal, rotuloDoPapel } from "@/lib/auth/papeis";
 import type { CausaDaDemonstracao } from "@/lib/dashboard/tipos";
 
 /**
@@ -36,8 +38,28 @@ function classificar(erro: unknown): CausaDaDemonstracao {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  /*
+   * O painel é recortado pelo acesso de quem pede.
+   *
+   * Sem sessão (portal sem `AUTH_SECRET`) não há recorte possível — e nesse
+   * estado o portal inteiro já está aberto, com a tarja vermelha dizendo isso.
+   * Fingir um recorte aqui daria a impressão de proteção onde não há nenhuma.
+   */
+  const sessao = await lerSessao();
+  const quem = sessao
+    ? {
+        nome: sessao.nome,
+        cargo: (() => {
+          const papel = papelPrincipal(sessao.papeis);
+          return papel ? rotuloDoPapel(papel) : "Acesso do sistema";
+        })(),
+        congIds: sessao.congIds,
+        escopo: sessao.escopo,
+      }
+    : null;
+
   try {
-    return NextResponse.json(await lerPainel());
+    return NextResponse.json(await lerPainel(new Date(), quem));
   } catch (erro) {
     /*
      * SEM BANCO, O PAINEL AINDA ABRE — MAS DIZ QUE E DEMONSTRACAO.

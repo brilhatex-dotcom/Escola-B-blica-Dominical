@@ -30,3 +30,28 @@ export const ALLOW_SKIP_SPLASH = true;
 
 export const APP_VERSION = "1.0";
 export const ORG_NAME = "IEADPE Campo de Betânia";
+
+/**
+ * A senha herdada bloqueia a GRAVAÇÃO?
+ *
+ * ============================================================================
+ * ESTE INTERRUPTOR EXISTE PORQUE A TROCA DE SENHA É UMA DECISÃO DA IGREJA
+ *
+ * As 19 contas do sistema antigo têm o mesmo hash — a mesma senha, que meia
+ * igreja pode conhecer. O certo é cada pessoa ter a sua, e é o que a reunião da
+ * liderança vai resolver.
+ *
+ * Até lá, `true` aqui teria um efeito muito concreto: no dia em que
+ * `AUTH_SECRET` for definida na Vercel, ninguém que ainda usa a senha antiga
+ * consegue registrar chamada. A EBD inteira pararia num domingo de manhã, sem
+ * ninguém entender por quê e sem caminho de volta.
+ *
+ * Com `false`, as senhas continuam EXATAMENTE como estão (nenhum registro do
+ * sistema antigo é alterado — regra da igreja), a gravação segue liberada e o
+ * painel mostra uma tarja dizendo, sem rodeio, que a senha é compartilhada.
+ *
+ * Depois da reunião, vire para `true`: a proteção passa a valer sem mais nada
+ * a fazer, e quem ainda não trocou é levado à tela de troca.
+ * ============================================================================
+ */
+export const EXIGIR_SENHA_PROPRIA_PARA_GRAVAR = false;

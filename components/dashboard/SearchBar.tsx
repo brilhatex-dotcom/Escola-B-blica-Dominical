@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Search, CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MENU } from "@/lib/dashboard/navegacao";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Busca global.
@@ -46,12 +47,21 @@ function normalizar(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
-function buscar(termo: string): Resultado[] {
+/**
+ * A busca respeita a permissao — senao ela vira a porta dos fundos do menu.
+ *
+ * De nada adianta esconder "Permissões" da barra lateral se digitar "perm" no
+ * campo de busca leva direto para la. A guarda do servidor recusaria a rota,
+ * mas o usuario teria passeado por uma tela vazia sem entender o que aconteceu.
+ */
+function buscar(termo: string, podeVer: (chave: string) => boolean): Resultado[] {
   const t = normalizar(termo.trim());
   if (!t) return [];
 
   return MENU.filter(
-    (i) => normalizar(i.rotulo).includes(t) || normalizar(i.descricao).includes(t),
+    (i) =>
+      podeVer(i.chave) &&
+      (normalizar(i.rotulo).includes(t) || normalizar(i.descricao).includes(t)),
   ).map((i) => ({
     chave: i.chave,
     titulo: i.rotulo,
@@ -71,7 +81,8 @@ export function SearchBar({ className }: { className?: string }) {
   const campo = useRef<HTMLInputElement>(null);
   const caixa = useRef<HTMLDivElement>(null);
 
-  const resultados = useMemo(() => buscar(termo), [termo]);
+  const { podeVer } = useAcesso();
+  const resultados = useMemo(() => buscar(termo, podeVer), [termo, podeVer]);
 
   // Ctrl/Cmd + K — o atalho que todo mundo ja tenta antes de procurar o campo.
   useEffect(() => {

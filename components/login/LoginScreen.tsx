@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { LoginCard } from "./LoginCard";
 import { AuthSuccessOverlay } from "./AuthSuccessOverlay";
-import { SPLASH_TO_LOGIN_MS } from "@/lib/config";
+import { EXIGIR_SENHA_PROPRIA_PARA_GRAVAR, SPLASH_TO_LOGIN_MS } from "@/lib/config";
 
 /**
  * Tela de login.
@@ -79,15 +79,26 @@ export function LoginScreen() {
              * emprestado, e uma porta aberta para o proximo que pegar.
              * ------------------------------------------------------------ */
             /*
-             * Quem entrou com a senha herdada vai direto para a troca.
+             * Quem entrou com a senha herdada vai direto para a troca — mas so
+             * enquanto a troca for OBRIGATORIA para gravar.
              *
-             * Nao e uma tela extra por capricho: as 19 contas do sistema antigo
-             * compartilham o mesmo hash, ou seja, a mesma senha. Deixar entrar
-             * sem trocar seria manter o sistema aberto a quem conhece uma senha
-             * que meia igreja sabe.
+             * As 19 contas do sistema antigo compartilham o mesmo hash, ou
+             * seja, a mesma senha. Com a trava ligada, mandar para ca e um
+             * favor: a alternativa e a pessoa descobrir o bloqueio ao perder a
+             * chamada de trinta alunos.
+             *
+             * Com a trava desligada (o estado de hoje, ate a reuniao da
+             * lideranca), gravar funciona — e parar toda entrada numa tela que
+             * ninguem e obrigado a preencher so ensina a passar batido por ela.
+             * O aviso do painel continua dizendo, em toda tela, que a senha e
+             * compartilhada.
              */
             onDone={() =>
-              router.replace(precisaTrocar ? "/dashboard/trocar-senha" : "/dashboard")
+              router.replace(
+                precisaTrocar && EXIGIR_SENHA_PROPRIA_PARA_GRAVAR
+                  ? "/dashboard/trocar-senha"
+                  : "/dashboard",
+              )
             }
           />
         )}

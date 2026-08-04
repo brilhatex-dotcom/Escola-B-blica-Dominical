@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verificarSenha } from "@/lib/auth/senha";
 import { criarSessao, temSegredo } from "@/lib/auth/sessao";
+import { acessoDaConta } from "@/lib/auth/acesso";
+import { papelPrincipal } from "@/lib/auth/papeis";
 
 /**
  * Entrada no sistema.
@@ -61,6 +63,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ erro: "Usuário ou senha inválidos." }, { status: 401 });
     }
 
+    /*
+     * O acesso é apurado AQUI, uma vez, e viaja dentro do JWT.
+     *
+     * É o único ponto do sistema que consulta o banco para decidir permissão:
+     * fazer isso a cada navegação seria uma ida ao Postgres por clique, de todo
+     * aparelho da igreja, num domingo de manhã.
+     */
+    const acesso = await acessoDaConta({
+      id: usuario.id,
+      perfil: usuario.perfil,
+      congId: usuario.congId,
+      pessoaId: usuario.pessoaId,
+    });
+
     await criarSessao({
       id: usuario.id,
       login: usuario.login,
@@ -68,12 +84,18 @@ export async function POST(req: Request) {
       perfil: usuario.perfil,
       congId: usuario.congId,
       precisaTrocar,
+      papeis: acesso.papeis,
+      congIds: acesso.congIds,
+      escopo: acesso.escopo,
+      presumido: acesso.presumido,
     });
 
     return NextResponse.json({
       ok: true,
       nome: usuario.nome,
       perfil: usuario.perfil,
+      papel: papelPrincipal(acesso.papeis),
+      escopo: acesso.escopo,
       // A tela usa isto para levar direto à troca de senha em vez do painel.
       precisaTrocar,
     });

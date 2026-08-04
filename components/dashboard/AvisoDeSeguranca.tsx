@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { KeyRound, ShieldAlert } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
+import { EXIGIR_SENHA_PROPRIA_PARA_GRAVAR } from "@/lib/config";
 
 /**
  * Tarja de estado da proteção do portal.
@@ -60,11 +61,37 @@ export function AvisoDeSeguranca() {
 
   if (estado.precisaTrocar) {
     return (
-      <Alert tipo="alerta" titulo="Senha herdada do sistema antigo" className="mb-4">
-        <p>
-          A sua senha é a mesma das outras 18 contas. Até trocá-la, você pode
-          consultar, mas não gravar.
-        </p>
+      <Alert
+        tipo="alerta"
+        titulo={
+          EXIGIR_SENHA_PROPRIA_PARA_GRAVAR
+            ? "Senha herdada do sistema antigo"
+            : "A sua senha é a mesma de outras 18 contas"
+        }
+        className="mb-4"
+      >
+        {/*
+          Duas frases para dois estados do sistema, e a diferença importa.
+
+          Com a trava ligada, o aviso explica por que a gravação foi recusada —
+          é a resposta a algo que acabou de acontecer com a pessoa. Com a trava
+          desligada (o estado de hoje, até a reunião da liderança), gravar
+          funciona, e dizer "você não pode gravar" seria simplesmente falso: o
+          aviso passa a ser sobre o RISCO, que é quem mais entra como você.
+        */}
+        {EXIGIR_SENHA_PROPRIA_PARA_GRAVAR ? (
+          <p>
+            A sua senha é a mesma das outras 18 contas. Até trocá-la, você pode
+            consultar, mas não gravar.
+          </p>
+        ) : (
+          <p>
+            Ela veio do sistema antigo e é <strong>idêntica em todas as contas</strong>.
+            Gravar continua liberado até a reunião da liderança — mas, enquanto
+            for assim, qualquer pessoa que conheça essa senha entra no portal
+            como você, e a auditoria registrará o seu nome.
+          </p>
+        )}
         <Link
           href="/dashboard/trocar-senha"
           className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gold-400/15 px-3 py-1.5 text-[0.78rem] font-medium text-gold-200 ring-1 ring-gold-400/25 transition-colors duration-300 hover:bg-gold-400/25"

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { AcessoProvider } from "@/components/acesso/AcessoProvider";
 import { AvisoDeSeguranca } from "@/components/dashboard/AvisoDeSeguranca";
 import { Header } from "@/components/dashboard/Header";
 import { Sidebar } from "@/components/dashboard/Sidebar";
@@ -73,6 +74,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const largura = recolhida ? LARGURA_RECOLHIDA : LARGURA_ABERTA;
 
   return (
+    /*
+      Quem esta usando o portal e apurado UMA vez, aqui, e compartilhado com
+      todas as telas. Sem isto, a Sidebar, a busca global e cada pagina fariam a
+      mesma pergunta a `/api/auth/eu` a cada navegacao, cada uma respondendo num
+      instante diferente — e o menu piscaria itens que aparecem e somem.
+    */
+    <AcessoProvider>
     <div
       className="relative min-h-[100dvh] bg-brand-990"
       style={{ ["--lateral" as string]: largura }}
@@ -178,5 +186,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
       </div>
     </div>
+    </AcessoProvider>
   );
 }

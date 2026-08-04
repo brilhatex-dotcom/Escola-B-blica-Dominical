@@ -1,5 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import {
+  escopoDe,
+  papelHerdado,
+  podeGravar as papelPodeGravar,
+  podeVer as papelPodeVer,
+  type Escopo,
+  type Papel,
+} from "./papeis";
 
 /**
  * Sessão do usuário — um JWT assinado, guardado num cookie httpOnly.
@@ -24,10 +32,29 @@ export interface Sessao {
   id: number;
   login: string;
   nome: string;
+  /** O `perfil` COMO VEIO da planilha. Não é reescrito e não decide acesso sozinho. */
   perfil: string;
   congId: number | null;
   /** `true` enquanto a senha ainda estiver no formato herdado. */
   precisaTrocar: boolean;
+
+  /*
+   * O ACESSO viaja dentro da sessão.
+   *
+   * Ele é apurado uma vez, no login (ver lib/auth/acesso.ts), e não a cada
+   * navegação: decidir permissão consultando o banco significaria uma ida ao
+   * Postgres por clique, de todo aparelho da igreja, num domingo de manhã.
+   *
+   * Como o JWT é assinado, o navegador não consegue alterar estes campos — um
+   * cookie adulterado para dizer "pastor-presidente" não passa na verificação
+   * de assinatura e é tratado como sessão inexistente.
+   */
+  papeis: Papel[];
+  /** Congregações que este acesso enxerga. Vazio quando o escopo é o campo. */
+  congIds: number[];
+  escopo: Escopo;
+  /** `true` quando o papel foi deduzido do perfil herdado, e não de um cargo. */
+  presumido: boolean;
 }
 
 /**
@@ -82,13 +109,43 @@ export async function lerSessao(): Promise<Sessao | null> {
 
   try {
     const { payload } = await jwtVerify(token, segredo());
+    const perfil = String(payload.perfil);
+
+    /*
+     * Sessões emitidas ANTES desta fase não trazem papéis.
+     *
+     * Elas continuam válidas por até 8 horas, e recusá-las deslogaria metade da
+     * igreja no instante da publicação — possivelmente no meio de uma chamada.
+     * Sem papéis no cookie, o acesso é deduzido do perfil herdado, exatamente
+     * como acontece com uma conta sem cargo atribuído.
+     */
+    const papeis = Array.isArray(payload.papeis)
+      ? (payload.papeis as Papel[])
+      : [papelHerdado(perfil)];
+
+    const congId = payload.congId === null || payload.congId === undefined
+      ? null
+      : Number(payload.congId);
+
+    const escopo: Escopo = payload.escopo === "campo" || payload.escopo === "congregacao"
+      ? payload.escopo
+      : escopoDe(papeis);
+
     return {
       id: Number(payload.id),
       login: String(payload.login),
       nome: String(payload.nome),
-      perfil: String(payload.perfil),
-      congId: payload.congId === null ? null : Number(payload.congId),
+      perfil,
+      congId,
       precisaTrocar: Boolean(payload.precisaTrocar),
+      papeis,
+      congIds: Array.isArray(payload.congIds)
+        ? (payload.congIds as number[])
+        : escopo === "campo" || congId === null
+          ? []
+          : [congId],
+      escopo,
+      presumido: payload.presumido === undefined ? true : Boolean(payload.presumido),
     };
   } catch {
     // Assinatura inválida ou expirada: o mesmo resultado de não ter sessão.
@@ -100,7 +157,33 @@ export async function encerrarSessao(): Promise<void> {
   (await cookies()).delete(COOKIE);
 }
 
-/** `master` enxerga o campo inteiro; os demais, só a própria congregação. */
+/**
+ * Enxerga o campo inteiro?
+ *
+ * A pergunta é feita ao ESCOPO, e não mais ao `perfil` da planilha. Aquele
+ * campo tem dois valores para dezenove contas e não sabe distinguir um
+ * Supervisor de um Professor — usá-lo para decidir alcance dava a todo mundo,
+ * fora as duas contas `master`, exatamente a mesma visão.
+ */
 export function podeVerTudo(sessao: Sessao | null): boolean {
-  return sessao?.perfil === "master";
+  return sessao?.escopo === "campo";
+}
+
+/**
+ * Sem sessão, tudo é permitido — e isso é deliberado.
+ *
+ * Só existe "sem sessão" quando `AUTH_SECRET` não está definida no servidor, e
+ * nesse estado o portal inteiro já está aberto (ver lib/auth/guarda.ts). Esconder
+ * módulos aqui não protegeria nada: bastaria digitar o endereço. Produziria
+ * apenas a ilusão de proteção, que é pior do que a tarja vermelha dizendo a
+ * verdade no painel.
+ */
+export function sessaoPodeVer(sessao: Sessao | null, chave: string): boolean {
+  if (!sessao) return true;
+  return papelPodeVer(sessao.papeis, chave);
+}
+
+export function sessaoPodeGravar(sessao: Sessao | null, chave: string): boolean {
+  if (!sessao) return true;
+  return papelPodeGravar(sessao.papeis, chave);
 }

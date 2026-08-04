@@ -26,6 +26,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 05 | Relatórios, Agenda, Configurações | pronto |
 | 06 | Autenticação real (login, sessão, proteção das rotas) | pronto |
 | 07 | Sincronização offline ligada na Chamada | pronto |
+| 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários | pronto |
 
 ---
 
@@ -45,9 +46,10 @@ nada é reescrito por conta própria. Quem troca é **a pessoa** — ao entrar c
 senha herdada, o portal pede uma nova, e é a nova que é gravada em **bcrypt**
 (fator 12, ~250 ms por tentativa, com sal próprio em cada hash).
 
-Enquanto a senha herdada estiver em uso: **ler é liberado, gravar não**.
-Permitir gravar chamada com uma senha que meia igreja conhece é o mesmo que não
-ter autenticação.
+O bloqueio de gravação para quem ainda usa a senha herdada existe e está
+**desligado hoje**, por decisão da liderança, até a reunião em que as senhas
+serão trocadas — ver *A senha herdada, até a reunião da liderança*, mais abaixo.
+O interruptor é `EXIGIR_SENHA_PROPRIA_PARA_GRAVAR`, em `lib/config.ts`.
 
 ### Decisões que valem explicar
 
@@ -96,6 +98,150 @@ vídeo de fundo é um componente independente das telas.
 
 ---
 
+## Permissões (RBAC)
+
+### O papel vem do CARGO — não de um cadastro à parte
+
+A Fase 05 já modelava `Pessoa ──< PessoaCargo >── Cargo`, e `PessoaCargo` já
+guardava **em qual congregação** o cargo é exercido. É exatamente o recorte que
+as permissões precisam: *"o Dirigente da Cong. Bandeiras vê a Cong. Bandeiras"*.
+
+Por isso não existe coluna "perfil de acesso" em lugar nenhum. Criar uma
+produziria o defeito clássico: alguém deixa de ser Dirigente no organograma e
+continua enxergando a congregação, porque ninguém lembrou de mexer na outra
+tela. **Trocar o Dirigente é alteração de dado — em um lugar só.**
+
+Dos oito papéis pedidos, seis já eram cargos existentes. Faltavam dois, e é só
+isso que `prisma/aplicar-fase-08.sql` acrescenta:
+
+```
+Secretário Local  (ordem 65, escopo congregação)
+Vice-Dirigente    (ordem 75, escopo congregação)
+```
+
+### Os nove papéis
+
+| Papel | Alcance | Grava |
+|---|---|---|
+| Pastor Presidente | campo | tudo |
+| Gestor Local | campo | tudo |
+| Supervisor da EBD | campo | tudo da EBD — **não** contas nem permissões |
+| Secretário Geral do Campo | campo | o que é da secretaria |
+| Dirigente | própria congregação | chamada, cadastro, agenda local |
+| Vice-Dirigente | própria congregação | igual ao Dirigente |
+| Secretário Local | própria congregação | chamada, alunos, visitantes, revistas |
+| Professor | própria congregação | **só** chamada e visitantes |
+| Administrador do sistema | campo | tudo (conta técnica herdada) |
+
+O nono não é cargo da igreja: é o que as duas contas `master` da planilha viram.
+Chamá-lo de "Pastor Presidente" faria o organograma mentir — a conta `admin` não
+é o pastor.
+
+### A chave do menu é a chave da permissão
+
+`lib/dashboard/navegacao.ts` declara os módulos; `lib/auth/papeis.ts` diz quais
+chaves cada papel enxerga — **as mesmas chaves**. Não há uma segunda lista de
+"módulos protegidos" para manter em dia. Duas listas divergem, e divergem
+calando: liberando ou escondendo sem que ninguém perceba.
+
+O script de verificação confere justamente isso: toda chave citada numa
+permissão precisa existir no menu. Sem essa conferência, um `rel-frequencias`
+escrito no plural liberaria nada e pareceria liberar tudo.
+
+### Esconder botão não é proteger
+
+Quem protege é a guarda no servidor (`lib/auth/guarda.ts`), conferida em toda
+gravação — `exigirLeitura(chave)` e `exigirEscrita(chave)`.
+
+O que o navegador faz é diferente e igualmente necessário: **não oferecer ao
+professor um botão que vai recusá-lo.** Uma tela que mostra o que a pessoa não
+pode fazer transforma cada clique numa mensagem de erro e ensina a desconfiar do
+sistema.
+
+Por isso, também, digitar o endereço de um módulo fora do alcance responde
+**"Sem acesso"**, e não "em construção". Dizer "em construção" ali seria uma
+inverdade cortês: a pessoa esperaria a próxima versão de um módulo que já existe
+e nunca será dela.
+
+### O recorte é aplicado no banco, não na tela
+
+`/api/painel` filtra por congregação **dentro da consulta**. A alternativa
+preguiçosa — buscar tudo e esconder na tela — enviaria ao navegador de um
+professor os números de todo o campo; bastaria abrir as ferramentas do navegador
+para ler o que a tela decidiu não desenhar.
+
+`undefined` no `where` do Prisma significa "não filtre", e é assim que quem
+enxerga o campo vê tudo. O contrário — montar a lista de todas as congregações —
+daria o mesmo resultado hoje e o resultado errado no dia em que uma congregação
+nova for cadastrada.
+
+Três recortes têm exceção explicada no código:
+
+| O quê | Por quê |
+|---|---|
+| **Liderança do campo** não se recorta | Saber quem é o Pastor Presidente é de toda a igreja |
+| **Eventos sem congregação** aparecem para todos | Senão o Congresso do Campo sumiria de todas as congregações |
+| **Atividades recentes** vêm vazias para o grupo B | `Auditoria` é tabela do sistema antigo e **não tem coluna de congregação** — recortá-la exigiria adivinhar pelo texto, que é decidir por conta própria sobre registro herdado |
+
+### A sessão carrega o acesso
+
+O papel é apurado **uma vez, no login**, e viaja dentro do JWT assinado. Decidir
+permissão consultando o banco significaria uma ida ao Postgres por clique, de
+todo aparelho da igreja, num domingo de manhã. Como o JWT é assinado, um cookie
+adulterado para dizer "pastor-presidente" não passa na verificação.
+
+O preço é que mudança de cargo vale na próxima entrada da pessoa — e isso é o
+certo: promover alguém no meio do domingo não deve derrubar a chamada que ele
+está fazendo.
+
+Sessões emitidas **antes** desta fase continuam válidas: sem papéis no cookie, o
+acesso cai no perfil herdado. Recusá-las deslogaria metade da igreja no instante
+da publicação, possivelmente no meio de uma chamada.
+
+### As 19 contas herdadas, e o palpite marcado como palpite
+
+As contas do sistema antigo não são pessoas — são contas de congregação
+("Cong. Pinheiro", "T. Matriz") — e têm só dois perfis: `master` (2) e `coord`
+(17). Nada disso é reescrito. O campo `perfil` continua exatamente como veio, e
+o portal apenas o **interpreta**: `master` → administrador do sistema; `coord` →
+dirigente da própria congregação.
+
+Cada conta nessa situação aparece em **Administração → Usuários** com a marca
+**presumido**, e o topo da tela diz quantas são. Confirmar é ligar a conta a uma
+pessoa e dar a ela o cargo que exerce — a partir daí o acesso passa a vir do
+organograma.
+
+### A senha herdada, até a reunião da liderança
+
+`EXIGIR_SENHA_PROPRIA_PARA_GRAVAR`, em `lib/config.ts`. Hoje está **`false`** a
+pedido da liderança: as senhas ficam exatamente como estão e a gravação segue
+liberada, com uma tarja dizendo, sem rodeio, que a senha é compartilhada e que a
+auditoria registrará o nome de quem ela pertence.
+
+Com `true`, no dia em que `AUTH_SECRET` fosse definida, ninguém que ainda usa a
+senha antiga conseguiria registrar chamada — a EBD inteira pararia num domingo
+de manhã. Depois da reunião, virar para `true` liga a proteção sem mais nada a
+fazer.
+
+### O menu
+
+Seis categorias, mais de trinta destinos, **uma seção aberta por vez**. Numa
+lista corrida, "Chamada" — o item usado toda semana — ficaria a meio metro de
+rolagem num celular. A seção da tela atual já abre sozinha: ninguém precisa
+procurar onde está.
+
+**Classes não estava na lista pedida e ficou no menu assim mesmo.** São 53
+classes cadastradas, e a Chamada, os Alunos e todos os relatórios dependem
+delas; tirá-la deixaria a secretaria sem como corrigir uma classe.
+
+**Congregações aparece duas vezes**, como pedido, com leituras diferentes: em
+Escola Bíblica é a visão pastoral (quem é o dirigente e o vice de cada uma); em
+Administração é o cadastro. As duas entram na Fase 09.
+
+Verificado com `npm run verificar:permissoes`: **97 asserções**, todas passando.
+
+---
+
 ## Rodando
 
 ```bash
@@ -113,7 +259,8 @@ Os comandos de banco estão em [README-IMPORT.md](./README-IMPORT.md).
 ### Verificações
 
 ```bash
-npm run verificar:offline    # camada offline, no Node (fake-indexeddb)
+npm run verificar:offline     # camada offline, no Node (fake-indexeddb)
+npm run verificar:permissoes  # a matriz de papéis e o menu, no Node
 ```
 
 ```bash
@@ -883,6 +1030,7 @@ public/
   icons/                  ícones do aplicativo instalado
 scripts/
   verificar-offline.mts   54 asserções da camada offline
+  verificar-permissoes.mts 97 asserções do controle de acesso
   verificar-pwa.mjs       15 verificações num navegador de verdade
   verificar-dashboard.mjs 46 checagens em 4 tamanhos de tela
 prisma/                   schema + importador

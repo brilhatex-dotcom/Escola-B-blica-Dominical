@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
+import { EXIGIR_SENHA_PROPRIA_PARA_GRAVAR } from "@/lib/config";
+import { filtroDeCongregacao } from "./acesso";
+import { podeGravar, podeVer } from "./papeis";
 import { lerSessao, temSegredo, type Sessao } from "./sessao";
 
 /**
- * Guarda das rotas de escrita.
+ * Guarda das rotas.
  *
  * ============================================================================
- * O ESTADO EM QUE ISTO ENTRA: antes desta fase, `/api/chamada` e
- * `/api/lideranca` aceitavam POST de qualquer pessoa que soubesse o endereço.
- * Não havia exploração conhecida porque ninguém sabia os endereços — mas isso
- * não é segurança, é sorte.
- *
  * O CUIDADO PARA NÃO TRANCAR NINGUÉM DO LADO DE FORA: enquanto `AUTH_SECRET`
  * não existir no servidor, não há como verificar sessão nenhuma — e recusar
  * tudo deixaria a igreja sem sistema, sem que ninguém entendesse por quê. Nesse
@@ -48,14 +46,17 @@ export async function exigirSessao(): Promise<Autorizacao> {
   }
 
   /*
-   * Quem ainda não trocou a senha herdada NÃO escreve.
+   * A senha herdada e a gravação.
    *
-   * As 19 contas do sistema antigo compartilham o mesmo hash — ou seja, a mesma
-   * senha, que meia igreja pode saber. Permitir gravar chamada com ela é o
-   * mesmo que não ter autenticação. Ler é liberado; escrever exige uma senha
-   * que seja de fato de uma pessoa.
+   * As 19 contas do sistema antigo compartilham o mesmo hash — a mesma senha,
+   * que meia igreja pode conhecer. O certo é cada pessoa ter a sua, e é o que a
+   * reunião da liderança vai resolver; até lá, o interruptor em lib/config.ts
+   * decide se isso trava a gravação ou apenas aparece como aviso no painel.
+   *
+   * Travar antes da reunião pararia a EBD inteira no dia em que a autenticação
+   * for ligada. Ver o comentário completo em EXIGIR_SENHA_PROPRIA_PARA_GRAVAR.
    */
-  if (sessao.precisaTrocar) {
+  if (sessao.precisaTrocar && EXIGIR_SENHA_PROPRIA_PARA_GRAVAR) {
     return {
       sessao,
       recusa: NextResponse.json(
@@ -71,23 +72,68 @@ export async function exigirSessao(): Promise<Autorizacao> {
   return { sessao, recusa: null };
 }
 
-/** Só o perfil `master` altera a estrutura do campo. */
-export async function exigirMaster(): Promise<Autorizacao> {
+/**
+ * Exige que o acesso ENXERGUE um módulo.
+ *
+ * A chave é a mesma do menu (ver lib/dashboard/navegacao.ts). Uma lista
+ * separada de "módulos protegidos" divergiria do menu no primeiro módulo novo,
+ * e a divergência apareceria como uma rota aberta que ninguém sabia estar
+ * aberta.
+ */
+export async function exigirLeitura(chave: string): Promise<Autorizacao> {
   const auth = await exigirSessao();
-  if (auth.recusa) return auth;
+  if (auth.recusa || !auth.sessao) return auth;
 
-  // Sem autenticação configurada não há perfil para conferir; a mesma decisão
-  // de `exigirSessao` vale aqui.
-  if (!auth.sessao) return auth;
-
-  if (auth.sessao.perfil !== "master") {
-    return {
-      sessao: auth.sessao,
-      recusa: NextResponse.json(
-        { erro: "Somente a administração do campo pode alterar isto." },
-        { status: 403 },
-      ),
-    };
+  if (!podeVer(auth.sessao.papeis, chave)) {
+    return { sessao: auth.sessao, recusa: recusaDeAcesso() };
   }
   return auth;
+}
+
+/** Exige que o acesso possa GRAVAR num módulo. */
+export async function exigirEscrita(chave: string): Promise<Autorizacao> {
+  const auth = await exigirSessao();
+  if (auth.recusa || !auth.sessao) return auth;
+
+  if (!podeGravar(auth.sessao.papeis, chave)) {
+    return { sessao: auth.sessao, recusa: recusaDeAcesso() };
+  }
+  return auth;
+}
+
+/**
+ * A recusa por falta de permissão é sempre a MESMA mensagem.
+ *
+ * Dizer "você não pode alterar a liderança, mas pode ver" ensinaria a quem
+ * estiver sondando exatamente onde o sistema é permissivo. E para quem está
+ * usando de boa-fé, a diferença não muda nada: o caminho é o mesmo — falar com
+ * quem administra o campo.
+ */
+function recusaDeAcesso(): NextResponse {
+  return NextResponse.json(
+    { erro: "O seu acesso não permite esta operação." },
+    { status: 403 },
+  );
+}
+
+/**
+ * O recorte de congregações desta sessão, pronto para um `where` do Prisma.
+ *
+ * `undefined` significa "não filtre" — é o que sai para quem enxerga o campo, e
+ * também para o portal sem autenticação configurada, onde não há sessão de onde
+ * tirar recorte nenhum.
+ */
+export function recorteDaSessao(sessao: Sessao | null): { in: number[] } | undefined {
+  return filtroDeCongregacao(sessao);
+}
+
+/**
+ * Só quem administra o sistema mexe em contas e permissões.
+ *
+ * Substitui o antigo `exigirMaster`, que perguntava ao campo `perfil` da
+ * planilha — um campo com dois valores para dezenove contas, incapaz de
+ * distinguir um Supervisor de um Professor.
+ */
+export async function exigirAdministracao(): Promise<Autorizacao> {
+  return exigirEscrita("usuarios");
 }

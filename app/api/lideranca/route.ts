@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { erro, responder } from "@/lib/api";
-import { exigirMaster } from "@/lib/auth/guarda";
+import { exigirEscrita } from "@/lib/auth/guarda";
 
 /**
  * A hierarquia oficial do campo — leitura e edição.
@@ -52,7 +52,7 @@ export async function GET() {
 export async function POST(req: Request) {
   // Trocar quem ocupa um cargo do campo e decisao da administracao, nao de
   // qualquer pessoa com sessao aberta.
-  const { recusa } = await exigirMaster();
+  const { recusa } = await exigirEscrita("lideranca");
   if (recusa) return recusa;
 
   let corpo: { cargoId?: number; pessoaId?: number | null };

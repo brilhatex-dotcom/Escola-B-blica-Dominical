@@ -1,4 +1,4 @@
-# Continuação — Fase 08: otimização e acessibilidade
+# Continuação — Fase 09: Escola Bíblica completa
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -26,6 +26,7 @@ Substitui um sistema antigo em Google Apps Script.
 4. **Uma fase por vez:** explicar brevemente o que será feito, desenvolver
    somente aquilo, e aguardar aprovação antes de seguir.
 5. O usuário **não é programador** — instruções precisam ser passo a passo.
+6. **As senhas ficam exatamente como estão** até a reunião da liderança.
 
 ## O que já está pronto
 
@@ -37,42 +38,57 @@ Substitui um sistema antigo em Google Apps Script.
 | 04 | Dashboard completo |
 | 05 | Pessoas e cargos normalizados, API sobre o Postgres, 9 módulos |
 | 06 | Autenticação real (bcrypt, JWT em cookie httpOnly, rotas protegidas) |
-| 07 | **Fila offline ligada na Chamada** — grava no aparelho, enfileira e reenvia sozinha |
+| 07 | Fila offline ligada na Chamada — grava no aparelho e reenvia sozinha |
+| 08 | **Menu em 6 categorias, permissões por papel (RBAC), Usuários, Permissões** |
 
-## O que a Fase 07 entregou (para não refazer)
+## O plano das próximas fases (aprovado)
 
-O botão "Gravar chamada" não fala mais com o servidor: escreve no IndexedDB e
-enfileira. Quem envia é o motor (`lib/sync/motor.ts`), pelo transporte novo
-(`lib/sync/transporte.ts`), ligado no navegador pelo
-`components/sync/SincronizacaoProvider.tsx` (montado no layout do painel).
+| Fase | Entrega |
+|---|---|
+| **09** | **Escola Bíblica: Congregações (com dirigente e vice), Aniversariantes, Lições, Pedido de Revistas** |
+| 10 | Relatórios: Frequência, Ranking, Alerta de Faltas, Ficha do Aluno, Certificados, Auditoria |
+| 11 | Agenda: Calendário, Eventos, Avisos, Reuniões |
+| 12 | Administração e Configurações: Hierarquia, Escalas, Sistema, Backup, Sincronização, Offline, Logs |
+| 13 | Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos |
 
-- A chamada vai **inteira, num pacote** (tabela local `chamadas`,
-  `salvarPacote` no repositório) — nunca uma requisição por aluno.
-- Os **três estados** por aluno atravessam a fila: quem não foi marcado
-  simplesmente não entra no pacote.
-- `403` da senha herdada é **erro que não adianta repetir**: o item fica parado
-  e visível em vez de martelar o servidor, e sobe quando a pessoa troca a senha
-  (`liberarBloqueios`).
-- `npm run verificar:offline` — **54 asserções**, todas passando.
+## O que a Fase 08 entregou (para não refazer)
 
-### O que ficou conhecido e não foi feito
+- **Menu em 6 categorias**, sanfonado, em `lib/dashboard/navegacao.ts`. A
+  **chave do item é a chave da permissão** — não existe segunda lista.
+- **9 papéis** em `lib/auth/papeis.ts`. O papel vem do **cargo** que a pessoa
+  ocupa (`PessoaCargos`), não de um campo novo.
+- **Recorte por congregação** aplicado *dentro* das consultas do painel.
+- **Guarda por permissão**: `exigirLeitura(chave)` / `exigirEscrita(chave)`.
+- Telas novas: **Administração → Usuários** e **Administração → Permissões**.
+- `npm run verificar:permissoes` — **97 asserções**, todas passando.
 
-- Abrir uma classe pela **primeira vez** ainda precisa de servidor (a lista de
-  alunos vem da API). Depois disso a tela abre sem sinal.
-- Desmarcar aluno **já gravado no servidor** não apaga o registro de lá — a rota
-  não tem remoção, e criar uma mexeria em dado do sistema antigo.
+### Falta aplicar no banco
 
-## A PRÓXIMA ETAPA — o que fazer
+`prisma/aplicar-fase-08.sql` — dois cargos novos (Secretário Local e
+Vice-Dirigente). Colar no SQL Editor do Neon e clicar em Run. Seguro rodar com
+o sistema no ar e seguro rodar duas vezes.
 
-**Fase 08 — otimização e acessibilidade.** Imagens, revalidação, `loading.tsx`
-por rota e uma revisão de acessibilidade em todas as telas.
+### Decisões da Fase 08 que valem lembrar
+
+- **Classes** ficou no menu apesar de não estar na lista pedida: 53 classes
+  cadastradas, e Chamada, Alunos e relatórios dependem delas.
+- **Congregações aparece duas vezes**, como pedido: em Escola Bíblica é a visão
+  (dirigente e vice); em Administração é o cadastro. As duas entram na Fase 09.
+- **Liderança** aponta para `/dashboard/configuracoes`, que já faz exatamente
+  isso. Renomear a rota quebraria os atalhos já salvos.
+- **Atividades recentes vêm vazias para quem vê só uma congregação**:
+  `Auditoria` é tabela do sistema antigo e não tem coluna de congregação.
+  Resolve-se quando a auditoria nova (Fase 12) passar a gravá-la.
 
 ## Pendências do usuário (não são código)
 
 1. **`AUTH_SECRET` na Vercel** — enquanto não existir, o portal fica aberto e
    mostra tarja vermelha "Portal sem proteção". Valor já gerado e entregue.
-2. **Trocar a senha do banco no Neon** — ela apareceu num print compartilhado.
-3. **Apagar o projeto Neon vazio** (`sa-east-1`, `ep-cold-leaf-…`) — o correto é
+2. **Aplicar `prisma/aplicar-fase-08.sql`** no SQL Editor do Neon.
+3. **Reunião da liderança para trocar as senhas.** Depois dela, virar
+   `EXIGIR_SENHA_PROPRIA_PARA_GRAVAR` para `true` em `lib/config.ts`.
+4. **Trocar a senha do banco no Neon** — ela apareceu num print compartilhado.
+5. **Apagar o projeto Neon vazio** (`sa-east-1`, `ep-cold-leaf-…`) — o correto é
    o `ebd-betania` (`us-east-1`, `ep-muddy-snow-…`). O usuário é leigo e não
    conseguiu; precisa de passo a passo. **Não temos acesso à conta Neon.**
 
