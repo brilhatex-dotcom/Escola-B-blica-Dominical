@@ -19,6 +19,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:dry": "tsx prisma/seed.ts --dry-run",
+    "db:pessoas": "tsx prisma/pessoas.ts",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio"
   },

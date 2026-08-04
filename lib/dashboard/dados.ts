@@ -4,7 +4,9 @@ import type {
   Atividade,
   Compromisso,
   DadosPainel,
+  Estrutura,
   Indicador,
+  Lider,
   PontoFrequencia,
   ResumoDomingo,
   Usuario,
@@ -13,18 +15,14 @@ import type {
 /**
  * A UNICA porta de entrada de dados do Dashboard.
  *
- * Hoje devolve numeros de exemplo. Amanha, quando as rotas de API existirem
- * (Fase 05), este arquivo passa a chamar `fetch("/api/painel")` e mais nada no
- * projeto muda: nenhum componente conhece a origem dos dados, todos recebem os
- * tipos de `tipos.ts`.
+ * `carregarPainel()` busca de `/api/painel`, que le o Postgres. Este arquivo
+ * guarda tambem o conjunto de EXEMPLO, usado quando o banco nao responde — e
+ * marcado como tal, para a tela poder avisar.
  *
- * Foi por isso que os componentes NAO tem numeros escritos dentro deles. Um
- * "323" digitado no meio do JSX parece inofensivo e vira caca ao tesouro na
- * hora de ligar o banco.
- *
- * OS NUMEROS SAO OS REAIS DA IGREJA — 323 alunos, 53 classes, 19 usuarios,
- * vindos do export do sistema antigo. O que e inventado sao os numeros do DIA
- * (presentes, visitantes, atividades), que so a chamada de domingo produz.
+ * Nenhum componente conhece a origem dos dados: todos recebem os tipos de
+ * `tipos.ts`. Foi por isso que nenhum deles tem numero escrito dentro; um "323"
+ * digitado no meio do JSX parece inofensivo e vira caca ao tesouro na hora de
+ * ligar o banco.
  */
 
 const usuario: Usuario = {
@@ -176,18 +174,15 @@ function versiculoDoDia(hoje: Date) {
   return { texto: v.texto, referencia: v.ref };
 }
 
-/**
- * Carrega tudo o que o Dashboard mostra.
- *
- * Ja e `async` de proposito, mesmo devolvendo dados prontos: quando virar uma
- * chamada de rede, as telas nao mudam de forma — nao aparece um `await` novo,
- * nem um estado de carregamento que ninguem tinha previsto.
- */
-export async function carregarPainel(hoje = new Date()): Promise<DadosPainel> {
+/** O painel de demonstracao. Usado quando o banco nao responde. */
+export async function painelDeExemplo(hoje = new Date()): Promise<DadosPainel> {
   return {
+    origem: "exemplo",
     usuario,
     versiculo: versiculoDoDia(hoje),
     indicadores,
+    estrutura,
+    lideranca,
     frequencia,
     resumo: {
       ...resumo,
@@ -199,4 +194,56 @@ export async function carregarPainel(hoje = new Date()): Promise<DadosPainel> {
     aniversariantes,
     agenda,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Estrutura e lideranca de exemplo
+ * ------------------------------------------------------------------ */
+
+/**
+ * Estes numeros SAO os reais, apurados do export: 47 textos distintos no campo
+ * `prof` das classes viraram 54 pessoas (porque "Jéssica e Elisângela" e um
+ * texto e duas pessoas), mais os 5 da lideranca. Nove delas acumulam funcao.
+ */
+const estrutura: Estrutura = {
+  pessoas: 59,
+  cargosOcupados: 68,
+  acumulam: 9,
+  classes: 53,
+  congregacoes: 12,
+  revisar: 5,
+};
+
+/**
+ * A hierarquia oficial do campo.
+ *
+ * No caminho normal ela vem do banco — `Cargos.destaque` diz quais entram e
+ * `Cargos.ordem` diz em que ordem. Esta copia so existe para a tela de
+ * demonstracao nao ficar vazia; editar a lideranca de verdade e trabalho do
+ * painel administrativo, nao deste arquivo.
+ */
+const lideranca: Lider[] = [
+  { cargoId: 1, cargo: "Pastor Presidente", ordem: 10, pessoaId: 1, nome: "Aílton José Alves", tratamento: "Pr.", foto: null },
+  { cargoId: 2, cargo: "Gestor Local", ordem: 20, pessoaId: 2, nome: "Enoque Carlos do Nascimento", tratamento: "Pr.", foto: null },
+  { cargoId: 3, cargo: "Supervisor da EBD", ordem: 30, pessoaId: 3, nome: "José Raimundo", tratamento: "Pb.", foto: null },
+  { cargoId: 4, cargo: "Secretário", ordem: 40, pessoaId: 4, nome: "Luiz Neto", tratamento: "Aux.", foto: null },
+  { cargoId: 5, cargo: "Secretário Auxiliar", ordem: 50, pessoaId: 5, nome: "Elvys Danilo", tratamento: "Aux.", foto: null },
+];
+
+/**
+ * Busca os dados do painel.
+ *
+ * Roda no navegador e fala com `/api/painel`, que e quem enxerga o Postgres.
+ * Se a rede falhar, cai no conjunto de exemplo — sempre marcado como tal, para
+ * a tela poder avisar em vez de apresentar numero inventado como se fosse a
+ * chamada de domingo.
+ */
+export async function carregarPainel(): Promise<DadosPainel> {
+  try {
+    const res = await fetch("/api/painel", { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return (await res.json()) as DadosPainel;
+  } catch {
+    return painelDeExemplo();
+  }
 }

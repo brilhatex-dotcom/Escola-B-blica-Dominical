@@ -20,8 +20,11 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 01 | Camada offline (Dexie/IndexedDB + fila de sincronização) | pronta |
 | 01 | Design System base (`components/ui`) | pronto |
 | 04 | Dashboard Principal | pronto |
-| 05 | Módulos internos (Chamada, Alunos, Classes…) | **próxima fase** |
-| 05 | Rotas de API e autenticação real | próxima fase |
+| 05 | Pessoas e cargos (modelagem normalizada) | pronto |
+| 05 | Rotas de API sobre o Postgres | pronto |
+| 05 | Chamada, Alunos, Professores, Classes, Visitantes | pronto |
+| 05 | Relatórios, Agenda, Configurações | **próxima etapa** |
+| 06 | Autenticação real e sincronização offline ligada | próxima etapa |
 
 O login **não autentica de verdade ainda** — a chamada está simulada, com o
 ponto exato de troca marcado em `components/login/LoginCard.tsx`.
@@ -421,6 +424,148 @@ decorativo.
 Verificado com `npm run verificar:dashboard`: 46 checagens em 1920×1080,
 1366×768, 820×1180 e 390×844 — sem rolagem horizontal, sem erro de console, com
 o gráfico desenhado em todas.
+
+---
+
+## Pessoas e cargos
+
+O sistema antigo **não sabia contar gente**, e isso não é uma opinião — é o que
+os dados mostram:
+
+| Onde | O que havia |
+|---|---|
+| `Usuarios` | 19 linhas, mas a maioria não é pessoa: são contas de congregação ("Cong. Pinheiro", "T. Matriz", "Templo Sede") |
+| `Classes.prof` | texto livre digitado à mão — 50 preenchidos, 47 textos distintos |
+
+Entre esses 47 textos estão **"Ana costa", "Ana maria da costa" e "Ana Maria
+costa"** (provavelmente a mesma pessoa), **"Jéssica e Elisângela"** (um texto,
+duas pessoas), **"Silvério" e "Aux. Silverio"** (a mesma, com e sem tratamento)
+e **"Classe Juniores"** — que não é pessoa nenhuma.
+
+Quem dava aula em duas classes virava duas pessoas. Quem era dirigente e
+professor virava duas de novo.
+
+### A modelagem
+
+```
+Pessoa ──< PessoaCargo >── Cargo
+               │
+               ├── Congregacao   (cargo de congregação)
+               └── Classe        (cargo de classe)
+```
+
+Uma pessoa acumula quantos cargos exercer e continua sendo **uma linha** em
+`Pessoas`. O resultado da importação:
+
+| | |
+|---|---:|
+| Pessoas únicas | **59** |
+| Cargos ocupados | **68** |
+| Pessoas acumulando função | **9** |
+| Marcadas para conferência humana | **5** |
+| Descartadas por não serem pessoa | **1** |
+
+### O que o script NÃO faz
+
+`npm run db:pessoas` cria linhas em `Pessoas` e `PessoaCargos`. Ele **não apaga
+nem reescreve `Classes.prof`** — o texto original continua lá, e
+`PessoaCargos.origem` guarda de qual texto cada vínculo nasceu.
+
+Onde há dúvida, ele não decide: marca `revisar = true` e escreve o porquê.
+Fundir "Ana costa" com "Ana Maria costa" pode estar certo — e pode ser mãe e
+filha. Quem sabe é a secretaria, não o programa. O Dashboard mostra esses 5
+cadastros num aviso que leva direto à lista.
+
+### Dois detalhes de banco que custam caro se ignorados
+
+**`NULLS NOT DISTINCT`.** Em Postgres, `NULL` não é igual a `NULL` — então o
+índice único gerado pelo Prisma **não** impediria o Pastor Presidente de ser
+cadastrado duas vezes (cargo de campo tem `congId` e `classeId` nulos). A
+migration acrescenta o índice com `NULLS NOT DISTINCT`, e isso está testado:
+a segunda inserção idêntica é recusada pelo banco.
+
+**O mesmo problema no cliente.** `prisma.upsert` recusa `null` num `where`
+composto ("Argument `congId` must not be null") — pela mesma razão. O backfill
+usa `findFirst` com `equals: null` (que vira `IS NULL`) e deixa o índice como
+rede de segurança.
+
+### A migration é aditiva
+
+Não apaga, não renomeia e não altera nenhuma tabela do sistema antigo. A única
+mudança em tabela existente é uma coluna nova e opcional em `Usuarios`
+(`pessoaId`), que nasce nula. **Dá para rodar com o sistema no ar.**
+
+```bash
+npm run db:deploy      # aplica a migration
+npm run db:pessoas     # popula pessoas e cargos (repetível)
+npm run db:pessoas -- --dry   # só mostra o que faria
+```
+
+---
+
+## Liderança do Campo
+
+Card institucional no Dashboard, em ordem hierárquica. **Nenhum nome aparece no
+código**: a lista vem de `Cargos.destaque` e a ordem, de `Cargos.ordem`. Trocar
+o Supervisor da EBD é alteração de dado, não de arquivo.
+
+Cargo vago aparece assim mesmo, com o lugar reservado — escondê-lo esconderia da
+igreja que a função existe e está sem ninguém.
+
+O tratamento ("Pr.", "Pb.", "Aux.") fica **separado do nome** no banco. Junto,
+"Pb. José Raimundo" e "José Raimundo" viravam duas pessoas — exatamente como
+"Silvério" e "Aux. Silverio" viraram no sistema antigo. Os dois se reencontram
+só na hora de exibir.
+
+---
+
+## Módulos e API
+
+| Rota | O quê |
+|---|---|
+| `/api/painel` | tudo do Dashboard, numa chamada |
+| `/api/pessoas` | **uma linha por pessoa**, com os cargos dentro |
+| `/api/alunos` | matriculados, com filtro por classe |
+| `/api/classes` | classes com professores de verdade e o texto original |
+| `/api/visitantes` | recebidos, do mais recente ao mais antigo |
+| `/api/chamada` | GET a chamada do dia, POST grava a classe inteira |
+
+### A chamada tem TRÊS estados por aluno
+
+`presente` · `ausente` · **`não marcado`**
+
+A diferença entre "faltou" e "ninguém marcou" é a diferença entre um dado e a
+ausência dele. Com dois estados, todo aluno nasce ausente e uma chamada
+esquecida no meio vira trinta faltas — que entram no relatório do mês como se
+fossem reais.
+
+### O POST grava a chamada inteira, não uma presença por vez
+
+Uma requisição por aluno são trinta requisições numa classe de trinta — e, na
+rede da igreja, algumas chegam e outras não. A chamada fica pela metade e
+ninguém sabe quais faltaram.
+
+Tudo junto, numa transação, só há dois resultados possíveis: gravou tudo ou não
+gravou nada. Reenviar o mesmo pacote atualiza em vez de duplicar (verificado:
+`criadas: 3` na primeira vez, `atualizadas: 3` na segunda).
+
+Os ids de `Frequencia` não são autoincrement — são a chave original da planilha
+—, então o próximo id é calculado **dentro** da transação: dois professores
+marcando presença ao mesmo tempo pegariam o mesmo número e um perderia a
+chamada.
+
+### O gráfico mostra média por domingo, não soma do mês
+
+Junho tem 585 presenças registradas — em quatro ou cinco domingos. Ao lado dos
+291 matriculados, a soma sugere que compareceu o dobro da igreja; a média (117)
+responde "quantos vêm num domingo típico", que é o que se quer saber.
+
+### Sem banco, o painel abre — e avisa
+
+Se `/api/painel` não alcança o Postgres, a tela cai no conjunto de exemplo
+**marcado como tal**, com um aviso visível. Um painel que exibe números
+inventados sem avisar é pior do que um painel fora do ar: a secretaria fecha o
+relatório do domingo com dados que não existem.
 
 ---
 

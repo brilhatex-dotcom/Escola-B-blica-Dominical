@@ -6,10 +6,13 @@ import { GraduationCap, School, UserRoundCheck, Users } from "lucide-react";
 import { AgendaCard } from "@/components/dashboard/AgendaCard";
 import { BirthdayCard } from "@/components/dashboard/BirthdayCard";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
+import { LeadershipCard } from "@/components/dashboard/LeadershipCard";
+import { StructureStrip } from "@/components/dashboard/StructureStrip";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { Saudacao } from "@/components/dashboard/Saudacao";
 import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { SystemStatus } from "@/components/dashboard/SystemStatus";
+import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { carregarPainel } from "@/lib/dashboard/dados";
 import type { ChaveIndicador, DadosPainel } from "@/lib/dashboard/tipos";
@@ -81,6 +84,22 @@ export default function DashboardPage() {
         licao={dados.resumo.licao}
       />
 
+      {/*
+        AVISO DE DEMONSTRACAO.
+
+        Aparece quando `/api/painel` nao conseguiu falar com o Postgres e a tela
+        caiu no conjunto de exemplo. Sem ele, o painel mostraria numeros
+        inventados com a mesma cara dos numeros reais — e alguem fecharia o
+        relatorio do domingo com eles.
+      */}
+      {dados.origem === "exemplo" && (
+        <Alert tipo="alerta" titulo="Dados de demonstração" className="mb-4">
+          O banco não respondeu, então estes números são de exemplo — não são a
+          chamada de hoje. Assim que a conexão voltar, o painel passa a mostrar
+          os dados reais sozinho.
+        </Alert>
+      )}
+
       {/* ---------------- Os quatro numeros ---------------- */}
       <section aria-label="Indicadores da Escola Bíblica" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {dados.indicadores.map((ind, i) => (
@@ -92,6 +111,9 @@ export default function DashboardPage() {
           />
         ))}
       </section>
+
+      {/* ---------------- Equipe e estrutura ---------------- */}
+      <StructureStrip estrutura={dados.estrutura} className="mt-4" />
 
       {/* ----------------------------------------------------------------
         Grafico + coluna da direita.
@@ -108,7 +130,14 @@ export default function DashboardPage() {
 
       {/* ---------------- Atividades, aniversarios e agenda ---------------- */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-        <RecentActivity atividades={dados.atividades} className="lg:row-span-2 xl:row-span-1" />
+        {/*
+          A lideranca vem ANTES das atividades: e informacao institucional,
+          estavel, que responde "quem responde por isto aqui" — pergunta que
+          alguem faz uma vez e nao volta a fazer. As atividades recentes mudam o
+          tempo todo e sao consultadas de relance.
+        */}
+        <LeadershipCard lideranca={dados.lideranca} />
+        <RecentActivity atividades={dados.atividades} />
         <BirthdayCard aniversariantes={dados.aniversariantes} hoje={hoje} />
         <AgendaCard agenda={dados.agenda} />
 
@@ -118,7 +147,7 @@ export default function DashboardPage() {
           responde "estou online?"; esta responde "o que esta acontecendo com
           os meus dados?", que e outra pergunta e precisa de espaco.
         */}
-        <SystemStatus variante="detalhado" className="lg:col-span-2 xl:col-span-1" />
+        <SystemStatus variante="detalhado" className="lg:col-span-2 xl:col-span-2" />
       </div>
     </>
   );

@@ -39,11 +39,11 @@ export interface ItemMenu {
 
 export const MENU: readonly ItemMenu[] = [
   { chave: "dashboard", rotulo: "Dashboard", href: "/dashboard", icone: Home, descricao: "Visão geral da Escola Bíblica" },
-  { chave: "chamada", rotulo: "Chamada", href: "/dashboard/chamada", icone: BookOpen, descricao: "Marcar presença das classes", emBreve: true },
-  { chave: "alunos", rotulo: "Alunos", href: "/dashboard/alunos", icone: GraduationCap, descricao: "Matrículas e cadastro de alunos", emBreve: true },
-  { chave: "professores", rotulo: "Professores", href: "/dashboard/professores", icone: UserRound, descricao: "Corpo docente e escalas", emBreve: true },
-  { chave: "classes", rotulo: "Classes", href: "/dashboard/classes", icone: School, descricao: "Classes por faixa e congregação", emBreve: true },
-  { chave: "visitantes", rotulo: "Visitantes", href: "/dashboard/visitantes", icone: Users, descricao: "Visitantes recebidos", emBreve: true },
+  { chave: "chamada", rotulo: "Chamada", href: "/dashboard/chamada", icone: BookOpen, descricao: "Marcar presença das classes" },
+  { chave: "alunos", rotulo: "Alunos", href: "/dashboard/alunos", icone: GraduationCap, descricao: "Matrículas e cadastro de alunos" },
+  { chave: "professores", rotulo: "Professores", href: "/dashboard/professores", icone: UserRound, descricao: "Pessoas e cargos — cadastro único" },
+  { chave: "classes", rotulo: "Classes", href: "/dashboard/classes", icone: School, descricao: "Classes por faixa e congregação" },
+  { chave: "visitantes", rotulo: "Visitantes", href: "/dashboard/visitantes", icone: Users, descricao: "Visitantes recebidos" },
   { chave: "relatorios", rotulo: "Relatórios", href: "/dashboard/relatorios", icone: ChartColumn, descricao: "Frequência, ofertas e estatísticas", emBreve: true },
   { chave: "agenda", rotulo: "Agenda", href: "/dashboard/agenda", icone: CalendarDays, descricao: "Cultos, EBD e eventos", emBreve: true },
   { chave: "configuracoes", rotulo: "Configurações", href: "/dashboard/configuracoes", icone: Settings, descricao: "Parâmetros, usuários e permissões", emBreve: true },

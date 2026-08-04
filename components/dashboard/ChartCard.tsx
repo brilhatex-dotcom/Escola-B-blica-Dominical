@@ -47,7 +47,7 @@ const CORES = {
 };
 
 const ROTULOS: Record<string, string> = {
-  presentes: "Presentes",
+  presentes: "Presentes (média)",
   matriculados: "Matriculados",
   visitantes: "Visitantes",
 };
@@ -100,7 +100,7 @@ export function ChartCard({ dados, className }: ChartCardProps) {
 
   const ultimo = visivel.at(-1);
   const taxa =
-    ultimo && ultimo.matriculados > 0
+    ultimo && ultimo.matriculados > 0 && ultimo.presentes > 0
       ? Math.round((ultimo.presentes / ultimo.matriculados) * 100)
       : null;
 
@@ -125,10 +125,15 @@ export function ChartCard({ dados, className }: ChartCardProps) {
           >
             Frequência mensal
           </h2>
+          {/*
+            "Media por domingo" precisa estar escrito. Sem isso, quem le supoe
+            soma do mes — e uma barra de 146 ao lado de 291 matriculados passa a
+            ideia de que metade da igreja faltou, quando 146 e o comparecimento
+            tipico de um domingo.
+          */}
           <p className="mt-1 text-[0.78rem] text-brand-200/55">
-            {taxa !== null
-              ? `${taxa}% dos matriculados presentes no último domingo`
-              : "Presença acompanhada mês a mês"}
+            Média por domingo
+            {taxa !== null && ` · ${taxa}% dos matriculados no mês mais recente`}
           </p>
         </div>
 

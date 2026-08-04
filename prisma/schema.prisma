@@ -45,6 +45,7 @@ model Congregacao {
   escalaCultos EscalaCulto[]
   eventos      Evento[]
   avisos       Aviso[]
+  pessoaCargos PessoaCargo[]
 
   @@map("Congregacoes")
 }
@@ -61,8 +62,17 @@ model Usuario {
   classeId Int?
   ativo    Boolean @default(true)
 
+  /// A PESSOA por tras da conta — quando existe uma.
+  ///
+  /// Fica nulo na maioria das 19 linhas herdadas, e isso esta certo: elas nao
+  /// sao pessoas, sao contas de congregacao ("Cong. Pinheiro", "T. Matriz").
+  /// Conta e pessoa sao coisas diferentes, e foi confundi-las que fez o sistema
+  /// antigo achar que tinha 19 professores.
+  pessoaId Int? @unique
+
   congregacao Congregacao? @relation(fields: [congId], references: [id])
   classe      Classe?      @relation(fields: [classeId], references: [id])
+  pessoa      Pessoa?      @relation(fields: [pessoaId], references: [id])
 
   @@index([congId])
   @@index([classeId])
@@ -82,12 +92,13 @@ model Classe {
 
   congregacao Congregacao? @relation(fields: [congId], references: [id])
 
-  usuarios    Usuario[]
-  alunos      Aluno[]
-  frequencias Frequencia[]
-  freqLicoes  FreqLicao[]
-  ofertas     Oferta[]
-  visitantes  Visitante[]
+  usuarios     Usuario[]
+  alunos       Aluno[]
+  frequencias  Frequencia[]
+  freqLicoes   FreqLicao[]
+  ofertas      Oferta[]
+  visitantes   Visitante[]
+  pessoaCargos PessoaCargo[]
 
   @@index([congId])
   @@map("Classes")
@@ -235,14 +246,14 @@ model Parametro {
 }
 
 model Reuniao {
-  id       Int      @id
-  legacyId Int?
-  titulo   String
-  tipo     String
-  data     DateTime @db.Date
-  local    String?
-  obs      String?
-  autor    String
+  id            Int      @id
+  legacyId      Int?
+  titulo        String
+  tipo          String
+  data          DateTime @db.Date
+  local         String?
+  obs           String?
+  autor         String
   /// No export e uma STRING com JSON serializado: [{"nome":..,"presente":bool}].
   /// A importacao faz o parse e grava como jsonb (13/13 linhas validadas).
   participantes Json
@@ -331,4 +342,143 @@ model Versiculo {
   ativo    Boolean @default(true)
 
   @@map("Versiculos")
+}
+
+/**
+ * ==========================================================================
+ * PESSOAS E CARGOS
+ * O sistema antigo nao tinha cadastro de pessoas, e por isso nao conseguia
+ * contar gente. Ele tinha duas coisas diferentes:
+ * Usuarios  — 19 linhas, mas a maioria nao e pessoa nenhuma: sao contas de
+ * congregacao ("Cong. Pinheiro", "T. Matriz", "Templo Sede").
+ * Classes.prof — texto livre, digitado por quem cadastrou a classe. Os 50
+ * preenchidos produzem 47 textos distintos, e entre eles estao
+ * "Ana costa", "Ana maria da costa" e "Ana Maria costa" (a mesma
+ * pessoa), "Jéssica e Elisângela" (DUAS pessoas num campo so) e
+ * "Classe Juniores" (que nao e pessoa alguma).
+ * Contar professores nesse arranjo e impossivel: quem da aula em duas classes
+ * vira duas pessoas, e quem e dirigente e professor vira duas de novo.
+ * A modelagem abaixo separa QUEM (Pessoa) de O QUE FAZ (Cargo), ligados por
+ * PessoaCargo. Uma pessoa pode acumular quantos cargos exercer — e continua
+ * sendo uma linha em Pessoa, que e o numero que o Dashboard mostra.
+ * ==========================================================================
+ */
+
+/// Cadastro unico de gente. Uma linha por PESSOA, nunca por funcao.
+model Pessoa {
+  id Int @id @default(autoincrement())
+
+  /// Nome civil, SEM tratamento eclesiastico. "Aílton José Alves", nao
+  /// "Pr. Aílton José Alves" — senao a mesma pessoa se duplica no dia em que
+  /// alguem digitar sem o prefixo, que e exatamente como o texto livre das
+  /// classes se multiplicou.
+  nome String
+
+  /// Tratamento: "Pr.", "Pb.", "Dc.", "Aux.", "Ir.ª". Guardado a parte para a
+  /// exibicao poder ser respeitosa sem contaminar a identidade.
+  tratamento String?
+
+  /// Forma normalizada do nome (minusculo, sem acento, sem tratamento).
+  /// Existe para impedir "Andreyna Magalhaes" e "Andreyna Magslhaes" de virarem
+  /// duas pessoas — e por ser UNIQUE, o banco recusa a duplicata em vez de
+  /// depender de a aplicacao lembrar de conferir.
+  chave String @unique
+
+  tel   String?
+  email String?
+  /// Caminho da foto. Quase sempre nulo: o cadastro herdado nao tem fotos.
+  foto  String?
+  nasc  DateTime? @db.Date
+
+  ativo Boolean @default(true)
+
+  /// Marcada quando a importacao SUSPEITOU de duplicidade mas nao teve certeza
+  /// — "Ana costa" e "Ana Maria costa" podem ser a mesma pessoa ou nao. A regra
+  /// da igreja e nao alterar registro do sistema antigo por conta propria,
+  /// entao a duvida fica registrada para um humano decidir, em vez de o
+  /// programa fundir as duas e ninguem mais descobrir.
+  revisar    Boolean @default(false)
+  observacao String?
+
+  criadoEm   DateTime @default(now())
+  atualizado DateTime @updatedAt
+
+  cargos  PessoaCargo[]
+  usuario Usuario?
+
+  @@index([nome])
+  @@map("Pessoas")
+}
+
+/// Lista de funcoes. E dado, nao codigo: cadastrar um cargo novo nao exige
+/// alterar o sistema.
+model Cargo {
+  id Int @id @default(autoincrement())
+
+  nome String @unique
+
+  /// Posicao na hierarquia — MENOR e mais alto. E o que ordena o card
+  /// "Liderança do Campo" sem que a ordem esteja escrita em nenhum componente.
+  /// Numerado de 10 em 10 para caber um cargo novo no meio sem renumerar tudo.
+  ordem Int
+
+  /// "campo" | "congregacao" | "classe" — a que altura o cargo se exerce.
+  /// Um Pastor Presidente e do campo inteiro; um Professor, de uma classe.
+  escopo String
+
+  /// Aparece no card institucional do Dashboard.
+  destaque Boolean @default(false)
+
+  ativo Boolean @default(true)
+
+  vinculos PessoaCargo[]
+
+  @@index([ordem])
+  @@map("Cargos")
+}
+
+/// O vinculo: esta pessoa exerce este cargo, aqui.
+///
+/// A linha e o cargo OCUPADO. Duas linhas da mesma pessoa somam dois cargos e
+/// uma pessoa — que e precisamente a distincao que o Dashboard precisa mostrar.
+model PessoaCargo {
+  id Int @id @default(autoincrement())
+
+  pessoaId Int
+  cargoId  Int
+
+  /// Onde exerce. Nulo em cargo de campo, que nao pertence a uma congregacao.
+  congId   Int?
+  /// Preenchido apenas em cargo de classe (professor, secretario de classe).
+  classeId Int?
+
+  inicio DateTime? @db.Date
+  /// Preenchido quando a pessoa deixa a funcao. O vinculo NAO e apagado: a
+  /// escala do ano passado precisa continuar dizendo quem dava a aula.
+  fim    DateTime? @db.Date
+
+  ativo Boolean @default(true)
+
+  /// Texto de origem quando o vinculo veio da importacao — por exemplo
+  /// "Pb. Lourival e Aux. Danilo", que gerou dois vinculos. Guardado para
+  /// qualquer conferencia futura poder voltar ao que estava escrito.
+  origem String?
+
+  criadoEm DateTime @default(now())
+
+  pessoa      Pessoa       @relation(fields: [pessoaId], references: [id], onDelete: Cascade)
+  cargo       Cargo        @relation(fields: [cargoId], references: [id])
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+
+  /// Impede o mesmo vinculo duas vezes. ATENCAO: em Postgres, NULL nao e igual
+  /// a NULL, entao esta restricao sozinha NAO cobre os cargos de campo (congId
+  /// e classeId nulos). A migration acrescenta o mesmo indice com
+  /// NULLS NOT DISTINCT, que fecha o buraco.
+  @@unique([pessoaId, cargoId, congId, classeId])
+  @@index([pessoaId])
+  @@index([cargoId])
+  @@index([congId])
+  @@index([classeId])
+  @@map("PessoaCargos")
 }

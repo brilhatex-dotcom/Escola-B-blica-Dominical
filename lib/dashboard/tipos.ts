@@ -122,6 +122,48 @@ export interface Compromisso {
   quando: string;
 }
 
+
+/* ------------------------------------------------------------------ *
+ * Estrutura: gente e funcoes
+ * ------------------------------------------------------------------ */
+
+/**
+ * Os quatro numeros que o sistema antigo nao sabia responder.
+ *
+ * `pessoas` e `cargosOcupados` sao DIFERENTES de proposito, e a diferenca e a
+ * informacao: quem e dirigente e professor conta uma vez em pessoas e duas em
+ * cargos. Mostrar so um dos dois esconde metade do quadro — ou a igreja parece
+ * ter mais gente do que tem, ou parece nao estar acumulando funcao.
+ */
+export interface Estrutura {
+  /** Gente, sem duplicidade. Uma linha por pessoa. */
+  pessoas: number;
+  /** Funcoes exercidas. Sempre >= pessoas. */
+  cargosOcupados: number;
+  /** Quantas pessoas exercem mais de uma funcao. Explica a diferenca acima. */
+  acumulam: number;
+  classes: number;
+  congregacoes: number;
+  /** Cadastros que a importacao marcou como possivel duplicata. */
+  revisar: number;
+}
+
+/**
+ * Uma linha da hierarquia oficial.
+ *
+ * `nome` nulo significa CARGO VAGO, e o card mostra assim mesmo. Esconder a
+ * linha faria a igreja deixar de saber que a funcao existe e esta sem ninguem.
+ */
+export interface Lider {
+  cargoId: number;
+  cargo: string;
+  ordem: number;
+  pessoaId: number | null;
+  nome: string | null;
+  tratamento: string | null;
+  foto: string | null;
+}
+
 /* ------------------------------------------------------------------ *
  * O painel inteiro
  * ------------------------------------------------------------------ */
@@ -134,9 +176,19 @@ export interface Usuario {
 }
 
 export interface DadosPainel {
+  /**
+   * De onde vieram estes numeros.
+   *
+   * Existe para a tela poder DIZER quando esta mostrando demonstracao. Um
+   * painel que exibe numeros de exemplo sem avisar e pior do que um painel
+   * vazio: a secretaria fecha o relatorio do domingo com dados inventados.
+   */
+  origem: "banco" | "exemplo";
   usuario: Usuario;
   versiculo: { texto: string; referencia: string };
   indicadores: Indicador[];
+  estrutura: Estrutura;
+  lideranca: Lider[];
   frequencia: PontoFrequencia[];
   resumo: ResumoDomingo;
   atividades: Atividade[];
