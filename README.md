@@ -10,13 +10,16 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 
 ## O que já existe
 
-| Entrega | Estado |
-|---|---|
-| Splash cinematográfica de 15s com o vídeo oficial | pronta |
-| Congelamento no melhor quadro da fachada | pronto |
-| Tela de login premium sobre o quadro congelado | pronta |
-| Schema Prisma + importador do sistema antigo | pronto (ver [README-IMPORT.md](./README-IMPORT.md)) |
-| Dashboard, módulos, API, autenticação | **fora do escopo desta etapa** |
+| Fase | Entrega | Estado |
+|---|---|---|
+| 02 | Splash cinematográfica de 15s com o vídeo oficial | pronta |
+| 02 | Congelamento no melhor quadro da fachada | pronto |
+| 02 | Tela de login premium sobre o quadro congelado | pronta |
+| 03 | Schema Prisma + importador do sistema antigo | pronto (ver [README-IMPORT.md](./README-IMPORT.md)) |
+| 01 | PWA instalável (manifesto, ícones, Service Worker) | pronta |
+| 01 | Camada offline (Dexie/IndexedDB + fila de sincronização) | pronta |
+| 01 | Design System base (`components/ui`) | pronto |
+| 04 | Dashboard, módulos, API, autenticação | **próxima fase** |
 
 O login **não autentica de verdade ainda** — a chamada está simulada, com o
 ponto exato de troca marcado em `components/login/LoginCard.tsx`.
@@ -47,6 +50,26 @@ npm run typecheck    # tsc --noEmit
 ```
 
 Os comandos de banco estão em [README-IMPORT.md](./README-IMPORT.md).
+
+### Verificações
+
+```bash
+npm run verificar:offline    # camada offline, no Node (fake-indexeddb)
+```
+
+```bash
+npm run build && npm start   # num terminal
+npm run verificar:pwa        # noutro — precisa de Chromium
+```
+
+O `verificar:pwa` abre um navegador de verdade e confere manifesto, Service
+Worker, o que foi para o cache e se a página abre sem internet. O `playwright`
+**não** está nas dependências de propósito — são mais de 100 MB que a Vercel
+baixaria em todo build sem serventia em produção. Instale só na hora:
+
+```bash
+npm i --no-save playwright && npx playwright install chromium
+```
 
 ---
 
@@ -181,6 +204,153 @@ No card, a marca fica entre **90 e 120px**: 96px no celular, 116px no desktop.
 
 ---
 
+## Aplicativo instalável (PWA)
+
+O portal instala como aplicativo no Android, iPhone, iPad, Windows, macOS e
+Chromebook, abrindo **sem barra de navegador** (`display: "standalone"`).
+
+| Arquivo | O quê |
+|---|---|
+| `app/manifest.ts` | manifesto gerado pelo Next em `/manifest.webmanifest` |
+| `public/icons/` | 192 e 512, `any` e `maskable`, + `apple-touch-icon` |
+| `public/sw.js` | Service Worker, escrito à mão |
+| `components/pwa/ServiceWorkerProvider.tsx` | registro e troca de versão |
+
+### Por que os ícones `maskable` são arquivos separados
+
+O sistema recorta o ícone na forma dele — círculo no Android, squircle no iOS.
+Sem uma versão com zona segura, o letreiro "ASSEMBLEIA DE DEUS" é a primeira
+coisa a ser cortada. Nos arquivos `maskable-*` a marca entra menor. **A arte
+continua sem alteração**: só muda a escala dentro da moldura.
+
+### Por que o Service Worker é escrito à mão
+
+Por causa do vídeo. Ao reproduzir, o navegador pede **pedaços** do arquivo com o
+cabeçalho `Range` e recebe status **206**; a Cache API **recusa** guardar
+respostas 206 — `cache.put` lança erro. Com uma receita genérica de PWA o vídeo
+nunca entra em cache e é rebaixado da internet a cada abertura, mesmo com o
+Service Worker instalado.
+
+A saída, em `responderMidia()`: ignorar o `Range` na ida (busca o arquivo
+inteiro, 200, e guarda) e tratar na volta (recorta o pedaço pedido do que está
+em cache e monta o 206 na mão).
+
+### O aperto de mão página → Service Worker
+
+Só o item acima não bastava, e a medição mostrou por quê:
+
+| Visita | O que aconteceu com o vídeo |
+|---|---|
+| 1ª | o SW ainda não controlava a página quando o vídeo foi pedido |
+| 2ª | o navegador serviu do cache HTTP dele próprio — **nenhuma requisição** |
+
+Ou seja, o Service Worker nunca via o arquivo. A correção: `DroneBackdrop`
+manda `{ tipo: "GUARDAR_MIDIA", url: video.currentSrc }` e o SW busca e guarda
+**esse** arquivo. `currentSrc` é a peça-chave — só a página sabe se o navegador
+escolheu o `.webm` ou o `.mp4`, então guarda-se **um** formato, não os dois.
+
+### Estratégias de cache
+
+| Recurso | Estratégia | Motivo |
+|---|---|---|
+| navegação | rede primeiro, cache como rede de segurança | garante que o app **abre** sem internet |
+| `/_next/static` | cache primeiro | os nomes têm hash: se está em cache, está correto |
+| imagens | cache primeiro | — |
+| `/media` (vídeo) | cache primeiro, com tratamento de `Range` | ver acima |
+| resto | rede primeiro | — |
+
+O `activate` chama `aquecerAppShell()`, que lê o próprio HTML de `/` e extrai os
+`/_next/static/…` referenciados. Sem isso o sintoma é cruel: na primeira visita
+o navegador já baixou todo o JS antes de o SW assumir, então o usuário instala o
+app, fica sem sinal, abre e vê **tela branca** — o HTML estava em cache, o
+JavaScript que o preenche não.
+
+### A atualização não recarrega sozinha
+
+O download da versão nova é automático, em segundo plano. O **instante da troca**
+não é, e isso é proposital: recarregar sozinho é destrutivo num sistema de
+chamada — o professor está marcando presença de trinta alunos, o app recarrega e
+a manhã inteira vai embora. A versão fica pronta esperando e o usuário escolhe a
+hora, ou ela entra na próxima abertura do zero.
+
+Dois guardas em `ServiceWorkerProvider`: `jaTinhaControlador` (sem ele, o
+`clients.claim()` da primeira visita recarregava a página **no meio dos 15
+segundos da abertura**) e `jaRecarregou` (laço clássico com várias abas).
+
+Medido com `npm run verificar:pwa`: 15 verificações, todas passando — vídeo em
+cache (`ebd-midia-v1`, só o `.webm`) e tocando offline com `readyState = 4`.
+
+---
+
+## Offline First
+
+O sistema é usado numa igreja, aos domingos, onde o sinal cai. A regra é: **a
+gravação nunca falha por falta de internet.** Escreve-se no aparelho e sincroniza
+quando der.
+
+| Arquivo | O quê |
+|---|---|
+| `lib/db/schema.ts` | tipos das tabelas locais e da fila |
+| `lib/db/local.ts` | banco Dexie/IndexedDB e índices |
+| `lib/db/repositorio.ts` | `salvar` · `remover` · `receberDoServidor` · `confirmarEnvio` |
+| `lib/sync/motor.ts` | esvazia a fila contra o servidor |
+
+### `uid` local e `idRemoto`
+
+Todo registro nasce com um `uid` gerado no aparelho, **imutável**, e é por ele
+que os outros registros apontam. O `idRemoto` só aparece quando o servidor
+confirma. Sem essa separação, uma presença marcada offline para um aluno criado
+offline não teria a que se referir — o aluno ainda não tem id.
+
+### Gravação e fila na mesma transação
+
+`salvar` escreve na tabela **e** enfileira dentro de **uma** transação Dexie. Se
+fossem duas operações, uma falha no meio deixaria o dado gravado e não
+enfileirado: some para sempre, em silêncio, sem ninguém perceber até a chamada
+não bater.
+
+### A carga do servidor não atropela alteração pendente
+
+`receberDoServidor` preserva o que está `pendente` localmente. O contrário
+significaria: o professor corrige um nome offline, o app sincroniza, a carga do
+servidor sobrescreve a correção com o valor antigo.
+
+### O motor para no primeiro erro
+
+A fila sobe em ordem de criação, sequencialmente, e **para** no primeiro erro em
+vez de pular para o próximo. Continuar enviaria alterações que dependem da que
+acabou de falhar — "marcar presença" antes de "criar aluno". A espera entre
+tentativas cresce (2s, 4s, 8s… até 5 min): sem isso, um servidor fora do ar vira
+um martelo que só gasta bateria e dados de quem está na igreja.
+
+O **transporte** é injetado de fora (`configurarTransporte`), porque as rotas de
+API só existem na Fase 05. Sem transporte o motor fica parado em vez de dar
+erro: a fila enche normalmente e sobe inteira quando as rotas existirem.
+
+Verificado com `npm run verificar:offline`: 20 asserções, todas passando.
+
+---
+
+## Design System
+
+`components/ui/` — Button, Checkbox, Input, Badge, Alert, Skeleton, Card, Table,
+Dialog. Importação por um ponto único:
+
+```ts
+import { Button, Card, Input } from "@/components/ui";
+```
+
+**Sidebar e Menu não estão aqui** de propósito: dependem da navegação e da
+hierarquia de permissões, que só ficam definidas na Fase 04. Construí-los agora
+seria adivinhar — e adivinhação em componente compartilhado é o tipo de coisa
+que depois ninguém consegue mudar.
+
+O `Card` tem dois tons: `glass` (vidro fosco sobre foto ou vídeo, como o card de
+login) e `solido` (fundo chapado, onde o vidro não tem o que refratar e só
+deixaria o texto menos legível).
+
+---
+
 ## Paleta
 
 Predominância do azul institucional; o dourado só em brilhos e destaques; o
@@ -224,8 +394,9 @@ Fontes: **Cinzel** (títulos), **Playfair Display** (subtítulos), **Inter**
 
 ```
 app/
-  layout.tsx              fontes + metadata
+  layout.tsx              fontes + metadata + Service Worker
   page.tsx                orquestra splash → login e hospeda o vídeo
+  manifest.ts             manifesto do PWA
   globals.css             tokens do design system
 components/
   brand/BrandMark         a logomarca oficial (+ selo claro)
@@ -234,12 +405,21 @@ components/
   splash/ParticleField    campo de partículas em canvas
   login/                  LoginScreen, LoginCard, FormField, VerseOfTheDay,
                           AuthSuccessOverlay
-  ui/                     Button, Checkbox
+  pwa/                    registro do Service Worker e troca de versão
+  ui/                     Design System (Button, Card, Input, Table, Dialog…)
 lib/
   config.ts               ajustes da abertura
   media.ts                o vídeo: recorte, tempos e a conta da desaceleração
   brand.ts                caminhos e regras de uso da logomarca
   verses.ts               os 51 versículos, vindos do export da igreja
+  db/                     banco local (Dexie/IndexedDB) e fila
+  sync/                   motor de sincronização
+public/
+  sw.js                   Service Worker
+  icons/                  ícones do aplicativo instalado
+scripts/
+  verificar-offline.mts   20 asserções da camada offline
+  verificar-pwa.mjs       15 verificações num navegador de verdade
 prisma/                   schema + importador
 ```
 
@@ -267,10 +447,17 @@ API entrarem — `postinstall` já roda `prisma generate`.
 
 ---
 
-## Próximos passos sugeridos
+## Próximos passos
+
+**Fase 04 — Dashboard.** Construir o painel e apontar o `onDone` do
+`AuthSuccessOverlay` para ele; com a navegação definida, aí sim entram Sidebar e
+Menu no Design System.
+
+Depois:
 
 1. Ligar a autenticação real (`/api/auth/login`), conferindo o SHA-256 herdado
    da planilha e re-gravando em bcrypt/argon2 no primeiro login correto — assim
    a base migra sozinha, sem forçar ninguém a trocar de senha.
 2. Ler os versículos do banco em vez do arquivo estático.
-3. Construir o Dashboard e apontar o `onDone` do `AuthSuccessOverlay` para ele.
+3. Fase 05: rotas de API e, com elas, o transporte do motor de sincronização
+   (`configurarTransporte`) — o motor já está pronto esperando.

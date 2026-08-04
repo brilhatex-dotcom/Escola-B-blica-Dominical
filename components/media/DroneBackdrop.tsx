@@ -157,6 +157,34 @@ export const DroneBackdrop = forwardRef<DroneBackdropHandle, DroneBackdropProps>
        * segundo 3 gasta um tempo variavel so para acordar, e a abertura entra
        * atrasada num ponto em que ninguem tem margem para esperar.
        */
+      /*
+       * Avisa o Service Worker qual dos formatos o navegador escolheu, para
+       * ele guardar ESSE arquivo — e so ele.
+       *
+       * O Service Worker sozinho nao consegue: na primeira visita ele ainda nao
+       * controla a pagina quando o video e pedido, e da segunda em diante o
+       * navegador serve do cache HTTP dele proprio sem emitir requisicao
+       * nenhuma. Sem esta mensagem, o video simplesmente nunca fica disponivel
+       * offline.
+       */
+      const avisarServiceWorker = () => {
+        if (!("serviceWorker" in navigator)) return;
+        const url = el.currentSrc;
+        if (!url) return;
+        navigator.serviceWorker.ready
+          .then((registro) =>
+            registro.active?.postMessage({ tipo: "GUARDAR_MIDIA", url }),
+          )
+          .catch(() => {
+            /* sem Service Worker: o video segue vindo da rede */
+          });
+      };
+      // Com `preload="auto"` o video costuma estar carregado ANTES de este
+      // efeito rodar. Nesse caso `loadeddata` ja passou e nunca dispara de
+      // novo — por isso a checagem, e nao so o listener.
+      if (el.readyState >= 2) avisarServiceWorker();
+      else el.addEventListener("loadeddata", avisarServiceWorker, { once: true });
+
       let cancelado = false;
       const aquecer = () => {
         if (cancelado) return;
@@ -176,6 +204,7 @@ export const DroneBackdrop = forwardRef<DroneBackdropHandle, DroneBackdropProps>
         cancelado = true;
         el.removeEventListener("ended", onEnded);
         el.removeEventListener("loadeddata", aquecer);
+        el.removeEventListener("loadeddata", avisarServiceWorker);
       };
     }, []);
 
