@@ -64,13 +64,24 @@ export default function AlunosPage() {
         url.searchParams.set("porPagina", "200");
 
         const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
         const dados = await res.json();
         setItens(dados.itens);
         setTotal(dados.total);
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
-        setErro("O servidor não respondeu. Verifique a conexão e tente de novo.");
+        /*
+         * "O servidor não respondeu" era mentira quando ele respondia 500 — e
+         * mandava procurar problema na internet, que estava perfeita. A
+         * mensagem agora separa os dois casos: sem rede o `fetch` lança e não
+         * há `status`; com resposta de erro, o problema está no banco.
+         */
+        const status = (e as { status?: number }).status;
+        setErro(
+          status
+            ? "O servidor respondeu com erro. Isso costuma ser banco de dados não configurado — abra /api/diagnostico para ver o motivo."
+            : "Sem resposta do servidor. Verifique a conexão e tente de novo.",
+        );
         setItens([]);
       }
     }, 300);
