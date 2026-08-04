@@ -263,16 +263,48 @@ async function main() {
       if (c !== null) congIds.add(c);
     }
   }
+  /*
+   * Os nomes das congregacoes nao estao numa aba propria, mas ESTAO no export:
+   * cada congId tem um usuario coordenador cuja conta e a propria congregacao
+   * (login "ebdbetania" -> nome "Cong. Betania"). O filtro por login iniciado
+   * em "ebd" separa essas contas institucionais das contas de pessoas — a
+   * coordenadora do congId 12, por exemplo, chama "IR. GRACA", que e nome de
+   * gente e nao de congregacao.
+   */
+  const nomesCong = new Map<number, string>();
+  for (const u of table("Usuarios")) {
+    const c = toInt(u.congId, "Usuarios.congId");
+    const login = (toStr(u.login) ?? "").toLowerCase();
+    const nome = toStr(u.nome);
+    if (c === null || !nome || !login.startsWith("ebd")) continue;
+    // O primeiro que aparecer vence: o congId 1 tem "Templo Sede" e
+    // "T. Matriz", que sao a mesma casa.
+    if (!nomesCong.has(c)) nomesCong.set(c, nome);
+  }
+
   for (const id of [...congIds].sort((a, b) => a - b)) {
+    const nome = nomesCong.get(id) ?? "";
     await save("Congregacoes", () =>
       prisma.congregacao.upsert({
         where: { id },
-        update: {},                     // nao sobrescreve nome ja preenchido
-        create: { id, nome: "" },
+        // `update: {}` de proposito: se voce corrigir um nome no banco, uma
+        // nova execucao do seed nao desfaz a sua correcao.
+        update: {},
+        create: { id, nome },
       }),
     );
   }
-  console.log(`Congregacoes derivadas: ${congIds.size}`);
+
+  const semNome = [...congIds].filter((c) => !nomesCong.has(c));
+  console.log(
+    `Congregacoes derivadas: ${congIds.size}` +
+      (semNome.length
+        ? ` (sem nome identificado: ${semNome.join(", ")})`
+        : " — todas com nome"),
+  );
+  for (const id of [...congIds].sort((a, b) => a - b)) {
+    console.log(`    ${String(id).padStart(2)}  ${nomesCong.get(id) ?? "(sem nome)"}`);
+  }
 
   /* -------- 2. Classes -------- */
   const classes = dedupeIds(table("Classes"), "Classes");
