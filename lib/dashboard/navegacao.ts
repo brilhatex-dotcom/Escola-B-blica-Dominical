@@ -188,7 +188,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/admin/congregacoes",
         icone: Building2,
         descricao: "Cadastro das congregações do campo",
-        emBreve: true,
       },
       /*
        * Liderança aponta para a tela que JÁ existe e já faz exatamente isto
@@ -209,7 +208,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/hierarquia",
         icone: Network,
         descricao: "O organograma do campo, do Pastor às classes",
-        emBreve: true,
       },
       {
         chave: "usuarios",
@@ -231,7 +229,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/escalas",
         icone: CalendarRange,
         descricao: "Escalas de culto do mês",
-        emBreve: true,
       },
     ],
   },
@@ -333,7 +330,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/sistema",
         icone: Sliders,
         descricao: "Parâmetros do portal e do campo",
-        emBreve: true,
       },
       {
         chave: "cfg-backup",
@@ -341,7 +337,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/backup",
         icone: Database,
         descricao: "Cópia de segurança dos dados",
-        emBreve: true,
       },
       {
         chave: "cfg-sincronizacao",
@@ -349,7 +344,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/sincronizacao",
         icone: Cloud,
         descricao: "Fila de envio e estado da sincronização",
-        emBreve: true,
       },
       {
         chave: "cfg-offline",
@@ -357,7 +351,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/offline",
         icone: CloudOff,
         descricao: "O que está guardado neste aparelho",
-        emBreve: true,
       },
       {
         chave: "cfg-logs",
@@ -365,7 +358,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/logs",
         icone: ScrollText,
         descricao: "Quem entrou e o que fez, com data e hora",
-        emBreve: true,
       },
     ],
   },

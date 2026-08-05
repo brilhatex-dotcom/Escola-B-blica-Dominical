@@ -73,7 +73,7 @@ export default function EventosPage() {
           dica="Eventos cadastrados aparecem aqui e no calendário automaticamente."
         />
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {itens.map((e, i) => (
             <motion.article key={e.id}
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}

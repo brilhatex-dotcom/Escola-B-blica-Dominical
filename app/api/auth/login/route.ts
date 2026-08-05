@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verificarSenha } from "@/lib/auth/senha";
 import { criarSessao, temSegredo } from "@/lib/auth/sessao";
+import { registrar } from "@/lib/auditoria";
 import { acessoDaConta } from "@/lib/auth/acesso";
 import { papelPrincipal } from "@/lib/auth/papeis";
 
@@ -88,6 +89,31 @@ export async function POST(req: Request) {
       congIds: acesso.congIds,
       escopo: acesso.escopo,
       presumido: acesso.presumido,
+    });
+
+    /*
+     * Entrada registrada — LOGIN era 589 das 1.671 linhas herdadas, a maior
+     * categoria do sistema antigo. Tentativa RECUSADA nao e registrada: a
+     * tabela viraria um alvo, e uma senha digitada no campo do usuario por
+     * engano acabaria escrita em claro na descricao.
+     */
+    registrar({
+      sessao: {
+        id: usuario.id,
+        login: usuario.login,
+        nome: usuario.nome,
+        perfil: usuario.perfil,
+        congId: usuario.congId,
+        precisaTrocar,
+        papeis: acesso.papeis,
+        congIds: acesso.congIds,
+        escopo: acesso.escopo,
+        presumido: acesso.presumido,
+      },
+      acao: "LOGIN",
+      entidade: "Sistema",
+      descricao: "Entrou no portal.",
+      congId: usuario.congId,
     });
 
     return NextResponse.json({

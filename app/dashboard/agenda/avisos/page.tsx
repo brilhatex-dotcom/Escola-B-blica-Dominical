@@ -110,7 +110,7 @@ export default function AvisosPage() {
             <motion.div
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-              className="grid gap-3 lg:grid-cols-2"
+              className="grid grid-cols-1 gap-3 lg:grid-cols-2"
             >
               {dados.vigentes.map((a) => <Cartao key={a.id} a={a} vencido={false} />)}
             </motion.div>
@@ -130,7 +130,7 @@ export default function AvisosPage() {
               {verVencidos && (
                 <motion.div
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="mt-3 grid gap-3 lg:grid-cols-2"
+                  className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2"
                 >
                   {dados.vencidos.map((a) => <Cartao key={a.id} a={a} vencido />)}
                 </motion.div>

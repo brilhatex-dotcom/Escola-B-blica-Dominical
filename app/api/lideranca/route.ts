@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { erro, responder } from "@/lib/api";
 import { exigirEscrita } from "@/lib/auth/guarda";
+import { registrar } from "@/lib/auditoria";
 
 /**
  * A hierarquia oficial do campo — leitura e edição.
@@ -52,7 +53,7 @@ export async function GET() {
 export async function POST(req: Request) {
   // Trocar quem ocupa um cargo do campo e decisao da administracao, nao de
   // qualquer pessoa com sessao aberta.
-  const { recusa } = await exigirEscrita("lideranca");
+  const { sessao, recusa } = await exigirEscrita("lideranca");
   if (recusa) return recusa;
 
   let corpo: { cargoId?: number; pessoaId?: number | null };
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
     const cargo = await prisma.cargo.findUnique({ where: { id: cargoId! } });
     if (!cargo) throw new Error("Cargo não encontrado.");
 
-    return prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx) => {
       /*
        * O vinculo anterior e ENCERRADO, nao apagado.
        *
@@ -86,7 +87,9 @@ export async function POST(req: Request) {
         data: { ativo: false, fim: new Date() },
       });
 
-      if (pessoaId === null) return { ok: true, cargo: cargo.nome, pessoaId: null };
+      if (pessoaId === null) {
+        return { ok: true, cargo: cargo.nome, pessoaId: null as number | null, nome: null as string | null };
+      }
 
       const pessoa = await tx.pessoa.findUnique({ where: { id: pessoaId! } });
       if (!pessoa) throw new Error("Pessoa não encontrada.");
@@ -118,5 +121,16 @@ export async function POST(req: Request) {
 
       return { ok: true, cargo: cargo.nome, pessoaId: pessoa.id, nome: pessoa.nome };
     });
+
+    registrar({
+      sessao,
+      acao: "UPDATE",
+      entidade: "Lideranca",
+      descricao: resultado.pessoaId === null
+        ? `Cargo "${cargo.nome}" ficou vago.`
+        : `Cargo "${cargo.nome}" passou a ser ocupado por ${resultado.nome}.`,
+    });
+
+    return resultado;
   });
 }

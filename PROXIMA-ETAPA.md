@@ -1,4 +1,4 @@
-# Continuação — Fase 12: Administração e Configurações
+# Continuação — Fase 13: Pesquisa Global e Offline First
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -42,14 +42,43 @@ Substitui um sistema antigo em Google Apps Script.
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários, Permissões |
 | 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas |
 | 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria |
-| 11 | **Agenda: Calendário, Eventos, Avisos, Reuniões** |
+| 11 | Agenda: Calendário, Eventos, Avisos, Reuniões |
+| 12 | **Administração e Configurações + auditoria gravando de verdade** |
 
 ## O plano das próximas fases (aprovado)
 
 | Fase | Entrega |
 |---|---|
-| **12** | **Administração e Configurações: Hierarquia, Escalas, Sistema, Backup, Sincronização, Offline, Logs** |
-| 13 | Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos |
+| **13** | **Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos** |
+
+## O que a Fase 12 entregou (para não refazer)
+
+Oito telas — **o menu não tem mais nenhum "em breve"**.
+
+- **A auditoria passou a ser GRAVADA.** Chamada, liderança, congregação, preços,
+  login e backup. `lib/auditoria.ts` — `registrar()` **não lança e não entra na
+  transação**: uma falha no log custa uma linha de auditoria, nunca a chamada da
+  classe. Login RECUSADO não é registrado (a senha errada acabaria em claro).
+- **Precisa do SQL:** `prisma/aplicar-fase-12.sql` cria a sequência do
+  `Auditoria.id` apontando para `MAX(id)+1` e a coluna `congId`. Sem ele o
+  portal funciona igual e a auditoria simplesmente não enche — a tela de Logs
+  diz isso, com o caminho.
+- **Congregações (cadastro) corrige o NOME e só.** O id é a chave de 9 tabelas;
+  apagar deixaria órfão o histórico inteiro de uma congregação.
+- **Hierarquia é leitura pura de `PessoaCargos`.** Quem acumula aparece duas
+  vezes (é o que o organograma existe para mostrar); a CONTAGEM é de pessoas
+  únicas. O recorte não corta cargo de campo. As 14 congregações aparecem
+  marcadas como **sem dirigente** — só existem 5 cargos de campo e 63 de
+  professor cadastrados.
+- **Sistema separa o que salva (preços) do que é regra (só leitura).** O banco
+  aparece pelo NOME da variável, nunca pela string de conexão.
+- **Backup exige permissão de GRAVAÇÃO, não de leitura** — é o cadastro de 319
+  crianças saindo do sistema. Senhas ficam de fora do arquivo. Toda geração é
+  auditada.
+- **Sincronização não oferece "limpar a fila"** e **Offline bloqueia a limpeza**
+  enquanto houver pendência: os dois botões apagariam a chamada do domingo.
+- **Escalas continua sendo um arquivo** (PDF no Drive), e a tela avisa quando o
+  mês corrente não tem escala publicada.
 
 ## O que a Fase 11 entregou (para não refazer)
 
@@ -129,14 +158,18 @@ o sistema no ar e seguro rodar duas vezes.
 - **Liderança** aponta para `/dashboard/configuracoes`, que já faz exatamente
   isso. Renomear a rota quebraria os atalhos já salvos.
 - **Atividades recentes vêm vazias para quem vê só uma congregação**:
-  `Auditoria` é tabela do sistema antigo e não tem coluna de congregação.
-  Resolve-se quando a auditoria nova (Fase 12) passar a gravá-la.
+  `Auditoria` é tabela do sistema antigo e não tinha coluna de congregação. A
+  Fase 12 acrescentou `congId` e passou a preenchê-la, mas **só no que o portal
+  gravar daqui em diante** — as 1.671 linhas herdadas continuam sem
+  congregação, porque deduzi-la seria inventar dado histórico. O painel
+  encherá com o uso.
 
 ## Pendências do usuário (não são código)
 
 1. **`AUTH_SECRET` na Vercel** — enquanto não existir, o portal fica aberto e
    mostra tarja vermelha "Portal sem proteção". Valor já gerado e entregue.
 2. **Aplicar `prisma/aplicar-fase-08.sql`** no SQL Editor do Neon.
+   **E `prisma/aplicar-fase-12.sql`** — sem ele a auditoria nova não grava.
 3. **Reunião da liderança para trocar as senhas.** Depois dela, virar
    `EXIGIR_SENHA_PROPRIA_PARA_GRAVAR` para `true` em `lib/config.ts`.
 4. **Trocar a senha do banco no Neon** — ela apareceu num print compartilhado.

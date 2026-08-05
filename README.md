@@ -30,6 +30,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas | pronto |
 | 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria | pronto |
 | 11 | Agenda: Calendário, Eventos, Avisos, Reuniões | pronto |
+| 12 | Administração e Configurações + auditoria gravando de verdade | pronto |
 
 ---
 
@@ -221,6 +222,123 @@ o que é pior do que não ter registro nenhum.
 
 A tabela também não tem coluna de congregação, então **não há como recortá-la por
 acesso** — a leitura fica restrita a quem enxerga o campo inteiro.
+
+---
+
+## Administração e Configurações (Fase 12)
+
+Oito telas: **Congregações (cadastro)**, **Hierarquia**, **Escalas**,
+**Sistema**, **Backup**, **Sincronização**, **Offline** e **Logs**. Com elas, o
+menu deixa de ter qualquer "em breve".
+
+### A auditoria deixou de terminar na migração
+
+O portal agora **grava** em `Auditoria` — chamada, troca de liderança, correção
+de nome de congregação, alteração de preço, entrada no sistema e geração de
+backup. Mas só depois que `prisma/aplicar-fase-12.sql` for aplicado: a tabela
+veio do sistema antigo com o `id` preenchido pela importação e **sem sequência
+nenhuma**, então um INSERT falharia por não ter de onde tirar o próximo número.
+O SQL cria a sequência apontando para `MAX(id) + 1` — começar do 1 colidiria
+com as 1.671 linhas herdadas.
+
+Enquanto o SQL não for colado, a tela de Logs **diz isso, com o caminho da
+correção**, em vez de mostrar uma lista parada. E quem decide qual frase
+aparece é o banco (`há linha com id acima do último importado?`), não uma
+constante: o mesmo código roda contra os dois estados.
+
+### A auditoria nunca derruba a operação que ela registra
+
+`registrar()` não lança e não entra na transação. Se a gravação do log
+participasse da transação da chamada, um problema no log desfaria a chamada de
+uma classe inteira num domingo de manhã — e o motivo real seria o *registro* da
+gravação, não a gravação.
+
+A troca é consciente: numa falha rara, perde-se uma linha de auditoria em vez de
+perder a chamada. Auditoria com um buraco continua útil; chamada perdida não
+volta.
+
+**Tentativa de login recusada não é registrada.** A tabela viraria alvo, e uma
+senha digitada por engano no campo do usuário acabaria escrita em claro na
+descrição.
+
+### O cadastro de congregações corrige o nome — e só
+
+`Congregacoes.id` não é autoincrement: é a chave da planilha, e ela aparece em
+`Classes`, `Alunos`, `Frequencias`, `Ofertas`, `Visitantes`, `Licoes`,
+`PessoaCargos`, `Eventos` e `Avisos`. Apagar a linha não apagaria nada disso —
+deixaria órfão, e o campo perderia o histórico de uma congregação inteira por
+causa de um clique. A tela mostra na própria linha o que depende de cada uma
+(classes, alunos ativos, cargos, chamadas), que é a informação que explica a
+restrição antes dela ser encontrada.
+
+### O organograma não tem dados próprios
+
+Cada caixa é uma linha de `PessoaCargos`; o nível vem de `Cargos.escopo` somado
+a onde o vínculo é exercido. Uma tabela "organograma" à parte pareceria mais
+simples e divergiria da tela de Liderança no primeiro Dirigente trocado.
+
+Quem acumula cargo **aparece duas vezes**, de propósito — é o organograma
+dizendo que a pessoa acumula. O que não se repete é a *contagem*: 59 pessoas,
+68 cargos, 9 acumulam. São números diferentes e a tela separa os dois.
+
+O recorte por congregação **não corta os cargos de campo**: um Dirigente
+precisa continuar vendo quem é o Pastor Presidente, senão o desenho fica
+decapitado e a congregação parece solta no ar. E as congregações **sem ninguém
+na direção aparecem marcadas** — hoje são todas as 14, porque os 68 cargos
+cadastrados são 5 do campo e 63 de professor. É justamente a lacuna que alguém
+precisa fechar.
+
+### O que salva e o que não salva ficam visivelmente separados
+
+Em Sistema, os preços das revistas são **dado** e gravam. O estado do servidor
+(autenticação, senha própria, banco) é **regra** e é só leitura: um campo
+editável para "exigir senha própria" seria um interruptor que tranca a EBD
+inteira num domingo de manhã, sem desfazer. Misturar os dois faria a secretaria
+descobrir por tentativa quais campos são de mentira.
+
+O nome do banco aparece como **nome da variável**, nunca a string de conexão —
+prints deste portal já circularam por WhatsApp.
+
+### Baixar o backup é mais grave do que ver qualquer tela
+
+O arquivo traz nome, telefone e data de nascimento de 319 alunos, muitos deles
+crianças. Uma tela mostra trinta linhas por vez, num aparelho, para quem está
+logado; o arquivo sai do sistema e vai para onde quiserem levá-lo.
+
+Por isso o download exige permissão de **gravação** em `cfg-backup`, e não de
+leitura — na prática, Pastor Presidente, Gestor Local e a conta de
+administração. O Supervisor da EBD vê a tela e o resumo: supervisionar a Escola
+Bíblica não é a mesma coisa que levar embora o cadastro do campo.
+
+**As senhas ficam de fora do arquivo.** Um backup com os hashes dentro é um
+ataque offline pronto — e as 19 contas ainda dividem o mesmo SHA-256 sem sal.
+Toda geração é registrada na auditoria; é a única pista que sobra depois que o
+arquivo sai daqui.
+
+### As duas telas que se recusam a apagar
+
+- **Sincronização** mostra a fila e oferece *reenviar* e *destravar* — nunca
+  "limpar a fila". Seria o botão mais tentador da tela para quem viu um número
+  vermelho, e apagaria a chamada do domingo sem cópia nenhuma.
+- **Offline** bloqueia a limpeza enquanto houver item pendente, com a fila
+  apontada e o caminho escrito. Um "tem certeza?" não resolveria: quem chegou
+  ali já decidiu, e é nesse estado que se clica em "sim" sem ler. Com a fila
+  vazia, a limpeza roda — e preserva a fila e a configuração, ao contrário de
+  `limparBancoLocal()`, que é do logout.
+
+Ambas perguntam pelo IndexedDB **dentro de um efeito**, não na inicialização do
+estado: no servidor ele não existe, e inicializar com a resposta do servidor
+quebrava a hidratação (erro #418 do React) — a tela piscava "este navegador não
+guarda dados" antes de se corrigir.
+
+### Escalas continua sendo um arquivo
+
+`Escala_Cultos` tem `nomeArquivo`, `url` e `urlPreview`: a escala é um PDF
+montado fora do sistema e guardado no Drive. Modelar turnos aqui criaria uma
+segunda escala para divergir da que o campo distribui pelo WhatsApp. A tela
+abre o arquivo e **avisa quando o mês corrente não tem escala publicada** — sem
+esse aviso, uma lista ordenada por data mostra a escala de maio no topo e não
+diz nada sobre agosto estar faltando.
 
 ---
 

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { erro, lerInt, responder } from "@/lib/api";
 import { exigirEscrita } from "@/lib/auth/guarda";
+import { registrar } from "@/lib/auditoria";
 
 /**
  * A chamada de uma classe num domingo.
@@ -90,7 +91,7 @@ interface CorpoChamada {
 
 export async function POST(req: Request) {
   // Gravar chamada exige sessao com permissao no modulo. Ver lib/auth/guarda.ts.
-  const { recusa } = await exigirEscrita("chamada");
+  const { sessao, recusa } = await exigirEscrita("chamada");
   if (recusa) return recusa;
 
   let corpo: CorpoChamada;
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
      * marcando presenca ao mesmo tempo, em classes diferentes, pegariam o mesmo
      * numero e um dos dois perderia a chamada.
      */
-    return prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx) => {
       const maior = await tx.frequencia.aggregate({ _max: { id: true } });
       let proximoId = (maior._max.id ?? 0) + 1;
 
@@ -157,5 +158,22 @@ export async function POST(req: Request) {
 
       return { ok: true, criadas, atualizadas, total: criadas + atualizadas };
     });
+
+    /*
+     * Fora da transacao, e de proposito: ver o cabecalho de lib/auditoria.ts.
+     * A chamada ja esta gravada quando esta linha roda — uma falha aqui custa
+     * uma linha de log, nunca o domingo da classe.
+     */
+    registrar({
+      sessao,
+      acao: resultado.criadas > 0 ? "CREATE" : "UPDATE",
+      entidade: "Frequencia",
+      descricao:
+        `Chamada da classe ${classeId} em ${data}: ` +
+        `${resultado.criadas} marcada(s) e ${resultado.atualizadas} corrigida(s).`,
+      congId: classe.congId,
+    });
+
+    return resultado;
   });
 }

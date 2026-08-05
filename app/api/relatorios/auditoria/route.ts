@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { lerPaginacao, pagina, responder } from "@/lib/api";
 import { exigirLeitura } from "@/lib/auth/guarda";
+import { ULTIMO_ID_IMPORTADO } from "@/lib/auditoria";
 
 /**
  * Auditoria: o que foi criado, alterado e apagado.
@@ -8,12 +9,16 @@ import { exigirLeitura } from "@/lib/auth/guarda";
  * ============================================================================
  * ESTE RELATÓRIO OLHA PARA TRÁS — E O QUE ELE VÊ TERMINA NA MIGRAÇÃO
  *
- * A tabela `Auditoria` tem 1.671 linhas, todas do sistema antigo. O portal
- * atual ainda NÃO grava nela: a auditoria nova entra na Fase 12.
+ * A tabela `Auditoria` veio com 1.671 linhas do sistema antigo. Desde a Fase
+ * 12 o portal TAMBÉM grava nela — mas só depois que
+ * `prisma/aplicar-fase-12.sql` for aplicado no banco, porque até lá não existe
+ * sequência para o `id`.
  *
- * A tela diz isso em vez de deixar a lista simplesmente parar numa data. Um
- * registro de auditoria que some sem aviso é pior que não ter registro nenhum
- * — ele sugere que nada aconteceu depois daquele dia.
+ * Por isso `gravandoAgora` é perguntado ao BANCO (há linha com id acima do
+ * último importado?) e não fixado no código: o mesmo código roda contra os dois
+ * estados, e a tela precisa dizer qual é o caso. Uma lista que simplesmente
+ * para numa data sugere que nada aconteceu depois dela, o que é pior do que não
+ * ter registro nenhum.
  *
  * A tabela também NÃO tem coluna de congregação, então o recorte por acesso não
  * tem em que se apoiar. Por isso a leitura é restrita a quem enxerga o campo
@@ -46,7 +51,7 @@ export async function GET(req: Request) {
         : {}),
     };
 
-    const [total, linhas, entidades, maisRecente] = await Promise.all([
+    const [total, linhas, entidades, maisRecente, doPortal] = await Promise.all([
       prisma.auditoria.count({ where }),
       prisma.auditoria.findMany({
         where,
@@ -56,6 +61,7 @@ export async function GET(req: Request) {
       }),
       prisma.auditoria.findMany({ distinct: ["entidade"], select: { entidade: true }, orderBy: { entidade: "asc" } }),
       prisma.auditoria.findFirst({ orderBy: { when: "desc" }, select: { when: true } }),
+      prisma.auditoria.count({ where: { id: { gt: ULTIMO_ID_IMPORTADO } } }),
     ]);
 
     return {
@@ -74,9 +80,10 @@ export async function GET(req: Request) {
         porPagina,
       ),
       entidades: entidades.map((e) => e.entidade).filter(Boolean),
-      /** Até quando o registro herdado vai. A tela avisa que para aqui. */
+      /** Até quando o registro vai. A tela avisa se ele para na migração. */
       ultimoRegistro: maisRecente?.when.toISOString() ?? null,
-      gravandoAgora: false,
+      gravandoAgora: doPortal > 0,
+      linhasDoPortal: doPortal,
     };
   });
 }

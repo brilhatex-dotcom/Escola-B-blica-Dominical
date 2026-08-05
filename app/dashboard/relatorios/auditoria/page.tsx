@@ -15,10 +15,13 @@ import {
 /**
  * Auditoria: o que foi criado, alterado e apagado.
  *
- * O REGISTRO TERMINA NA MIGRAÇÃO, e a tela diz isso. As 1.671 linhas são todas
- * do sistema antigo; o portal atual ainda não grava auditoria — isso entra na
- * Fase 12. Uma lista que simplesmente para numa data sugere que nada aconteceu
- * depois dela, o que é pior do que não ter registro nenhum.
+ * Desde a Fase 12 o portal grava auditoria — mas só depois que
+ * `prisma/aplicar-fase-12.sql` for aplicado no banco. Enquanto não for, o
+ * registro TERMINA NA MIGRAÇÃO, e a tela diz isso com o caminho da correção.
+ *
+ * Quem decide qual das duas frases aparece é o servidor (`gravandoAgora`), que
+ * pergunta ao banco. Uma lista que simplesmente para numa data sugere que nada
+ * aconteceu depois dela, o que é pior do que não ter registro nenhum.
  */
 
 interface Registro {
@@ -45,6 +48,7 @@ export default function AuditoriaPage() {
     entidades: string[];
     ultimoRegistro: string | null;
     gravandoAgora: boolean;
+    linhasDoPortal: number;
   } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -117,9 +121,13 @@ export default function AuditoriaPage() {
             {dados.ultimoRegistro
               ? fmt.format(new Date(dados.ultimoRegistro))
               : "a data da migração"}
-            . O portal atual <strong>ainda não grava auditoria</strong> — isso entra numa
-            próxima etapa. Não é que nada aconteceu desde então; é que ainda não está
-            sendo registrado.
+            . O portal <strong>já sabe gravar auditoria</strong>, mas ainda não gravou
+            nada neste banco: falta aplicar o arquivo{" "}
+            <code className="rounded bg-white/8 px-1 py-0.5 text-[0.72rem]">
+              prisma/aplicar-fase-12.sql
+            </code>{" "}
+            no SQL Editor do Neon. Não é que nada aconteceu desde então — é que ainda
+            não está sendo registrado.
           </p>
         </div>
       )}

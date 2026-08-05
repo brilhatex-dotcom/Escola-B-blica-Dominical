@@ -46,6 +46,7 @@ model Congregacao {
   eventos      Evento[]
   avisos       Aviso[]
   pessoaCargos PessoaCargo[]
+  auditoria    Auditoria[]
 
   @@map("Congregacoes")
 }
@@ -318,8 +319,12 @@ model Aviso {
   @@map("Avisos")
 }
 
+/// A partir da Fase 12 o portal TAMBEM grava aqui — ate entao so havia as
+/// 1.671 linhas herdadas. Por isso `id` ganhou sequencia (ver
+/// prisma/aplicar-fase-12.sql, que a cria comecando acima do maior id
+/// importado) e `congId`, que as linhas antigas nao tem.
 model Auditoria {
-  id       Int      @id
+  id       Int      @id @default(autoincrement())
   legacyId Int?
   /// Timestamp ISO completo no export.
   when     DateTime
@@ -328,9 +333,16 @@ model Auditoria {
   action   String
   entidade String
   desc     String
+  /// Nulo em TODAS as linhas do sistema antigo — ele nao registrava
+  /// congregacao. E por isso que a leitura continua restrita a quem enxerga o
+  /// campo inteiro: filtrar por congregacao esconderia o historico inteiro.
+  congId   Int?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
 
   @@index([when])
   @@index([whoLogin])
+  @@index([congId])
   @@map("Auditoria")
 }
 
