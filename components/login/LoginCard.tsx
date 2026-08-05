@@ -36,6 +36,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
   const [lembrar, setLembrar] = useState(true);
   const [loading, setLoading] = useState(false);
   const [erros, setErros] = useState<{ usuario?: string; senha?: string; geral?: string }>({});
+  const [verAjuda, setVerAjuda] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -218,13 +219,39 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
             variant="link"
             size="sm"
             className="px-0 text-[0.78rem]"
-            onClick={() => {
-              // TODO: fluxo de recuperacao de senha (fora do escopo destas duas telas).
-            }}
+            aria-expanded={verAjuda}
+            onClick={() => setVerAjuda((v) => !v)}
           >
             Esqueci minha senha
           </Button>
         </div>
+
+        {/*
+          Não existe recuperação por e-mail: a igreja não tem servidor de e-mail
+          configurado, e um formulário que redefine a senha só com o nome do
+          usuário deixaria qualquer pessoa trocar a senha de qualquer conta. Por
+          isso a recuperação é feita por quem administra o portal — e este painel
+          explica o caminho em vez de o botão não fazer nada.
+        */}
+        {verAjuda && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 text-[0.76rem] leading-relaxed text-brand-100/80"
+          >
+            <p className="font-medium text-brand-50">Para recuperar o acesso:</p>
+            <p className="mt-1.5">
+              Fale com quem administra o portal do campo — é essa pessoa que
+              redefine a sua senha. Por segurança, o próprio sistema não troca a
+              senha só com o nome de usuário.
+            </p>
+            <p className="mt-2 text-brand-200/60">
+              Ao entrar com a senha compartilhada do sistema antigo, o portal pede
+              para você criar a sua própria senha. É esse o caminho normal até a
+              reunião da liderança.
+            </p>
+          </motion.div>
+        )}
 
         <Button type="submit" size="lg" disabled={loading} className="mt-3 w-full short:mt-2">
           {loading ? (
