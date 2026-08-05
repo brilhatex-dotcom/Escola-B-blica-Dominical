@@ -28,6 +28,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 07 | Sincronização offline ligada na Chamada | pronto |
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários | pronto |
 | 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas | pronto |
+| 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria | pronto |
 
 ---
 
@@ -162,6 +163,81 @@ menor que o real, com aparência de conferido.
 O ajuste de quantidade é **rascunho e some ao sair**, e a tela avisa. Um número
 que a pessoa digita e o sistema esquece sem avisar é pior do que um rascunho
 assumido.
+
+---
+
+## Relatórios (Fase 10)
+
+### "Faltou" não é "não foi marcado"
+
+`Frequencias` só tem linha para aluno que foi **chamado**. Um domingo em que a
+classe não fez chamada não produz faltas — produz ausência de dados.
+
+Tratar os dois como a mesma coisa arruinaria todos os números: o aluno de uma
+classe que esqueceu a chamada apareceria com 100% de faltas, e o ranking puniria
+a classe organizada que registra tudo (inclusive as faltas) para premiar a que só
+registra presença.
+
+Por isso **o denominador de toda taxa é o número de chamadas existentes**, nunca
+os domingos do calendário. A regra vale nas cinco telas e mora em
+`lib/relatorios/comum.ts`.
+
+### O ranking ordena por taxa, com piso de amostra
+
+Ordenar pelo total faria o Templo Sede (92 alunos) ganhar todo mês por ser o
+maior — isso não é ranking, é a lista de tamanhos. Com taxa, a Cong. M.D.
+Boqueirão lidera com **78,8%**.
+
+A taxa cria outro problema: quem foi chamado uma vez e estava presente marca
+100%. Daí o piso de 3 domingos — e quem fica abaixo **aparece assim mesmo, com o
+motivo escrito**. Sumir da lista faria alguém procurar a própria classe e
+concluir que o sistema perdeu os dados dela.
+
+### Certificados: o sistema apura, a igreja decide
+
+A tela lista os **aptos**; não emite nem grava nada. Emitir automaticamente
+transformaria um reconhecimento da igreja em efeito colateral de uma consulta —
+e o primeiro erro de digitação numa chamada viraria um certificado indevido, com
+o nome de alguém impresso nele.
+
+### Alerta de faltas existe para gerar telefonemas
+
+Telefone e responsável ficam **na linha**, e o número é um link `tel:`. Mandar
+abrir a ficha de cada aluno para achar o telefone transformaria uma lista de
+trinta em trinta idas e voltas.
+
+A sequência de faltas é resolvida no banco (`ROW_NUMBER()` sobre as chamadas de
+cada aluno), não em JavaScript: a tabela cresce ~2.600 linhas por ano.
+
+`ultimaPresenca: null` — "nunca esteve presente" — é distinto de "faltou desde
+tal dia", e o professor precisa saber qual dos dois é.
+
+### A auditoria termina na migração, e a tela diz isso
+
+As 1.671 linhas são todas do sistema antigo; o portal ainda não grava auditoria.
+Uma lista que simplesmente para numa data sugere que nada aconteceu depois dela,
+o que é pior do que não ter registro nenhum.
+
+A tabela também não tem coluna de congregação, então **não há como recortá-la por
+acesso** — a leitura fica restrita a quem enxerga o campo inteiro.
+
+---
+
+## As rotas da Fase 05 estavam sem guarda
+
+Achado durante esta fase, e corrigido nela: `/api/alunos`, `/api/classes`,
+`/api/visitantes` e `/api/relatorios` **nasceram antes do RBAC** (Fase 08) e
+ficaram abertas. A Fase 08 protegeu o que ela mesma criou; ninguém percebeu
+porque a **tela** já escondia o menu.
+
+Esconder o item do menu nunca protegeu nada — bastava digitar `/api/alunos` no
+navegador para receber os 323 alunos do campo inteiro, qualquer que fosse a
+congregação de quem pedia. O recorte que o painel aplicava com cuidado não
+existia ali.
+
+As quatro passaram a exigir permissão **e** a aplicar o recorte dentro da
+consulta. O `?cong=` da tela **estreita, nunca amplia**: o alvo é a interseção
+entre o que a tela pediu e o que o acesso permite.
 
 ---
 

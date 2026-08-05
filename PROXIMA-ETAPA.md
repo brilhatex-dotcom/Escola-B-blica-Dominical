@@ -1,4 +1,4 @@
-# Continuação — Fase 10: Relatórios
+# Continuação — Fase 11: Agenda
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -40,16 +40,33 @@ Substitui um sistema antigo em Google Apps Script.
 | 06 | Autenticação real (bcrypt, JWT em cookie httpOnly, rotas protegidas) |
 | 07 | Fila offline ligada na Chamada — grava no aparelho e reenvia sozinha |
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários, Permissões |
-| 09 | **Congregações, Aniversariantes, Lições, Pedido de Revistas** |
+| 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas |
+| 10 | **Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria** |
 
 ## O plano das próximas fases (aprovado)
 
 | Fase | Entrega |
 |---|---|
-| **10** | **Relatórios: Frequência, Ranking, Alerta de Faltas, Ficha do Aluno, Certificados, Auditoria |
-| 11 | Agenda: Calendário, Eventos, Avisos, Reuniões |
+| **11** | **Agenda: Calendário, Eventos, Avisos, Reuniões |
 | 12 | Administração e Configurações: Hierarquia, Escalas, Sistema, Backup, Sincronização, Offline, Logs |
 | 13 | Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos |
+
+## O que a Fase 10 entregou (para não refazer)
+
+- **"Faltou" não é "não foi marcado"** — o denominador de toda taxa é o número
+  de chamadas existentes, nunca os domingos do calendário. Regra em
+  `lib/relatorios/comum.ts`, vale nas cinco telas.
+- **Ranking por taxa, com piso de 3 domingos.** Quem fica abaixo aparece com o
+  motivo, não some.
+- **Certificados listam aptos** — não emitem nem gravam nada.
+- **Alerta de Faltas** com telefone na linha (link `tel:`); sequência resolvida
+  no banco com `ROW_NUMBER()`.
+- **Auditoria** avisa que o registro termina na migração. Sem coluna de
+  congregação, é restrita a quem vê o campo inteiro.
+- **CORRIGIDO:** `/api/alunos`, `/api/classes`, `/api/visitantes` e
+  `/api/relatorios` estavam **sem guarda de permissão** desde a Fase 05 —
+  bastava digitar o endereço para receber o campo inteiro. Agora exigem
+  permissão e aplicam o recorte dentro da consulta.
 
 ## O que a Fase 09 entregou (para não refazer)
 

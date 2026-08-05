@@ -254,7 +254,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/ranking",
         icone: Trophy,
         descricao: "Ranking por congregação, por classe e por frequência",
-        emBreve: true,
       },
       {
         chave: "rel-faltas",
@@ -262,7 +261,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/faltas",
         icone: TriangleAlert,
         descricao: "Alunos faltando há domingos seguidos",
-        emBreve: true,
       },
       {
         chave: "rel-ficha",
@@ -270,7 +268,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/ficha",
         icone: ClipboardList,
         descricao: "Histórico completo de um aluno",
-        emBreve: true,
       },
       {
         chave: "rel-certificados",
@@ -278,7 +275,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/certificados",
         icone: Award,
         descricao: "Certificados de frequência e conclusão",
-        emBreve: true,
       },
       {
         chave: "rel-auditoria",
@@ -286,7 +282,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/auditoria",
         icone: ScrollText,
         descricao: "O que foi criado, alterado e apagado no sistema",
-        emBreve: true,
       },
     ],
   },

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { lerInt, responder } from "@/lib/api";
+import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 
 /**
  * Relatório de frequência e ofertas.
@@ -27,9 +28,26 @@ function dataOu(valor: string | null, padrao: Date): Date {
 }
 
 export async function GET(req: Request) {
+  const { sessao, recusa } = await exigirLeitura("rel-frequencia");
+  if (recusa) return recusa;
+
   return responder(async () => {
     const url = new URL(req.url);
-    const congId = lerInt(url, "cong");
+    const pedida = lerInt(url, "cong");
+
+    /*
+     * Um relatorio SEM recorte e o vazamento mais silencioso que existe: nao
+     * expoe uma tela, expoe uma planilha inteira. Aqui o alcance e sempre a
+     * intersecao entre o que a tela pediu e o que o acesso permite.
+     */
+    const recorte = recorteDaSessao(sessao);
+    const alvo = recorte
+      ? recorte.in.length && pedida !== null && recorte.in.includes(pedida)
+        ? [pedida]
+        : recorte.in
+      : pedida !== null
+        ? [pedida]
+        : null;
 
     const hoje = new Date();
     const noventaDias = new Date(hoje);
@@ -37,7 +55,7 @@ export async function GET(req: Request) {
 
     const de = dataOu(url.searchParams.get("de"), noventaDias);
     const ate = dataOu(url.searchParams.get("ate"), hoje);
-    const filtroCong = congId ? { congId } : {};
+    const filtroCong = alvo ? { congId: { in: alvo } } : {};
 
     /*
      * Fragmento SQL, e nao uma chamada aninhada.
@@ -48,7 +66,9 @@ export async function GET(req: Request) {
      * existem justamente para compor pedaco de consulta com seguranca — o
      * valor continua indo como parametro, sem concatenacao de texto.
      */
-    const soCongregacao = congId ? Prisma.sql`AND f."congId" = ${congId}` : Prisma.empty;
+    const soCongregacao = alvo
+      ? Prisma.sql`AND f."congId" IN (${Prisma.join(alvo.length ? alvo : [-1])})`
+      : Prisma.empty;
 
     const [porClasse, porDomingo, ofertas, totais] = await Promise.all([
       /*
