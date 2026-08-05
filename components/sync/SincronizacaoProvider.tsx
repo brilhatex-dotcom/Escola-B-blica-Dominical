@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { temBancoLocal } from "@/lib/db/local";
+import { hidratarCacheLocal } from "@/lib/db/hidratar";
 import { configurarTransporte, iniciarSincronizacaoAutomatica } from "@/lib/sync/motor";
 import { transporteHttp } from "@/lib/sync/transporte";
 
@@ -29,9 +30,19 @@ export function SincronizacaoProvider() {
     configurarTransporte(transporteHttp);
     const parar = iniciarSincronizacaoAutomatica();
 
+    /*
+     * A DESCIDA do cache para a busca offline. Roda uma vez ao abrir o painel
+     * (com conexão), e de novo quando a internet volta — o mesmo gatilho da
+     * subida. Falha em silêncio: o espelho antigo continua servindo a busca.
+     */
+    void hidratarCacheLocal();
+    const aoVoltar = () => void hidratarCacheLocal();
+    window.addEventListener("online", aoVoltar);
+
     return () => {
       parar();
       configurarTransporte(null);
+      window.removeEventListener("online", aoVoltar);
     };
   }, []);
 

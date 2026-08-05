@@ -31,6 +31,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria | pronto |
 | 11 | Agenda: Calendário, Eventos, Avisos, Reuniões | pronto |
 | 12 | Administração e Configurações + auditoria gravando de verdade | pronto |
+| 13 | Pesquisa Global (com busca offline) sobre os registros | pronto |
 
 ---
 
@@ -222,6 +223,55 @@ o que é pior do que não ter registro nenhum.
 
 A tabela também não tem coluna de congregação, então **não há como recortá-la por
 acesso** — a leitura fica restrita a quem enxerga o campo inteiro.
+
+---
+
+## Pesquisa Global (Fase 13)
+
+A barra do topo (Ctrl+K) procura em três fontes ao mesmo tempo, e as três
+devolvem o mesmo formato, então o teclado e o desenho não sabem de onde veio
+cada resultado:
+
+1. **Módulos** — instantâneo, da lista do menu. Digitar "vis" mostra Visitantes
+   antes de a rede responder.
+2. **Registros, online** — `/api/busca`: alunos, professores, classes,
+   congregações e visitantes.
+3. **Registros, offline** — o espelho no aparelho, quando a rede cai.
+
+### A busca é uma porta, e usa a mesma fechadura do resto
+
+Cada categoria só é procurada se o acesso **enxerga** o módulo dela
+(`podeVer`), e o resultado é recortado pela congregação exatamente como as
+telas. Sem isso a busca seria a porta dos fundos do RBAC: um Professor acharia o
+campo inteiro só trocando a tela pelo campo de busca. O recorte vale na busca
+online (`/api/busca`) **e** na descida do espelho (`/api/sincronizar`) — o
+aparelho só guarda o que aquele acesso pode ver.
+
+### "betânia" com e sem acento
+
+`Pessoas.chave` já é o nome normalizado (sem acento), então professores são
+achados digitando "jose" → "Pb. José Raimundo". As congregações são poucas (14)
+e o nome do próprio campo tem acento — então a busca delas é filtrada em memória
+com a mesma normalização, para "betania" achar "Cong. Betânia". Alunos e
+visitantes usam a busca do banco (resolve caixa, não acento) — a mesma limitação
+já documentada em `/api/alunos`; a busca **offline**, essa, ignora acento em
+tudo.
+
+### A descida (`/api/sincronizar`) é o par da fila
+
+A fila de sincronização (Fase 07) é a **subida**: leva ao servidor a chamada
+gravada sem sinal. A Fase 13 acrescenta a **descida**: traz para o IndexedDB os
+cadastros — congregações, classes, alunos (com telefone e nascimento) e
+visitantes — que a busca precisa quando a rede cai. Roda ao abrir o painel e
+quando a internet volta, com `uid` determinístico (`srv-<tabela>-<id>`) para
+atualizar em vez de duplicar, e `receberDoServidor` preserva o que ainda não
+subiu — a descida nunca atropela a chamada de hoje que está na fila.
+
+É por isso que buscar "maria" sem internet devolve os **telefones** dos alunos:
+exatamente o que se precisa num domingo de manhã, que é quando mais se procura
+alguém e menos se tem sinal. Professores não descem (a tabela `Pessoas` não está
+no espelho local), então a busca offline cobre alunos, classes, congregações e
+visitantes.
 
 ---
 

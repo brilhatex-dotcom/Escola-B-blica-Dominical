@@ -1,4 +1,4 @@
-# Continuação — Fase 13: Pesquisa Global e Offline First
+# Continuação — roadmap concluído (pós Fase 13)
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -43,13 +43,32 @@ Substitui um sistema antigo em Google Apps Script.
 | 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas |
 | 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria |
 | 11 | Agenda: Calendário, Eventos, Avisos, Reuniões |
-| 12 | **Administração e Configurações + auditoria gravando de verdade** |
+| 12 | Administração e Configurações + auditoria gravando de verdade |
+| 13 | **Pesquisa Global (com busca offline) sobre os registros** |
 
 ## O plano das próximas fases (aprovado)
 
-| Fase | Entrega |
-|---|---|
-| **13** | **Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos** |
+As 13 fases planejadas estão entregues. O que vier a partir daqui é manutenção
+e pedidos novos — não há mais fase pendente no roadmap aprovado.
+
+## O que a Fase 13 entregou (para não refazer)
+
+- **Busca global (Ctrl+K) em três fontes**: módulos (instantâneo), registros
+  online (`/api/busca`) e registros offline (o espelho do aparelho). As três
+  devolvem o mesmo formato.
+- **A busca respeita permissão e recorte** — online e na descida do espelho.
+  Cada categoria só entra se o acesso a enxerga; nada de porta dos fundos do
+  RBAC.
+- **Acento**: professores via `Pessoas.chave` normalizada; congregações
+  filtradas em memória (14 linhas) para "betania" achar "Betânia"; a busca
+  offline ignora acento em tudo. Alunos/visitantes online resolvem caixa, não
+  acento (limitação já conhecida de `/api/alunos`).
+- **A descida (`/api/sincronizar` + `lib/db/hidratar.ts`)** é o par da fila:
+  espelha congregações, classes, alunos (com telefone) e visitantes no
+  IndexedDB, recortado pelo acesso, com `uid` determinístico. Buscar sem
+  internet devolve o telefone do aluno.
+- **Professores não descem** (a tabela `Pessoas` não está no schema local); a
+  busca offline cobre alunos, classes, congregações e visitantes.
 
 ## O que a Fase 12 entregou (para não refazer)
 

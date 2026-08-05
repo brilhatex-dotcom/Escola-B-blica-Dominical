@@ -43,6 +43,13 @@ export default function ClassesPage() {
   const [itens, setItens] = useState<ClasseLista[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
+  // Semeado pela busca global (?busca=): clicar numa classe cai aqui filtrado.
+  // Lido do `window` num efeito para não exigir Suspense no App Router.
+  useEffect(() => {
+    const b = new URLSearchParams(window.location.search).get("busca");
+    if (b) setBusca(b);
+  }, []);
+
   useEffect(() => {
     const controle = new AbortController();
     const t = window.setTimeout(async () => {
