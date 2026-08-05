@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Building2, GraduationCap, Phone, School, UserRound } from "lucide-react";
+import { Building2, GraduationCap, Phone, School, UserCog, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   CabecalhoModulo,
@@ -11,6 +11,8 @@ import {
   EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
 import { iniciais } from "@/lib/dashboard/formato";
+import { GerirResponsaveis } from "@/components/dashboard/GerirResponsaveis";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Congregações do campo, cada uma com quem responde por ela.
@@ -88,29 +90,34 @@ function Responsavel({ papel, pessoa }: { papel: string; pessoa: Pessoa | null }
 export default function CongregacoesPage() {
   const [itens, setItens] = useState<CongregacaoLista[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [gerindo, setGerindo] = useState<number | null>(null);
+  const { podeGravar } = useAcesso();
+  const editavel = podeGravar("hierarquia");
+
+  const carregar = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch("/api/congregacoes", { signal, cache: "no-store" });
+      if (!res.ok) throw Object.assign(new Error(), { status: res.status });
+      setItens((await res.json()).itens);
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      const status = (e as { status?: number }).status;
+      setErro(
+        status === 403
+          ? "O seu acesso não permite ver esta tela."
+          : status
+            ? "O servidor respondeu com erro. Abra /api/diagnostico para ver o motivo."
+            : "Sem resposta do servidor. Verifique a conexão.",
+      );
+      setItens([]);
+    }
+  }, []);
 
   useEffect(() => {
     const controle = new AbortController();
-    (async () => {
-      try {
-        const res = await fetch("/api/congregacoes", { signal: controle.signal, cache: "no-store" });
-        if (!res.ok) throw Object.assign(new Error(), { status: res.status });
-        setItens((await res.json()).itens);
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        const status = (e as { status?: number }).status;
-        setErro(
-          status === 403
-            ? "O seu acesso não permite ver esta tela."
-            : status
-              ? "O servidor respondeu com erro. Abra /api/diagnostico para ver o motivo."
-              : "Sem resposta do servidor. Verifique a conexão.",
-        );
-        setItens([]);
-      }
-    })();
+    void carregar(controle.signal);
     return () => controle.abort();
-  }, []);
+  }, [carregar]);
 
   const semNome = (itens ?? []).filter((c) => c.semNome).length;
 
@@ -176,11 +183,36 @@ export default function CongregacoesPage() {
                 </div>
               </header>
 
-              <div className="mt-3 space-y-3">
-                <Responsavel papel="Dirigente" pessoa={c.dirigente} />
-                <Responsavel papel="Vice-Dirigente" pessoa={c.vice} />
-                {c.secretario && <Responsavel papel="Secretário Local" pessoa={c.secretario} />}
-              </div>
+              {gerindo === c.id ? (
+                <div className="mt-3">
+                  <GerirResponsaveis
+                    congId={c.id}
+                    atuais={{
+                      Dirigente: c.dirigente,
+                      "Vice-Dirigente": c.vice,
+                      "Secretário Local": c.secretario,
+                    }}
+                    aoMudar={() => void carregar()}
+                  />
+                </div>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  <Responsavel papel="Dirigente" pessoa={c.dirigente} />
+                  <Responsavel papel="Vice-Dirigente" pessoa={c.vice} />
+                  {c.secretario && <Responsavel papel="Secretário Local" pessoa={c.secretario} />}
+                </div>
+              )}
+
+              {editavel && (
+                <button
+                  type="button"
+                  onClick={() => setGerindo(gerindo === c.id ? null : c.id)}
+                  className="mt-3 flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[0.74rem] text-brand-200/70 transition-colors hover:border-gold-400/30 hover:text-gold-200"
+                >
+                  <UserCog className="h-3.5 w-3.5" />
+                  {gerindo === c.id ? "Concluir" : "Definir responsáveis"}
+                </button>
+              )}
             </motion.article>
           ))}
         </div>
@@ -191,8 +223,9 @@ export default function CongregacoesPage() {
           <UserRound className="mt-0.5 h-4 w-4 shrink-0 text-gold-300" />
           <p className="text-[0.8rem] leading-relaxed text-brand-100/75">
             Nenhuma congregação tem dirigente cadastrado ainda. O sistema antigo não
-            guardava essa informação — ela é atribuída em{" "}
-            <strong>Administração → Hierarquia</strong>, e é o mesmo vínculo que define
+            guardava essa informação — {editavel ? "use o botão " : "ela é atribuída pelo botão "}
+            <strong>Definir responsáveis</strong> em cada cartão (ou em{" "}
+            <strong>Administração → Hierarquia</strong>). É o mesmo vínculo que define
             quem enxerga cada congregação.
           </p>
         </div>

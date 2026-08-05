@@ -97,7 +97,7 @@ export function Saudacao({ nome, versiculo, licao, className }: SaudacaoProps) {
 
         <div className="glass-panel flex flex-col justify-center rounded-2xl px-5 py-4">
           <p className="text-[0.64rem] uppercase tracking-[0.18em] text-brand-200/50">
-            Lição da semana
+            Próxima lição · Adultos
           </p>
           <p className="mt-1.5 font-serif text-[0.95rem] leading-snug text-white">
             {licao.numero}. {licao.titulo}

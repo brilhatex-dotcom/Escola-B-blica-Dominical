@@ -358,12 +358,31 @@ function separarLicao(licao: { titulo: string; trim: string; tipoClasse: string 
   };
 }
 
-async function lerResumo(domingo: Date, recorte: Recorte) {
+async function lerResumo(hoje: Date, domingo: Date, recorte: Recorte) {
   const inicio = soData(domingo);
+  const hojeCivil = soData(hoje);
 
-  const [licao, classesTotal, iniciadas, presentes, visitantes, professores] = await Promise.all([
-    // A lição do domingo é a mesma em todo o campo — ela não se recorta.
-    prisma.licao.findFirst({ where: { data: { lte: inicio } }, orderBy: { data: "desc" } }),
+  const [licao, licaoFallback, classesTotal, iniciadas, presentes, visitantes, professores] = await Promise.all([
+    /*
+     * A PRÓXIMA lição de ADULTOS — a que vem, não a que passou.
+     *
+     * O painel abre no meio da semana, e mostrar a lição do domingo que já
+     * passou não ajuda ninguém a se preparar. Então a busca é para a frente
+     * (`data >= hoje`) e fica na classe de adultos, que é a referência do campo.
+     * No domingo, `data >= hoje` já inclui a lição do próprio dia.
+     *
+     * A lição é a mesma em todo o campo — não se recorta por congregação.
+     */
+    prisma.licao.findFirst({
+      where: { data: { gte: hojeCivil }, tipoClasse: "adultos" },
+      orderBy: [{ data: "asc" }, { id: "asc" }],
+    }),
+    // Reserva: se o trimestre acabou e não há lição futura cadastrada, mostra a
+    // última de adultos em vez de deixar o card vazio.
+    prisma.licao.findFirst({
+      where: { tipoClasse: "adultos" },
+      orderBy: [{ data: "desc" }, { id: "desc" }],
+    }),
     prisma.classe.count({ where: { ativa: true, congId: recorte } }),
     prisma.frequencia
       .groupBy({ by: ["classeId"], where: { data: inicio, congId: recorte } })
@@ -382,7 +401,7 @@ async function lerResumo(domingo: Date, recorte: Recorte) {
   ]);
 
   return {
-    licao: separarLicao(licao),
+    licao: separarLicao(licao ?? licaoFallback),
     classesIniciadas: iniciadas,
     classesTotal,
     presentes,
@@ -552,7 +571,7 @@ export async function lerPainel(
       // Pastor Presidente é de toda a igreja, não de uma congregação.
       lerLideranca(),
       lerFrequencia(hoje, recorte),
-      lerResumo(domingo, recorte),
+      lerResumo(hoje, domingo, recorte),
       lerAtividades(recorte),
       lerAniversariantes(hoje, recorte),
       lerAgenda(hoje, recorte),

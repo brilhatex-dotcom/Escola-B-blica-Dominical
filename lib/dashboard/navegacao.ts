@@ -243,7 +243,7 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         rotulo: "Frequência",
         href: "/dashboard/relatorios",
         icone: FileText,
-        descricao: "Frequência por classe e ofertas do período",
+        descricao: "Índices de frequência por período, congregação e classe",
       },
       {
         chave: "rel-ranking",

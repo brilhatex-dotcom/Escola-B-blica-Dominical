@@ -32,6 +32,36 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 11 | Agenda: Calendário, Eventos, Avisos, Reuniões | pronto |
 | 12 | Administração e Configurações + auditoria gravando de verdade | pronto |
 | 13 | Pesquisa Global (com busca offline) sobre os registros | pronto |
+| — | Refinamentos pós-roadmap (ver abaixo) | pronto |
+
+---
+
+## Refinamentos
+
+Ajustes pedidos depois do roadmap, cada um com a razão que o guiou.
+
+- **Dashboard mostra a PRÓXIMA lição de adultos**, não a que passou. A consulta
+  virou para a frente (`data >= hoje`, `tipoClasse = adultos`), com reserva para
+  a última lição quando o trimestre acaba. O card se chama "Próxima lição ·
+  Adultos".
+- **A conta `master` é super-usuário e nada a rebaixa.** Em `montarAcesso`,
+  `perfil = "master"` devolve `administrador` (campo, tudo) antes de olhar
+  qualquer cargo — senão ligar a conta a uma pessoa cadastrada como Professor
+  trancaria o administrador do lado de fora.
+- **Dirigentes atribuídos pela tela**, em Congregações e na Hierarquia, pelo
+  mesmo componente (`GerirResponsaveis`) e a mesma rota
+  (`/api/congregacoes/dirigente`). Grava o vínculo em `PessoaCargos` com o
+  `congId` — a peça que faltava. Como o papel de acesso vem do cargo, definir o
+  Dirigente já lhe dá a visão da congregação. O vínculo anterior é encerrado,
+  não apagado. (`/api/pessoas`, usada no seletor, ganhou a guarda que faltava.)
+- **Classes agrupadas por congregação**, recolhidas: são 53, e a grade solta era
+  uma parede. Cada congregação abre sob demanda; a busca abre sozinha as seções
+  com resultado.
+- **Relatórios por período e recorte.** Linha do tempo em **domingo / mês /
+  trimestre** e ranking por **congregação / classe**, ordenado pela **taxa de
+  presença** (presentes ÷ chamados — "faltou" continua não sendo "não marcado").
+- **A oferta saiu** dos relatórios e do menu. A tabela `Ofertas` continua no
+  banco e no backup; só deixou de aparecer nas telas.
 
 ---
 

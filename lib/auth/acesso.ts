@@ -88,6 +88,20 @@ export function montarAcesso(
   conta: DadosDaConta,
   vinculos: readonly VinculoDeCargo[],
 ): Acesso {
+  /*
+   * A CONTA MASTER É O SUPER-USUÁRIO, E NADA A REBAIXA.
+   *
+   * `master` é a conta técnica de administração do campo. Ela vem antes de
+   * qualquer cargo de propósito: se um dia alguém ligar essa conta a uma pessoa
+   * cadastrada como Professor (para o organograma), o vínculo NÃO pode tirar
+   * dela o acesso total — senão o administrador se tranca do lado de fora sem
+   * entender por quê, e não sobra ninguém para consertar. Master é sempre
+   * `administrador`, escopo campo, tudo liberado.
+   */
+  if (conta.perfil === "master") {
+    return { papeis: ["administrador"], congIds: [], escopo: "campo", presumido: false };
+  }
+
   if (conta.pessoaId) {
     const papeis = new Set<Papel>();
     const congIds = new Set<number>();

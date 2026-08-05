@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
+import { exigirLeitura } from "@/lib/auth/guarda";
 
 /**
  * Pessoas e os cargos que exercem.
@@ -17,6 +18,10 @@ import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  // Fechada como as demais: ver o cadastro de pessoas exige poder ver o módulo.
+  const { recusa } = await exigirLeitura("professores");
+  if (recusa) return recusa;
+
   return responder(async () => {
     const url = new URL(req.url);
     const { pagina: p, porPagina, pular } = lerPaginacao(url);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronRight, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   CabecalhoModulo, EsqueletoLista, EstadoErro,
 } from "@/components/dashboard/PaginaModulo";
+import { GerirResponsaveis } from "@/components/dashboard/GerirResponsaveis";
 
 /**
  * O organograma do campo.
@@ -42,6 +43,12 @@ interface Dados {
   };
 }
 
+/** O ocupante de um cargo numa congregação, no formato do seletor de pessoa. */
+function ocupanteComoPessoa(c: Cong, cargo: string) {
+  const o = c.ocupantes.find((x) => x.cargo === cargo);
+  return o ? { id: o.pessoaId, nome: o.nome, tratamento: o.tratamento } : null;
+}
+
 function Pessoa({ o, destaque }: { o: Ocupante; destaque?: boolean }) {
   return (
     <div
@@ -66,25 +73,27 @@ export default function HierarquiaPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
 
+  const carregar = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch("/api/hierarquia", { signal, cache: "no-store" });
+      if (!res.ok) throw Object.assign(new Error(), { status: res.status });
+      setDados(await res.json());
+    } catch (e) {
+      if ((e as Error).name === "AbortError") return;
+      const status = (e as { status?: number }).status;
+      setErro(
+        status === 403
+          ? "O seu acesso não permite ver o organograma."
+          : "Não foi possível carregar o organograma.",
+      );
+    }
+  }, []);
+
   useEffect(() => {
     const controle = new AbortController();
-    (async () => {
-      try {
-        const res = await fetch("/api/hierarquia", { signal: controle.signal, cache: "no-store" });
-        if (!res.ok) throw Object.assign(new Error(), { status: res.status });
-        setDados(await res.json());
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        const status = (e as { status?: number }).status;
-        setErro(
-          status === 403
-            ? "O seu acesso não permite ver o organograma."
-            : "Não foi possível carregar o organograma.",
-        );
-      }
-    })();
+    void carregar(controle.signal);
     return () => controle.abort();
-  }, []);
+  }, [carregar]);
 
   return (
     <>
@@ -197,10 +206,28 @@ export default function HierarquiaPage() {
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                         className="space-y-3 px-2 pb-4 pl-9"
                       >
-                        {c.ocupantes.length > 0 && (
-                          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                            {c.ocupantes.map((o) => <Pessoa key={o.vinculoId} o={o} />)}
-                          </div>
+                        {/*
+                          Definir Dirigente, Vice e Secretário aqui mesmo — é o
+                          vínculo que faltava para o organograma receber os
+                          dirigentes pela tela. Só aparece editável para quem
+                          pode gravar em hierarquia.
+                        */}
+                        <div className="rounded-xl border border-white/8 bg-white/[0.02] p-3">
+                          <GerirResponsaveis
+                            congId={c.id}
+                            atuais={{
+                              Dirigente: ocupanteComoPessoa(c, "Dirigente"),
+                              "Vice-Dirigente": ocupanteComoPessoa(c, "Vice-Dirigente"),
+                              "Secretário Local": ocupanteComoPessoa(c, "Secretário Local"),
+                            }}
+                            aoMudar={() => void carregar()}
+                          />
+                        </div>
+
+                        {c.classes.length > 0 && (
+                          <p className="pt-1 text-[0.64rem] uppercase tracking-[0.14em] text-brand-200/40">
+                            Classes
+                          </p>
                         )}
 
                         {c.classes.map((cl) => (
