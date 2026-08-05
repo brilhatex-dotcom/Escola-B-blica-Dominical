@@ -27,6 +27,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 06 | Autenticação real (login, sessão, proteção das rotas) | pronto |
 | 07 | Sincronização offline ligada na Chamada | pronto |
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários | pronto |
+| 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas | pronto |
 
 ---
 
@@ -95,6 +96,72 @@ páginas extras".
 Segui o bloco final, que é o mais específico. **Não há landing page.** Se ela era
 para existir mesmo, é um acréscimo direto: a arquitetura já suporta, porque o
 vídeo de fundo é um componente independente das telas.
+
+---
+
+## Escola Bíblica (Fase 09)
+
+### Dirigente e vice vêm de `PessoaCargos`, não de colunas em `Congregacoes`
+
+Guardar `dirigenteId` e `viceId` direto na congregação parece mais simples e cria
+duas fontes de verdade para o mesmo fato. No dia em que alguém trocasse o
+Dirigente pela tela de Hierarquia, a coluna aqui continuaria apontando para a
+pessoa anterior — e as duas telas mostrariam nomes diferentes, ambas "corretas".
+
+Como o vínculo já mora em `PessoaCargos` desde a Fase 05, **com a congregação
+dentro**, a congregação apenas o consulta. Trocar o Dirigente continua sendo
+alteração em um lugar só.
+
+**Cargo vago aparece como vago**, com o lugar reservado. Omitir a linha faria a
+tela parecer completa — e é justamente essa ausência que alguém precisa ver.
+
+### Aniversário não tem ano
+
+Filtrar por intervalo de datas não acha ninguém: quem nasceu em 12/08/1974 está
+fora de qualquer intervalo de 2026. A comparação é por **mês e dia**
+(`EXTRACT(MONTH)`), ignorando o ano.
+
+Um índice sobre `nasc` não ajuda nessa forma, e tudo bem — são 323 alunos e a
+varredura é instantânea. Criar um índice de expressão aqui resolveria um problema
+que não existe.
+
+A idade mostrada é a que a pessoa **completa** naquele mês, não a de hoje: numa
+lista de aniversariantes, "faz 15 anos" é a informação.
+
+### O filtro da tela nunca amplia o recorte do acesso
+
+Em Aniversariantes, `?cong=1` na barra de endereço é interceptado: o alvo é a
+**interseção** entre o que a tela pediu e o que o acesso permite. Sem isso, um
+Dirigente veria os aniversariantes de outra congregação digitando um número.
+
+### Lições: o que foi dado vem da chamada, não do calendário
+
+Marcar como ministrada toda lição cuja data já passou seria fácil e mentiria — o
+número viria do relógio, não da igreja, e um trimestre inteiro sem chamada
+apareceria como um trimestre em dia. `classesQueDeram` vem de `Freq_Licao`.
+
+`null` (nenhum registro) é distinto de `0`. Uma lição do próximo mês com "0
+classes" parece atraso; sem registro nenhum ela apenas ainda não chegou — e
+chamar de "pendente" o que não venceu treina a secretaria a ignorar o aviso.
+
+### Revistas: o pedido é calculado, não cadastrado
+
+A aba `Pedidos_Revistas` do sistema antigo veio **vazia** — nunca foi usada. Não
+há como importar o que não existe, e um cadastro em branco daria uma tela que só
+funciona depois de alguém digitar tudo de novo.
+
+O que existe são os alunos por classe e a tabela de preços (35 linhas, reais).
+Com as duas, o pedido nasce pronto: uma revista por aluno ativo. Resultado real:
+**290 revistas, R$ 3.062,00**.
+
+O `tipoClasse` é texto livre e a tabela de preços usa as próprias chaves; o
+casamento é por normalização. **O que não casa fica de fora do valor**, e a tela
+diz quantas classes são — tratar categoria ausente como zero produziria um total
+menor que o real, com aparência de conferido.
+
+O ajuste de quantidade é **rascunho e some ao sair**, e a tela avisa. Um número
+que a pessoa digita e o sistema esquece sem avisar é pior do que um rascunho
+assumido.
 
 ---
 

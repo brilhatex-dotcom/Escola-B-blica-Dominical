@@ -1,4 +1,4 @@
-# Continuação — Fase 09: Escola Bíblica completa
+# Continuação — Fase 10: Relatórios
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -39,17 +39,32 @@ Substitui um sistema antigo em Google Apps Script.
 | 05 | Pessoas e cargos normalizados, API sobre o Postgres, 9 módulos |
 | 06 | Autenticação real (bcrypt, JWT em cookie httpOnly, rotas protegidas) |
 | 07 | Fila offline ligada na Chamada — grava no aparelho e reenvia sozinha |
-| 08 | **Menu em 6 categorias, permissões por papel (RBAC), Usuários, Permissões** |
+| 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários, Permissões |
+| 09 | **Congregações, Aniversariantes, Lições, Pedido de Revistas** |
 
 ## O plano das próximas fases (aprovado)
 
 | Fase | Entrega |
 |---|---|
-| **09** | **Escola Bíblica: Congregações (com dirigente e vice), Aniversariantes, Lições, Pedido de Revistas** |
-| 10 | Relatórios: Frequência, Ranking, Alerta de Faltas, Ficha do Aluno, Certificados, Auditoria |
+| **10** | **Relatórios: Frequência, Ranking, Alerta de Faltas, Ficha do Aluno, Certificados, Auditoria |
 | 11 | Agenda: Calendário, Eventos, Avisos, Reuniões |
 | 12 | Administração e Configurações: Hierarquia, Escalas, Sistema, Backup, Sincronização, Offline, Logs |
 | 13 | Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos |
+
+## O que a Fase 09 entregou (para não refazer)
+
+- **Congregações** — dirigente, vice e secretário lidos de `PessoaCargos`, nunca
+  de colunas próprias. Cargo vago aparece como vago.
+- **Aniversariantes** — comparação por mês e dia (`EXTRACT`), porque aniversário
+  não tem ano. O filtro `?cong=` é interceptado pela interseção com o recorte do
+  acesso.
+- **Lições** — `classesQueDeram` vem de `Freq_Licao`, não do calendário. `null`
+  (sem registro) é distinto de `0`.
+- **Pedido de Revistas** — calculado (uma revista por aluno ativo × tabela de
+  preços), porque a aba `Pedidos_Revistas` veio vazia do export. 290 revistas,
+  R$ 3.062,00. Ajuste na tela é rascunho e a tela diz isso.
+
+O menu **não tem mais nenhum "em breve" em Escola Bíblica**.
 
 ## O que a Fase 08 entregou (para não refazer)
 

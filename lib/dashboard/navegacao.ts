@@ -110,7 +110,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/congregacoes",
         icone: Building2,
         descricao: "Cada congregação com o seu dirigente e vice-dirigente",
-        emBreve: true,
       },
       {
         chave: "chamada",
@@ -160,7 +159,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/aniversariantes",
         icone: CakeSlice,
         descricao: "Aniversários do mês, por congregação e classe",
-        emBreve: true,
       },
       {
         chave: "licoes",
@@ -168,7 +166,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/licoes",
         icone: BookMarked,
         descricao: "Lições do trimestre e o que cada classe ministrou",
-        emBreve: true,
       },
       {
         chave: "revistas",
@@ -176,7 +173,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/revistas",
         icone: ScrollText,
         descricao: "Pedidos de revistas por classe, com os preços do campo",
-        emBreve: true,
       },
     ],
   },
