@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, Pencil, Search, UserRound, X } from "lucide-react";
+import { Check, GraduationCap, Loader2, Pencil, Search, UserRound, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 
@@ -11,15 +11,14 @@ import { useAcesso } from "@/components/acesso/AcessoProvider";
  * ============================================================================
  * UM SÓ COMPONENTE, USADO NA HIERARQUIA E NAS CONGREGAÇÕES
  *
- * O usuário pediu para atribuir dirigentes nos dois lugares. Em vez de duas
- * telas que fazem a mesma coisa e divergem, é este componente nos dois — grava
- * pela mesma rota (`/api/congregacoes/dirigente`), que escreve o vínculo em
- * `PessoaCargos`. Como o papel de acesso vem do cargo (Fase 08), definir o
+ * Grava pela mesma rota (`/api/congregacoes/dirigente`), que escreve o vínculo
+ * em `PessoaCargos`. Como o papel de acesso vem do cargo (Fase 08), definir o
  * Dirigente aqui já lhe dá a visão da congregação, sem tela de permissão à parte.
  *
- * Só aparece o botão de editar para quem pode gravar em `hierarquia` — para os
- * demais, é leitura. E a busca de pessoa é a mesma normalização do resto: digita
- * "jose", acha "José".
+ * A BUSCA ACHA PESSOAS E ALUNOS. Quem vai virar dirigente pode ainda não ter
+ * cargo nenhum — "Aux. Bartolomeu" estava só como aluno. O seletor mostra os
+ * dois; ao escolher um aluno, a rota cria a pessoa na hora. E o tratamento
+ * digitado ("Aux.") é ignorado na busca, que casa pelo nome.
  * ============================================================================
  */
 
@@ -37,21 +36,23 @@ const CARGOS = [
 
 type CargoChave = (typeof CARGOS)[number]["chave"];
 
-interface PessoaBusca {
+interface Candidato {
+  tipo: "pessoa" | "aluno";
   id: number;
   nome: string;
   tratamento: string | null;
+  subtitulo: string;
 }
 
 function Seletor({
   aoEscolher,
   aoCancelar,
 }: {
-  aoEscolher: (p: PessoaBusca | null) => void;
+  aoEscolher: (c: Candidato | null) => void;
   aoCancelar: () => void;
 }) {
   const [termo, setTermo] = useState("");
-  const [resultados, setResultados] = useState<PessoaBusca[]>([]);
+  const [resultados, setResultados] = useState<Candidato[]>([]);
   const [carregando, setCarregando] = useState(false);
   const campo = useRef<HTMLInputElement>(null);
 
@@ -69,19 +70,13 @@ function Seletor({
     setCarregando(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/pessoas?busca=${encodeURIComponent(t)}&porPagina=8`, {
+        const res = await fetch(`/api/pessoas/candidatos?q=${encodeURIComponent(t)}`, {
           signal: controle.signal,
           cache: "no-store",
         });
         if (!res.ok) throw new Error();
         const dados = await res.json();
-        setResultados(
-          (dados.itens ?? []).map((p: { id: number; nome: string; tratamento: string | null }) => ({
-            id: p.id,
-            nome: p.nome,
-            tratamento: p.tratamento,
-          })),
-        );
+        setResultados(dados.candidatos ?? []);
       } catch {
         setResultados([]);
       } finally {
@@ -103,7 +98,7 @@ function Seletor({
           value={termo}
           onChange={(e) => setTermo(e.target.value)}
           onKeyDown={(e) => e.key === "Escape" && aoCancelar()}
-          placeholder="Buscar pessoa pelo nome…"
+          placeholder="Buscar pessoa ou aluno pelo nome…"
           className="min-w-0 flex-1 bg-transparent py-2 text-[0.82rem] text-brand-50 placeholder:text-brand-200/40 focus:outline-none"
         />
         {carregando && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-300/50" />}
@@ -118,19 +113,31 @@ function Seletor({
       </div>
 
       {resultados.length > 0 && (
-        <ul className="mt-1.5 max-h-52 overflow-y-auto">
-          {resultados.map((p) => (
-            <li key={p.id}>
+        <ul className="mt-1.5 max-h-56 overflow-y-auto">
+          {resultados.map((c) => (
+            <li key={`${c.tipo}-${c.id}`}>
               <button
                 type="button"
-                onClick={() => aoEscolher(p)}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[0.82rem] text-brand-50 transition-colors hover:bg-white/8"
+                onClick={() => aoEscolher(c)}
+                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-white/8"
               >
-                <UserRound className="h-3.5 w-3.5 shrink-0 text-brand-300/50" />
-                <span className="truncate">
-                  {p.tratamento && <span className="text-gold-200/80">{p.tratamento} </span>}
-                  {p.nome}
+                {c.tipo === "aluno" ? (
+                  <GraduationCap className="h-3.5 w-3.5 shrink-0 text-brand-300/50" />
+                ) : (
+                  <UserRound className="h-3.5 w-3.5 shrink-0 text-brand-300/50" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.82rem] text-brand-50">
+                    {c.tratamento && <span className="text-gold-200/80">{c.tratamento} </span>}
+                    {c.nome}
+                  </span>
+                  <span className="block truncate text-[0.7rem] text-brand-200/50">{c.subtitulo}</span>
                 </span>
+                {c.tipo === "aluno" && (
+                  <span className="shrink-0 rounded-full bg-white/6 px-1.5 py-0.5 text-[0.58rem] uppercase tracking-wider text-brand-200/50">
+                    aluno
+                  </span>
+                )}
               </button>
             </li>
           ))}
@@ -138,10 +145,11 @@ function Seletor({
       )}
 
       {termo.trim().length >= 2 && !carregando && resultados.length === 0 && (
-        <p className="px-2.5 py-2 text-[0.76rem] text-brand-200/45">Ninguém encontrado.</p>
+        <p className="px-2.5 py-2 text-[0.76rem] text-brand-200/45">
+          Ninguém encontrado — nem entre pessoas, nem entre alunos.
+        </p>
       )}
 
-      {/* Deixar o cargo vago é uma escolha legítima — e explícita. */}
       <button
         type="button"
         onClick={() => aoEscolher(null)}
@@ -159,9 +167,7 @@ export function GerirResponsaveis({
   aoMudar,
 }: {
   congId: number;
-  /** Quem ocupa cada cargo hoje. */
   atuais: Partial<Record<CargoChave, Pessoa | null>>;
-  /** Chamado após gravar, para a tela recarregar. */
   aoMudar?: () => void;
 }) {
   const { podeGravar } = useAcesso();
@@ -174,7 +180,7 @@ export function GerirResponsaveis({
 
   useEffect(() => setLocal(atuais), [atuais]);
 
-  async function gravar(cargo: CargoChave, pessoa: PessoaBusca | null) {
+  async function gravar(cargo: CargoChave, escolha: Candidato | null) {
     setSalvando(cargo);
     setEditando(null);
     setRecado(null);
@@ -182,15 +188,25 @@ export function GerirResponsaveis({
       const res = await fetch("/api/congregacoes/dirigente", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ congId, cargo, pessoaId: pessoa?.id ?? null }),
+        body: JSON.stringify({
+          congId,
+          cargo,
+          // Pessoa existente vai por pessoaId; aluno a promover vai por alunoId;
+          // sem escolha, pessoaId null deixa o cargo vago.
+          pessoaId: escolha?.tipo === "pessoa" ? escolha.id : escolha ? undefined : null,
+          alunoId: escolha?.tipo === "aluno" ? escolha.id : undefined,
+        }),
       });
       const corpo = await res.json();
       if (!res.ok) throw new Error(corpo?.erro ?? "Não foi possível gravar.");
+
       setLocal((atual) => ({
         ...atual,
-        [cargo]: pessoa ? { id: pessoa.id, nome: pessoa.nome, tratamento: pessoa.tratamento } : null,
+        [cargo]: corpo.pessoaId
+          ? { id: corpo.pessoaId, nome: corpo.nome, tratamento: escolha?.tratamento ?? null }
+          : null,
       }));
-      setRecado(pessoa ? `${cargo}: ${pessoa.nome}.` : `${cargo} ficou vago.`);
+      setRecado(corpo.pessoaId ? `${cargo}: ${corpo.nome}.` : `${cargo} ficou vago.`);
       aoMudar?.();
     } catch (e) {
       setRecado((e as Error).message);
@@ -230,7 +246,7 @@ export function GerirResponsaveis({
             </div>
 
             {editando === chave && (
-              <Seletor aoEscolher={(p) => void gravar(chave, p)} aoCancelar={() => setEditando(null)} />
+              <Seletor aoEscolher={(c) => void gravar(chave, c)} aoCancelar={() => setEditando(null)} />
             )}
           </div>
         );
