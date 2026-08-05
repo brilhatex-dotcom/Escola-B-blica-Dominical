@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, GraduationCap, Loader2, Pencil, Search, UserRound, X } from "lucide-react";
+import { Check, GraduationCap, Loader2, Pencil, Search, UserPlus, UserRound, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 
@@ -37,7 +37,7 @@ const CARGOS = [
 type CargoChave = (typeof CARGOS)[number]["chave"];
 
 interface Candidato {
-  tipo: "pessoa" | "aluno";
+  tipo: "pessoa" | "aluno" | "novo";
   id: number;
   nome: string;
   tratamento: string | null;
@@ -145,9 +145,28 @@ function Seletor({
       )}
 
       {termo.trim().length >= 2 && !carregando && resultados.length === 0 && (
-        <p className="px-2.5 py-2 text-[0.76rem] text-brand-200/45">
-          Ninguém encontrado — nem entre pessoas, nem entre alunos.
+        <p className="px-2.5 pt-2 text-[0.76rem] text-brand-200/45">
+          Ninguém encontrado entre pessoas ou alunos.
         </p>
+      )}
+
+      {/*
+        Cadastrar alguém que não está em lugar nenhum. Aparece sempre que há
+        um nome digitado — mesmo com resultados —, porque a pessoa certa pode
+        não estar na lista. O nome vai como está; o servidor separa o
+        tratamento e evita duplicar quem já existe.
+      */}
+      {termo.trim().length >= 2 && (
+        <button
+          type="button"
+          onClick={() =>
+            aoEscolher({ tipo: "novo", id: 0, nome: termo.trim(), tratamento: null, subtitulo: "" })
+          }
+          className="mt-1 flex w-full items-center gap-2 rounded-lg border border-dashed border-gold-400/30 px-2.5 py-2 text-left text-[0.8rem] text-gold-200/90 transition-colors hover:bg-gold-400/[0.08]"
+        >
+          <UserPlus className="h-3.5 w-3.5 shrink-0" />
+          Cadastrar “{termo.trim()}” como pessoa nova
+        </button>
       )}
 
       <button
@@ -191,10 +210,11 @@ export function GerirResponsaveis({
         body: JSON.stringify({
           congId,
           cargo,
-          // Pessoa existente vai por pessoaId; aluno a promover vai por alunoId;
-          // sem escolha, pessoaId null deixa o cargo vago.
+          // Pessoa existente → pessoaId; aluno a promover → alunoId; nome novo →
+          // novoNome; sem escolha, pessoaId null deixa o cargo vago.
           pessoaId: escolha?.tipo === "pessoa" ? escolha.id : escolha ? undefined : null,
           alunoId: escolha?.tipo === "aluno" ? escolha.id : undefined,
+          novoNome: escolha?.tipo === "novo" ? escolha.nome : undefined,
         }),
       });
       const corpo = await res.json();

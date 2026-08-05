@@ -78,6 +78,16 @@ export async function GET(req: Request) {
     const ate = dataOu(url.searchParams.get("ate"), hoje);
     const filtroCong = alvo ? { congId: { in: alvo } } : {};
 
+    /*
+     * O MEIO DO PERÍODO — é o que separa "crescendo" de "diminuindo".
+     *
+     * Para dizer quem subiu e quem caiu, comparamos a MÉDIA de presentes por
+     * chamada na 1ª metade do período com a da 2ª metade. Não é o total (que
+     * confunde quem fez mais chamadas com quem cresceu): é a média por domingo,
+     * a mesma que ignora domingo sem chamada. A tela mostra a seta e o quanto.
+     */
+    const meio = new Date((de.getTime() + ate.getTime()) / 2);
+
     // Fragmento SQL — nunca `$queryRaw` aninhado, que dispara e vira Promise.
     const soCongregacao = alvo
       ? Prisma.sql`AND f."congId" IN (${Prisma.join(alvo.length ? alvo : [-1])})`
@@ -90,7 +100,7 @@ export async function GET(req: Request) {
         ? Prisma.sql`f.data`
         : Prisma.sql`date_trunc(${por === "mes" ? "month" : "quarter"}, f.data)`;
 
-    const [serie, porClasse, porCongregacao, totais] = await Promise.all([
+    const [serie, porClasse, porCongregacao, campoHalves, totais] = await Promise.all([
       /* Linha do tempo, no balde escolhido. */
       prisma.$queryRaw<
         Array<{ balde: Date; presentes: bigint; faltas: bigint; chamadas: bigint; classes: bigint }>
@@ -119,6 +129,8 @@ export async function GET(req: Request) {
           faltas: bigint;
           media: number | null;
           taxa: number | null;
+          media_ant: number | null;
+          media_rec: number | null;
         }>
       >`
         SELECT
@@ -129,7 +141,9 @@ export async function GET(req: Request) {
           count(*) FILTER (WHERE f.presente)             AS presencas,
           count(*) FILTER (WHERE NOT f.presente)         AS faltas,
           round(count(*) FILTER (WHERE f.presente)::numeric / NULLIF(count(DISTINCT f.data), 0), 1) AS media,
-          round(100.0 * count(*) FILTER (WHERE f.presente) / NULLIF(count(*), 0), 1) AS taxa
+          round(100.0 * count(*) FILTER (WHERE f.presente) / NULLIF(count(*), 0), 1) AS taxa,
+          round(count(*) FILTER (WHERE f.presente AND f.data <  ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data <  ${meio}), 0), 1) AS media_ant,
+          round(count(*) FILTER (WHERE f.presente AND f.data >= ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data >= ${meio}), 0), 1) AS media_rec
         FROM "Frequencias" f
         LEFT JOIN "Classes"      c ON c.id = f."classeId"
         LEFT JOIN "Congregacoes" g ON g.id = f."congId"
@@ -150,6 +164,8 @@ export async function GET(req: Request) {
           faltas: bigint;
           media: number | null;
           taxa: number | null;
+          media_ant: number | null;
+          media_rec: number | null;
         }>
       >`
         SELECT
@@ -160,13 +176,25 @@ export async function GET(req: Request) {
           count(*) FILTER (WHERE f.presente)             AS presencas,
           count(*) FILTER (WHERE NOT f.presente)         AS faltas,
           round(count(*) FILTER (WHERE f.presente)::numeric / NULLIF(count(DISTINCT f.data), 0), 1) AS media,
-          round(100.0 * count(*) FILTER (WHERE f.presente) / NULLIF(count(*), 0), 1) AS taxa
+          round(100.0 * count(*) FILTER (WHERE f.presente) / NULLIF(count(*), 0), 1) AS taxa,
+          round(count(*) FILTER (WHERE f.presente AND f.data <  ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data <  ${meio}), 0), 1) AS media_ant,
+          round(count(*) FILTER (WHERE f.presente AND f.data >= ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data >= ${meio}), 0), 1) AS media_rec
         FROM "Frequencias" f
         LEFT JOIN "Congregacoes" g ON g.id = f."congId"
         WHERE f.data BETWEEN ${de} AND ${ate}
           ${soCongregacao}
         GROUP BY f."congId", g.nome
         ORDER BY taxa DESC NULLS LAST, presencas DESC
+      `,
+
+      /* O campo inteiro, para a manchete "crescendo / estável / em queda". */
+      prisma.$queryRaw<Array<{ media_ant: number | null; media_rec: number | null }>>`
+        SELECT
+          round(count(*) FILTER (WHERE f.presente AND f.data <  ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data <  ${meio}), 0), 1) AS media_ant,
+          round(count(*) FILTER (WHERE f.presente AND f.data >= ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data >= ${meio}), 0), 1) AS media_rec
+        FROM "Frequencias" f
+        WHERE f.data BETWEEN ${de} AND ${ate}
+          ${soCongregacao}
       `,
 
       Promise.all([
@@ -176,6 +204,35 @@ export async function GET(req: Request) {
     ]);
 
     const taxaDe = (v: number | null) => (v === null ? 0 : Number(v));
+    const num = (v: number | null) => (v === null ? null : Number(v));
+
+    /*
+     * A tendência de uma linha: comparamos a média recente com a anterior.
+     *
+     * Sem base em uma das metades (a classe só fez chamada num período),
+     * "sem-base" — não dá para dizer que cresceu ou caiu, e uma seta ali seria
+     * invenção. Variação menor que 1 presença por domingo é "estável": não vale
+     * alarmar por um aluno a mais ou a menos.
+     */
+    type Tendencia = "subindo" | "descendo" | "estavel" | "sem-base";
+    function tendenciaDe(ant: number | null, rec: number | null): {
+      mediaAnterior: number | null;
+      mediaRecente: number | null;
+      variacao: number | null;
+      variacaoPct: number | null;
+      tendencia: Tendencia;
+    } {
+      const a = num(ant);
+      const r = num(rec);
+      if (a === null || r === null) {
+        return { mediaAnterior: a, mediaRecente: r, variacao: null, variacaoPct: null, tendencia: "sem-base" };
+      }
+      const variacao = Math.round((r - a) * 10) / 10;
+      const variacaoPct = a > 0 ? Math.round((variacao / a) * 100) : null;
+      const tendencia: Tendencia =
+        Math.abs(variacao) < 1 ? "estavel" : variacao > 0 ? "subindo" : "descendo";
+      return { mediaAnterior: a, mediaRecente: r, variacao, variacaoPct, tendencia };
+    }
 
     return {
       periodo: { de: de.toISOString().slice(0, 10), ate: ate.toISOString().slice(0, 10) },
@@ -200,6 +257,7 @@ export async function GET(req: Request) {
         faltas: Number(l.faltas),
         media: taxaDe(l.media),
         taxa: taxaDe(l.taxa),
+        ...tendenciaDe(l.media_ant, l.media_rec),
       })),
       porCongregacao: porCongregacao.map((l) => ({
         congId: l.congId,
@@ -210,7 +268,10 @@ export async function GET(req: Request) {
         faltas: Number(l.faltas),
         media: taxaDe(l.media),
         taxa: taxaDe(l.taxa),
+        ...tendenciaDe(l.media_ant, l.media_rec),
       })),
+      // A manchete: o campo (ou a congregação filtrada) está crescendo?
+      campo: tendenciaDe(campoHalves[0]?.media_ant ?? null, campoHalves[0]?.media_rec ?? null),
       visitantes: totais[0],
       matriculados: totais[1],
     };

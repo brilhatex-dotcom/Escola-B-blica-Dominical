@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { ChartColumn, Percent, TrendingUp, UserRoundPlus, Users } from "lucide-react";
+import {
+  ChartColumn, Minus, Percent, TrendingDown, TrendingUp, UserRoundPlus, Users,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   CabecalhoModulo,
@@ -29,7 +31,16 @@ import { numero } from "@/lib/dashboard/formato";
  * ============================================================================
  */
 
-interface LinhaClasse {
+type TendenciaTipo = "subindo" | "descendo" | "estavel" | "sem-base";
+interface Tendencia {
+  mediaAnterior: number | null;
+  mediaRecente: number | null;
+  variacao: number | null;
+  variacaoPct: number | null;
+  tendencia: TendenciaTipo;
+}
+
+interface LinhaClasse extends Tendencia {
   classeId: number | null;
   classe: string;
   congregacao: string;
@@ -39,7 +50,7 @@ interface LinhaClasse {
   media: number;
   taxa: number;
 }
-interface LinhaCong {
+interface LinhaCong extends Tendencia {
   congId: number | null;
   congregacao: string;
   domingos: number;
@@ -64,6 +75,7 @@ interface Relatorio {
   serie: PontoSerie[];
   porClasse: LinhaClasse[];
   porCongregacao: LinhaCong[];
+  campo: Tendencia;
   visitantes: number;
   matriculados: number;
 }
@@ -133,6 +145,68 @@ function corDaTaxa(t: number): string {
   return "text-flame-400/85";
 }
 
+/**
+ * A seta de tendência — cresceu, caiu, ficou igual ou não dá para comparar.
+ *
+ * "sem-base" aparece quando falta chamada numa das metades do período: dizer
+ * "cresceu" ali seria inventar. É informação honesta, não um buraco.
+ */
+function Seta({ t, texto = true }: { t: Tendencia; texto?: boolean }) {
+  if (t.tendencia === "sem-base") {
+    return <span className="text-[0.72rem] text-brand-300/40">sem base</span>;
+  }
+  const config = {
+    subindo: { Icone: TrendingUp, cor: "text-emerald-300", sinal: "+" },
+    descendo: { Icone: TrendingDown, cor: "text-flame-400/90", sinal: "" },
+    estavel: { Icone: Minus, cor: "text-brand-200/60", sinal: "" },
+  }[t.tendencia];
+  const { Icone, cor, sinal } = config;
+  return (
+    <span className={cn("inline-flex items-center gap-1 tabular-nums", cor)}>
+      <Icone className="h-3.5 w-3.5 shrink-0" />
+      {texto && t.variacao !== null && (
+        <span className="text-[0.76rem] font-medium">
+          {sinal}
+          {t.variacao.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}
+          {t.variacaoPct !== null && ` (${sinal}${t.variacaoPct}%)`}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** Frase-manchete do campo. */
+function manchete(t: Tendencia): { titulo: string; sub: string; cor: string } {
+  if (t.tendencia === "sem-base") {
+    return {
+      titulo: "Ainda sem base para comparar",
+      sub: "É preciso ter chamada nas duas metades do período para dizer se cresceu ou caiu.",
+      cor: "text-brand-100",
+    };
+  }
+  const de = t.mediaAnterior?.toLocaleString("pt-BR", { minimumFractionDigits: 1 }) ?? "—";
+  const para = t.mediaRecente?.toLocaleString("pt-BR", { minimumFractionDigits: 1 }) ?? "—";
+  if (t.tendencia === "subindo") {
+    return {
+      titulo: "A frequência está crescendo",
+      sub: `Média por domingo passou de ${de} para ${para} presentes na segunda metade do período.`,
+      cor: "text-emerald-300",
+    };
+  }
+  if (t.tendencia === "descendo") {
+    return {
+      titulo: "A frequência está caindo",
+      sub: `Média por domingo passou de ${de} para ${para} presentes na segunda metade do período.`,
+      cor: "text-flame-400",
+    };
+  }
+  return {
+    titulo: "A frequência está estável",
+    sub: `Média por domingo perto de ${para} presentes, sem mudança relevante no período.`,
+    cor: "text-gold-200",
+  };
+}
+
 export default function RelatoriosPage() {
   const [dados, setDados] = useState<Relatorio | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -176,6 +250,16 @@ export default function RelatoriosPage() {
       ? Math.round((1000 * totalPresencas) / (totalPresencas + totalFaltas)) / 10
       : 0;
   const maxSerie = Math.max(1, ...(dados?.serie.map((s) => s.presentes) ?? [1]));
+
+  // Destaques: quem mais cresceu e quem mais caiu, entre as congregações com
+  // base para comparar. É o que responde "quem está subindo e quem está caindo".
+  const comVariacao = (dados?.porCongregacao ?? []).filter((c) => c.variacao !== null);
+  const maiorAlta = comVariacao
+    .filter((c) => c.tendencia === "subindo")
+    .sort((a, b) => (b.variacao ?? 0) - (a.variacao ?? 0))[0];
+  const maiorQueda = comVariacao
+    .filter((c) => c.tendencia === "descendo")
+    .sort((a, b) => (a.variacao ?? 0) - (b.variacao ?? 0))[0];
 
   return (
     <>
@@ -233,6 +317,59 @@ export default function RelatoriosPage() {
               nota="recebidos no período"
             />
           </div>
+
+          {/* ---------------- Manchete: crescendo ou caindo ---------------- */}
+          {(() => {
+            const m = manchete(dados.campo);
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                className="glass-panel mt-4 flex items-start gap-3 rounded-2xl p-4"
+              >
+                <span className="mt-0.5 shrink-0">
+                  <Seta t={dados.campo} texto={false} />
+                </span>
+                <div className="min-w-0">
+                  <p className={cn("font-display text-[0.98rem] font-semibold", m.cor)}>{m.titulo}</p>
+                  <p className="mt-0.5 text-[0.8rem] leading-relaxed text-brand-100/75">{m.sub}</p>
+                </div>
+              </motion.div>
+            );
+          })()}
+
+          {/* ---------------- Destaques: maior alta e maior queda ---------------- */}
+          {(maiorAlta || maiorQueda) && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {maiorAlta && (
+                <div className="glass-panel rounded-2xl p-4">
+                  <p className="text-[0.68rem] uppercase tracking-[0.14em] text-emerald-300/80">
+                    Em maior crescimento
+                  </p>
+                  <p className="mt-1 truncate font-display text-[0.98rem] font-semibold text-white">
+                    {maiorAlta.congregacao}
+                  </p>
+                  <p className="mt-0.5 text-[0.8rem] text-brand-100/70">
+                    <Seta t={maiorAlta} /> presentes por domingo
+                  </p>
+                </div>
+              )}
+              {maiorQueda && (
+                <div className="glass-panel rounded-2xl p-4">
+                  <p className="text-[0.68rem] uppercase tracking-[0.14em] text-flame-400/80">
+                    Precisa de atenção
+                  </p>
+                  <p className="mt-1 truncate font-display text-[0.98rem] font-semibold text-white">
+                    {maiorQueda.congregacao}
+                  </p>
+                  <p className="mt-0.5 text-[0.8rem] text-brand-100/70">
+                    <Seta t={maiorQueda} /> presentes por domingo
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ---------------- Linha do tempo ---------------- */}
           <motion.section
@@ -314,7 +451,7 @@ export default function RelatoriosPage() {
               <EstadoVazio mensagem="Nenhuma chamada registrada neste período." />
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[40rem] text-left">
+                <table className="w-full min-w-[48rem] text-left">
                   <thead>
                     <tr className="text-[0.68rem] uppercase tracking-[0.14em] text-brand-200/45">
                       <th className="px-5 py-2.5 font-medium">
@@ -326,7 +463,8 @@ export default function RelatoriosPage() {
                       <th className="px-3 py-2.5 text-right font-medium">Domingos</th>
                       <th className="px-3 py-2.5 text-right font-medium">Presenças</th>
                       <th className="px-3 py-2.5 text-right font-medium">Faltas</th>
-                      <th className="px-5 py-2.5 text-right font-medium">Taxa</th>
+                      <th className="px-3 py-2.5 text-right font-medium">Taxa</th>
+                      <th className="px-5 py-2.5 text-right font-medium">Tendência</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/6">
@@ -338,9 +476,10 @@ export default function RelatoriosPage() {
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{l.domingos}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">{numero(l.presencas)}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">{numero(l.faltas)}</td>
-                            <td className={cn("px-5 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
+                            <td className={cn("px-3 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
                               {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
                             </td>
+                            <td className="px-5 py-2.5 text-right"><Seta t={l} /></td>
                           </tr>
                         ))
                       : dados.porClasse.map((l, i) => (
@@ -350,9 +489,10 @@ export default function RelatoriosPage() {
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{l.domingos}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">{numero(l.presencas)}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">{numero(l.faltas)}</td>
-                            <td className={cn("px-5 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
+                            <td className={cn("px-3 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
                               {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
                             </td>
+                            <td className="px-5 py-2.5 text-right"><Seta t={l} /></td>
                           </tr>
                         ))}
                   </tbody>
