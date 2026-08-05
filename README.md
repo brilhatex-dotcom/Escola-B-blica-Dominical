@@ -29,6 +29,7 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários | pronto |
 | 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas | pronto |
 | 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria | pronto |
+| 11 | Agenda: Calendário, Eventos, Avisos, Reuniões | pronto |
 
 ---
 
@@ -220,6 +221,66 @@ o que é pior do que não ter registro nenhum.
 
 A tabela também não tem coluna de congregação, então **não há como recortá-la por
 acesso** — a leitura fica restrita a quem enxerga o campo inteiro.
+
+---
+
+## Agenda (Fase 11)
+
+Quatro telas: **Calendário**, **Eventos**, **Avisos** e **Reuniões**.
+
+### O calendário não guarda os domingos — ele os deduz
+
+Não existe, e não vai existir, uma tabela "domingos de EBD". Domingo de Escola
+Bíblica é todo dia cujo `getDay() === 0`; o que o banco tem a dizer sobre ele é
+se **houve chamada** (`Frequencias` agrupadas por data) e **qual lição** foi
+dada.
+
+Uma tabela de domingos precisaria ser preenchida todo ano por alguém, e no
+primeiro janeiro esquecido o calendário ficaria vazio — com aparência de que a
+EBD não aconteceu.
+
+### "Domingo sem chamada" só conta o que já passou
+
+O resumo do mês separa domingos **com** e **sem** chamada, e o segundo número
+**ignora os domingos futuros**. Contar 3 de 4 como pendência no dia 5 do mês
+seria acusar a igreja de não ter feito uma chamada cuja data ainda não chegou —
+o alerta perderia sentido na primeira semana de todo mês.
+
+Pela mesma razão, o dia futuro aparece como *"EBD a realizar"* (cinza) e não
+como *"domingo sem chamada"* (âmbar).
+
+### Um evento de vários dias continua acontecendo
+
+Eventos têm `data` e `dataFim`. Um congresso de sexta a domingo, consultado no
+sábado, **é um evento em curso, não um evento passado**. Por isso:
+
+- no calendário, o mês casa por interseção (`data <= fim AND dataFim >= início`),
+  senão um evento que começa dia 28 de março some do calendário de abril;
+- na lista, "próximos" filtra por `dataFim`, e o cartão traz `emCurso`.
+
+### Um aviso vencido pode estar errado
+
+`dataExpiracao` existe no cadastro antigo e nunca foi usada — a planilha mostrava
+tudo junto. Mas "culto às 19h no dia 12" continua no mural em março do ano
+seguinte e manda a igreja para o lugar errado.
+
+Vigentes e vencidos ficam **separados**, a tela abre nos vigentes, e os vencidos
+seguem acessíveis atrás de um clique. Apagar histórico não é papel desta tela.
+
+### A lista de presença da reunião vem de JSON
+
+`Reunioes.participantes` é uma coluna JSON do sistema antigo, não uma tabela.
+Como qualquer JSON de origem externa, ela pode vir nula, vir como objeto ou vir
+como texto — a leitura confere `Array.isArray` antes de usar, e uma lista vazia
+vira `null` (sem lista) em vez de "0 participantes", que são coisas diferentes.
+
+São 13 reuniões registradas, todas do tipo *Estudo de Professores*.
+
+### `/api/agenda` estava sem guarda desde a Fase 05
+
+Mesmo defeito das quatro rotas descritas na seção seguinte, encontrado aqui:
+a rota da agenda nasceu antes do RBAC e ficava aberta. Agora exige
+`agenda-calendario` e aplica o recorte por congregação dentro da consulta.
 
 ---
 

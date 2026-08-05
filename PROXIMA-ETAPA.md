@@ -1,4 +1,4 @@
-# Continuação — Fase 11: Agenda
+# Continuação — Fase 12: Administração e Configurações
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -41,15 +41,35 @@ Substitui um sistema antigo em Google Apps Script.
 | 07 | Fila offline ligada na Chamada — grava no aparelho e reenvia sozinha |
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários, Permissões |
 | 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas |
-| 10 | **Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria** |
+| 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria |
+| 11 | **Agenda: Calendário, Eventos, Avisos, Reuniões** |
 
 ## O plano das próximas fases (aprovado)
 
 | Fase | Entrega |
 |---|---|
-| **11** | **Agenda: Calendário, Eventos, Avisos, Reuniões |
-| 12 | Administração e Configurações: Hierarquia, Escalas, Sistema, Backup, Sincronização, Offline, Logs |
+| **12** | **Administração e Configurações: Hierarquia, Escalas, Sistema, Backup, Sincronização, Offline, Logs** |
 | 13 | Pesquisa Global sobre registros (alunos, professores, classes…) + Offline First nos módulos novos |
+
+## O que a Fase 11 entregou (para não refazer)
+
+- **O calendário deduz os domingos** (`diaSemana === 0`) em vez de guardá-los numa
+  tabela. Do banco vem só o que ele sabe: se houve chamada e qual lição.
+- **"Domingo sem chamada" só conta domingo que já passou.** Sem isso, todo dia 5
+  do mês o portal acusaria a igreja de três chamadas atrasadas que ainda nem
+  tinham data.
+- **Evento de vários dias continua acontecendo.** O calendário casa o mês por
+  interseção (`data <= fim AND dataFim >= início`) e a lista de "próximos" filtra
+  por `dataFim`, não por `data`.
+- **Avisos vencidos ficam separados dos vigentes** — um aviso expirado pode estar
+  errado e mandar a igreja para o lugar errado. Ficam acessíveis, não apagados.
+- **`Reunioes.participantes` é JSON do sistema antigo**: a leitura confere
+  `Array.isArray` antes de usar, e lista vazia vira `null` (sem lista), que não é
+  a mesma coisa que "0 participantes".
+- **CORRIGIDO:** `/api/agenda` estava **sem guarda de permissão** desde a Fase 05,
+  mesmo defeito das quatro rotas achadas na Fase 10.
+
+O menu **não tem mais nenhum "em breve" em Agenda**.
 
 ## O que a Fase 10 entregou (para não refazer)
 

@@ -304,7 +304,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/agenda/eventos",
         icone: PartyPopper,
         descricao: "Eventos do campo e das congregações",
-        emBreve: true,
       },
       {
         chave: "agenda-avisos",
@@ -312,7 +311,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/agenda/avisos",
         icone: Bell,
         descricao: "Avisos publicados, com prioridade e validade",
-        emBreve: true,
       },
       {
         chave: "agenda-reunioes",
@@ -320,7 +318,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/agenda/reunioes",
         icone: UsersRound,
         descricao: "Reuniões com lista de presença",
-        emBreve: true,
       },
     ],
   },
