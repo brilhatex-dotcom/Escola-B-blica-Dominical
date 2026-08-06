@@ -24,7 +24,7 @@ import {
   EstadoVazio,
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
-import { iniciais } from "@/lib/dashboard/formato";
+import { domingoMaisRecente, iniciais } from "@/lib/dashboard/formato";
 import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
@@ -150,15 +150,6 @@ function daMemoriaDoAparelho(local: ChamadaLocal): Chamada | null {
       presente: marcado.get(a.id) ?? null,
     })),
   };
-}
-
-/** Domingo mais recente, "YYYY-MM-DD" — o dia que a chamada quase sempre quer. */
-function domingoMaisRecente(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - d.getDay());
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
 export default function ChamadaPage() {

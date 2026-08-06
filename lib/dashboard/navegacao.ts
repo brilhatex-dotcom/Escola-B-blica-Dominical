@@ -17,6 +17,7 @@ import {
   Home,
   KeyRound,
   Network,
+  NotebookPen,
   PartyPopper,
   Radar,
   School,
@@ -253,6 +254,13 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/frequencia",
         icone: FileText,
         descricao: "Índices de frequência por período, congregação e classe",
+      },
+      {
+        chave: "rel-semanal",
+        rotulo: "Relatório Semanal",
+        href: "/dashboard/relatorios/semanal",
+        icone: NotebookPen,
+        descricao: "O relatório de domingo, no modelo da Superintendência das Escolas Dominicais",
       },
       {
         chave: "rel-comparativo",

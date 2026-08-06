@@ -1,5 +1,10 @@
 # Continuação — Fase 15c ou o próximo pedido do usuário (confirme antes de escolher)
 
+> Fase 17 (Relatório Semanal + saudação) foi entregue depois da 16, também
+> fora da ordem proposta — o usuário segue mandando ajustes concretos ao vivo,
+> testando o portal publicado. Isso é esperado neste projeto: trate cada
+> pedido novo como a prioridade do momento, não como quebra do plano.
+
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
 
@@ -50,6 +55,46 @@ Substitui um sistema antigo em Google Apps Script.
 | 15a | **Central de Revistas CPAD — painel do trimestre e alertas** |
 | 15b | **Central de Revistas CPAD — o pedido é digitado e confirmado (tela "Fazer Pedido")** |
 | 16 | **Três ajustes pedidos ao vivo: Grupo B edita a liderança local, Alunos em caixinhas por classe, seletor de trimestre em Revistas** |
+| 17 | **Relatório Semanal (modelo da Superintendência das EDs) + saudação completa do Dashboard** |
+
+## O que a Fase 17 entregou (para não refazer)
+
+Dois pedidos na mesma mensagem, com foto do formulário de papel em mãos.
+
+1. **`/dashboard/relatorios/semanal`** (nova) — a mesma tabela do papel
+   (Classe/Matriculados/Presentes/Visitantes/Professor/Total), **sem**
+   Bíblias e Ofertas (pedido explícito). Tudo calculado de
+   `Alunos`/`Frequencias`/`Visitantes`/`PessoaCargos`, exceto "Visita
+   Ministerial" e "Nº de Conversões", que ficam EM BRANCO de propósito —
+   nenhuma tabela do sistema guarda isso, nem a antiga nem esta.
+   - `/api/relatorios/semanal?cong=&data=` (nova rota, só leitura).
+   - Nova permissão `rel-semanal` (Grupo B já enxerga, igual às demais telas
+     de relatório).
+   - "1º Lugar" compara pelo TOTAL bruto (não pela taxa) — de propósito,
+     diferente do Ranking; é uma disputa de um domingo só, não uma métrica
+     de saúde ao longo do tempo.
+   - Botão Imprimir. `app/globals.css` ganhou um reset de impressão
+     (`@media print`) que vale para TODAS as telas com botão de imprimir
+     (Ficha, Certificados, e esta) — sem ele, imprimir pintava a folha de
+     azul-marinho antes de escrever por cima.
+   - `domingoMaisRecente()` saiu de dentro de `chamada/page.tsx` (estava
+     duplicável) para `lib/dashboard/formato.ts`, compartilhado.
+2. **A saudação do Dashboard tinha DOIS bugs empilhados**, achados a partir
+   de um print real ("Bom dia, Ir.ª." sem nome nenhum):
+   - `Saudacao.tsx` pegava a primeira PALAVRA de `Usuario.nome` (texto
+     livre, às vezes digitado com tratamento junto) — e a primeira palavra
+     era o próprio tratamento.
+   - Corrigir com `separarTratamento` esbarrou num bug MAIS ANTIGO em
+     `lib/pessoas/nome.ts`: `"ª"` (indicador ordinal feminino) não é
+     diacrítico — `\p{Diacritic}` não a removia — e `"Ir.ª"` nunca batia com
+     `"ir.a"` no conjunto de tratamentos reconhecidos. Isso afetava TODA
+     normalização de nome no sistema, não só a saudação (busca de pessoas,
+     chave única de `Pessoa`).
+   - `semAcento()` (novo) resolve os dois na raiz. `tratamentoPorExtenso()`
+     (novo) troca a abreviação de crachá pela forma falada: "Ir.ª" → "Irmã".
+   - `npm run verificar:saudacao` (novo script): **16 asserções**.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ## O que a Fase 16 entregou (para não refazer)
 

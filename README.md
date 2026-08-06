@@ -384,6 +384,75 @@ caminho.
 
 ---
 
+## Fase 17 — Relatório Semanal e a saudação de verdade
+
+Dois pedidos: uma aba nova, no exato modelo do formulário de papel da
+Superintendência das Escolas Dominicais (foto em mãos), e a saudação do
+Dashboard completa — "Bom dia, Irmã Ilma", não cortada.
+
+### Relatório Semanal — sem bíblias, sem ofertas, com o que é real
+
+`/dashboard/relatorios/semanal` reproduz a tabela do papel — Classe,
+Matriculados, Presentes, Visitantes, Professor, Total — **sem** as colunas de
+Bíblias e Ofertas, por pedido explícito (a oferta já tinha saído dos
+relatórios do portal antes desta fase). Abaixo, os campos de liderança
+(Dirigente, Vice-Dirigente, Secretário(a), Coordenador(a) se a congregação
+usar esse nome de cargo) e os quadros "1º Lugar — Frequência/Visitantes".
+
+**O que é calculado, e o que fica em branco de propósito:**
+
+- Matriculados, Presentes, Visitantes e Professor (por classe) vêm de dado
+  real — `Alunos`, `Frequencias`, `Visitantes`, `PessoaCargos`. "Presentes"
+  chega `null` (mostrado como "—") numa classe que não fez chamada naquele
+  domingo, nunca `0` — a mesma regra de sempre.
+- "Professor" conta **vínculos por classe**, não pessoas únicas: quem dá aula
+  em duas classes entra duas vezes nessa coluna, igual ao card de estrutura do
+  Dashboard já avisa ("uma pessoa em vários cargos continua sendo uma
+  pessoa"). O card de liderança, embaixo, mostra o total de professores SEM
+  repetição.
+- **"Visita Ministerial" e "Nº de Conversões" ficam em branco.** Nenhuma
+  tabela do sistema — nem a antiga, nem esta — guarda isso. Inventar um zero
+  pareceria apurado; um espaço em branco, pronto pra caneta depois de
+  imprimir, não mente.
+- **"1º Lugar" compara pelo TOTAL bruto**, não pela taxa — de propósito,
+  diferente do Ranking (que compara por taxa de frequência). O papel é uma
+  disputa simples entre classes num domingo só; a taxa é a pergunta certa
+  para "quem está indo melhor ao longo do tempo", que é outra tela.
+- Botão **Imprimir** (`window.print()`), com um reset de impressão novo em
+  `app/globals.css`: o portal é escuro, papel não é — sem ele, imprimir
+  gastaria tinta pintando a folha de azul-marinho antes de escrever por cima.
+  Vale para as três telas com botão de imprimir (Ficha do Aluno,
+  Certificados, e esta), não só a nova.
+
+### "Bom dia, Ir.ª." — dois bugs, uma correção
+
+O usuário mandou um print: a saudação do Dashboard cortava no tratamento,
+sem nome nenhum. Dois problemas empilhados:
+
+1. `Usuario.nome` é texto livre, e quem cadastra às vezes digita o
+   tratamento junto ("Ir.ª Jéssica Sousa"). A saudação pegava a primeira
+   PALAVRA do texto pra soar como gente — e a primeira palavra era o próprio
+   tratamento.
+2. Corrigir isso com `separarTratamento` (a função que já existia, usada em
+   Pessoas) esbarrou num segundo bug, mais antigo: "ª" (indicador ordinal
+   feminino, U+00AA) **não é uma marca diacrítica** — é uma letra própria — e
+   `\p{Diacritic}` não a removia. `"Ir.ª".normalize("NFD")` não virava
+   `"ir.a"`, e o tratamento nunca era reconhecido, nem aqui nem em nenhum
+   outro lugar do sistema que usa a mesma normalização (busca de pessoas,
+   chave única de `Pessoa`).
+
+`semAcento()` (novo, em `lib/pessoas/nome.ts`) troca "ª"/"º" por "a"/"o"
+explicitamente, depois do NFD — conserta os dois bugs na raiz, para todo
+mundo que usa `normalizarChave`/`separarTratamento`, não só a saudação.
+`tratamentoPorExtenso()` (novo) troca a abreviação de crachá pela forma que
+se diz em voz alta: "Ir.ª" → "Irmã", "Pr." → "Pastor", "Pb." → "Presbítero"
+— uma saudação não é uma etiqueta de lista.
+
+Verificado com `npm run verificar:saudacao`: **16 asserções**, incluindo o
+caso real reportado ("Ir.ª Jéssica Sousa" → "Irmã Jéssica").
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"
@@ -1451,6 +1520,7 @@ só na hora de exibir.
 | `/api/relatorios/painel` | Índice de Saúde por congregação, IGE do campo, alertas, análise e evolução mensal |
 | `/api/relatorios/comparativo` | 2 a 4 congregações lado a lado: componentes do IGS e evolução de 6 meses |
 | `/api/revistas` | pedido confirmado + sugestão calculada por congregação, pagamentos, prazos, alertas |
+| `/api/relatorios/semanal` | o relatório de domingo por classe (matriculados/presentes/visitantes/professor) |
 | `/api/revistas/pedido` | GET o rascunho/confirmado de uma congregação, PUT salva, POST confirma ou reabre |
 | `/api/agenda` | eventos e reuniões numa lista só, mais as escalas |
 | `/api/lideranca` | GET a hierarquia, POST troca quem ocupa um cargo |

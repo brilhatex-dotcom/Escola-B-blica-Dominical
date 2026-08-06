@@ -99,6 +99,15 @@ export function iniciais(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
 }
 
+/** Domingo mais recente, "YYYY-MM-DD" — o dia que a Chamada e o Relatório Semanal quase sempre querem. */
+export function domingoMaisRecente(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay());
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
 /**
  * Converte "MM-DD" numa data do ano corrente.
  *

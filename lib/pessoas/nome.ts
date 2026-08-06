@@ -21,14 +21,27 @@ const TRATAMENTOS = new Set([
   "aux.", "ir.", "ir.a",
 ]);
 
-/** minúsculo, sem acento, espaços colapsados — a forma da coluna `chave`. */
-export function normalizarChave(s: string): string {
+/**
+ * minúsculo e sem acento — a base de toda normalização deste arquivo.
+ *
+ * `\p{Diacritic}` sozinho NÃO cobre "ª"/"º" (indicadores ordinais femini-
+ * no/masculino, U+00AA/U+00BA): eles são letras próprias, não marcas combi-
+ * nantes, então `"ª".normalize("NFD")` não muda nada. Sem esta troca extra,
+ * "Ir.ª" normalizava para "ir.ª" — que não batia com "ir.a" no conjunto de
+ * tratamentos — e a saudação do Dashboard ficava sem o nome ("Bom dia, Ir.ª.").
+ */
+function semAcento(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/ª/g, "a")
+    .replace(/º/g, "o");
+}
+
+/** minúsculo, sem acento, espaços colapsados — a forma da coluna `chave`. */
+export function normalizarChave(s: string): string {
+  return semAcento(s).replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -40,7 +53,7 @@ export function normalizarChave(s: string): string {
 export function separarTratamento(nomeCompleto: string): { tratamento: string | null; nome: string } {
   const bruto = (nomeCompleto ?? "").trim();
   const primeira = bruto.split(/\s+/)[0] ?? "";
-  const norm = primeira.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  const norm = semAcento(primeira);
   if (TRATAMENTOS.has(norm)) {
     const resto = bruto.slice(primeira.length).trim();
     // Se sobrar vazio (só o tratamento foi digitado), devolve o original.
@@ -55,4 +68,34 @@ export function separarTratamento(nomeCompleto: string): { tratamento: string | 
  */
 export function termoDeBusca(termo: string): string {
   return normalizarChave(separarTratamento(termo).nome);
+}
+
+/**
+ * O tratamento por extenso, para falar — não para etiquetar.
+ *
+ * "Ir.ª" nas listas e crachás fica abreviado de propósito (compacto, igual em
+ * toda linha). Numa saudação ("Bom dia, ___") a abreviação soa como um rótulo
+ * de cadastro, não como algo que alguém diria — por isso a Fase 16 pediu a
+ * forma completa: "Bom dia, Irmã Ilma", não "Bom dia, Ir.ª Ilma".
+ *
+ * Tratamento não reconhecido devolve como veio, em vez de sumir — abreviações
+ * novas que a igreja passe a usar continuam aparecendo, só que abreviadas.
+ */
+const POR_EXTENSO: Readonly<Record<string, string>> = {
+  "pr.": "Pastor",
+  "pra.": "Pastora",
+  "pb.": "Presbítero",
+  "presb.": "Presbítero",
+  "dc.": "Diácono",
+  "diac.": "Diácono",
+  "ev.": "Evangelista",
+  "miss.": "Missionário(a)",
+  "aux.": "Auxiliar",
+  "ir.": "Irmão",
+  "ir.a": "Irmã",
+};
+
+export function tratamentoPorExtenso(tratamento: string | null): string | null {
+  if (!tratamento) return null;
+  return POR_EXTENSO[semAcento(tratamento)] ?? tratamento;
 }

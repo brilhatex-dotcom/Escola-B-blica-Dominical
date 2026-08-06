@@ -87,6 +87,7 @@ const VE_A_CONGREGACAO = [
   "revistas",
   "rel-painel",
   "rel-frequencia",
+  "rel-semanal",
   "rel-comparativo",
   "rel-ranking",
   "rel-faltas",
