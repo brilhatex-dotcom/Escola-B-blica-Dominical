@@ -1,4 +1,4 @@
-# Continuação — Fase 14c: rankings expandidos e comparativos adicionais (BI)
+# Continuação — Fase 15b: Central de Revistas CPAD (cards e gráficos financeiros)
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -47,6 +47,81 @@ Substitui um sistema antigo em Google Apps Script.
 | 13 | Pesquisa Global (com busca offline) sobre os registros |
 | 14a | **Central de Relatórios (BI) — o cérebro: IGS, IGE, alertas, análise automática** |
 | 14b | **Central de Relatórios (BI) — gráficos avançados: evolução, radar e comparativo** |
+| 15a | **Central de Revistas CPAD — painel do trimestre e alertas** |
+
+## A Fase 15 — Central de Revistas CPAD — e o corte combinado com o usuário
+
+O pedido original ("FASE XX — Central de Gestão de Revistas CPAD") reconstrói
+o módulo de Revistas inteiro: dashboard financeiro com gráficos, cards por
+congregação com ícones, categorias novas (Discipulado, Apoio, Visuais,
+Material Complementar), comprovante de pagamento anexado, impressão
+profissional, histórico com comparativos entre trimestres, exportação
+PDF/Excel/CSV. Equivale a 5–6 fases somadas — do mesmo tamanho do pedido de BI
+que já foi cortado em 14a/14b.
+
+Perguntei ao usuário três coisas antes de começar (ver `AskUserQuestion` no
+histórico da sessão):
+
+1. **Por onde começar?** → **"Painel e alertas primeiro"** — a peça que não
+   depende de infraestrutura nova nem de preço que ainda não existe.
+2. **Discipulado/Apoio/Visuais/Material Complementar não têm preço
+   cadastrado — como seguir?** → **"Me diga os valores agora"** — ainda
+   aguardando o usuário informar os valores; nenhuma dessas categorias entrou
+   no cálculo até lá.
+3. **Comprovante de pagamento (upload de arquivo) — configurar agora?** →
+   **"Não por agora"** — continua como campo de observação em texto.
+
+### O corte de sub-fases (proposto e ainda não aprovado item a item)
+
+| Sub-fase | Entrega |
+|---|---|
+| **15a** | ✅ Entregue — painel do trimestre (tema, situação, prazos), alertas automáticos, cards de resumo, e a Revista do Professor somada ao cálculo |
+| 15b | Cards por congregação redesenhados (ícones de pagar/imprimir/editar/histórico) + gráficos financeiros (barra, pizza, evolução semanal) |
+| 15c | Categorias extras (Discipulado, Apoio, Visuais, Material Complementar) — **bloqueado até o usuário informar os preços** |
+| 15d | Impressão profissional (pedido individual com timbre e assinaturas) + impressão geral (todas/pendentes/pagas/por categoria) |
+| 15e | Histórico multi-trimestre + comparativos automáticos (trimestre anterior, mesmo trimestre do ano passado) + estatísticas |
+| 15f | Exportação PDF/Excel/CSV |
+| — | Comprovante de pagamento (upload) — recusado por enquanto; exigiria configurar um serviço de armazenamento de arquivo novo |
+
+**Antes de começar 15b, confirme com o usuário se a ordem continua essa** — a
+aprovação foi dada só para 15a.
+
+**A Fase 14c/14d (BI: rankings expandidos e exportação) segue proposta e não
+aprovada** — o usuário abriu a Fase 15 antes de decidir sobre elas. Não
+presumir qual delas vem depois de 15b; perguntar.
+
+## O que a Fase 15a entregou (para não refazer)
+
+- **`lib/revistas/situacao.ts`** — funções puras, sem banco:
+  `situacaoDoTrimestre`, `situacaoDaCongregacao`, `nivelDoPrazo`,
+  `diasRestantes`, `gerarAlertasRevistas`. "Fechado" é redefinido
+  honestamente: não existe passo de "enviar" o pedido (ele nasce calculado),
+  então "Fechado" significa "prazo de AJUSTE passou, prazo de PAGAMENTO
+  ainda não" — e só acontece se a administração definir um prazo de pedido.
+- **`/api/revistas` GET** ganhou: `trimestre.tema`, `dataLimitePedido`,
+  `prazos` (dias restantes + nível de cada prazo), `situacao` do trimestre,
+  `situacao` por congregação, e `alertas`. **PUT** agora aceita `tema`,
+  `dataLimitePedido` e `dataLimite` juntos ou separados — só muda o que vier
+  no corpo.
+- **Revista do Professor somada ao cálculo**: a tabela de preços sempre teve
+  as linhas `mestre-*` e o cálculo só usava `aluno-*`. Agora cada classe soma
+  `professores ativos × preço do professor`, com a contagem vinda de
+  `PessoaCargos` (mesma fonte que a tela de Classes já usa). Muda os totais
+  que a Fase 09 tinha documentado (290 revistas, R$ 3.062,00).
+- **Tela `/dashboard/revistas`**: painel do trimestre (tema editável,
+  situação, os dois prazos com cor), 3 cards de resumo financeiro + 3 cards de
+  contagem de congregações (em dia/pendentes/atrasadas), painel de alertas
+  clicável (abre a congregação certa), badge de situação em cada card de
+  congregação, e a linha da Revista do Professor visível dentro do
+  detalhamento de cada classe.
+- **Não entrou**: Discipulado/Apoio/Visuais/Material Complementar (sem
+  preço), comprovante de pagamento (upload — recusado por enquanto), forma de
+  pagamento e "quem recebeu" no registro de baixa (não foi pedido nesta
+  sub-fase; fica para quando o "Controle de Pagamento" completo entrar).
+- `npm run verificar:revistas` — **27 asserções**.
+- **Precisa aplicar no banco:** `prisma/aplicar-fase-15a.sql` — duas colunas
+  novas em `Trimestres_Revistas` (`tema`, `dataLimitePedido`), nulas em todo
+  trimestre já cadastrado, seguro rodar com o sistema no ar.
 
 ## A Fase 14 — Central de Relatórios (BI) — e o corte combinado com o usuário
 
@@ -274,12 +349,17 @@ o sistema no ar e seguro rodar duas vezes.
    mostra tarja vermelha "Portal sem proteção". Valor já gerado e entregue.
 2. **Aplicar `prisma/aplicar-fase-08.sql`** no SQL Editor do Neon.
    **E `prisma/aplicar-fase-12.sql`** — sem ele a auditoria nova não grava.
+   **E `prisma/aplicar-fase-15a.sql`** — sem ele o tema e o prazo de pedido do
+   trimestre não salvam (o resto do painel funciona igual).
 3. **Reunião da liderança para trocar as senhas.** Depois dela, virar
    `EXIGIR_SENHA_PROPRIA_PARA_GRAVAR` para `true` em `lib/config.ts`.
 4. **Trocar a senha do banco no Neon** — ela apareceu num print compartilhado.
 5. **Apagar o projeto Neon vazio** (`sa-east-1`, `ep-cold-leaf-…`) — o correto é
    o `ebd-betania` (`us-east-1`, `ep-muddy-snow-…`). O usuário é leigo e não
    conseguiu; precisa de passo a passo. **Não temos acesso à conta Neon.**
+6. **Preços de Discipulado, Revistas de Apoio, Revistas Visuais e Material
+   Complementar** — o usuário disse que ia informar os valores; nenhuma
+   dessas categorias entra no pedido até chegar o preço.
 
 ## Variáveis de ambiente
 

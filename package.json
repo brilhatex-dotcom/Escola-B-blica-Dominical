@@ -15,6 +15,7 @@
     "verificar:permissoes": "tsx scripts/verificar-permissoes.mts",
     "verificar:login": "tsx scripts/verificar-login.mts",
     "verificar:bi": "tsx scripts/verificar-relatorios-bi.mts",
+    "verificar:revistas": "tsx scripts/verificar-revistas.mts",
     "verificar:pwa": "node scripts/verificar-pwa.mjs",
     "verificar:dashboard": "node scripts/verificar-dashboard.mjs",
     "db:generate": "prisma generate",

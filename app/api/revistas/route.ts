@@ -2,6 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { erro, lerInt, responder } from "@/lib/api";
 import { exigirEscrita, exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 import { registrar } from "@/lib/auditoria";
+import {
+  diasRestantes,
+  gerarAlertasRevistas,
+  nivelDoPrazo,
+  situacaoDaCongregacao,
+  situacaoDoTrimestre,
+} from "@/lib/revistas/situacao";
 
 /**
  * Pedido de Lição — o que cada congregação precisa, quanto custa, e quanto já
@@ -91,6 +98,10 @@ export async function GET() {
           id: true, nome: true, tipoClasse: true, faixa: true,
           congregacao: { select: { id: true, nome: true } },
           _count: { select: { alunos: { where: { ativo: true } } } },
+          pessoaCargos: {
+            where: { ativo: true, cargo: { nome: "Professor" } },
+            select: { id: true },
+          },
         },
       }),
       prisma.precoRevista.findMany({ orderBy: [{ categoria: "asc" }, { key: "asc" }] }),
@@ -101,8 +112,11 @@ export async function GET() {
       prisma.trimestreRevista.findUnique({ where: { trimestre: tri.chave } }),
     ]);
 
-    // Preço de referência (Revista do Aluno, capa comum) por categoria.
+    // Preço de referência (Revista do Aluno, capa comum) por categoria — e o
+    // mesmo para a Revista do Professor ("mestre-*"), que a tabela de preços
+    // já tinha e o pedido nunca somava.
     const precoAlunoDe = new Map<string, number>();
+    const precoProfessorDe = new Map<string, number>();
     const porCategoria = new Map<string, { key: string; label: string; preco: number }[]>();
     for (const p of precos) {
       const cat = normalizar(p.categoria);
@@ -115,6 +129,11 @@ export async function GET() {
       const alunoMin = lista.filter((x) => x.key.startsWith("aluno")).sort((a, b) => a.preco - b.preco)[0];
       const ref = comum ?? alunoMin ?? lista.sort((a, b) => a.preco - b.preco)[0];
       if (ref) precoAlunoDe.set(cat, ref.preco);
+
+      const mestreComum = lista.find((x) => x.key === "mestre-comum");
+      const mestreMin = lista.filter((x) => x.key.startsWith("mestre")).sort((a, b) => a.preco - b.preco)[0];
+      const refProf = mestreComum ?? mestreMin;
+      if (refProf) precoProfessorDe.set(cat, refProf.preco);
     }
 
     // Mini-tabela de preços (sem obreiros/jovenadult), na ordem preferida.
@@ -151,6 +170,7 @@ export async function GET() {
       classeId: number; classe: string; faixa: string; categoria: string;
       categoriaRotulo: string; categoriaEncontrada: boolean;
       alunos: number; precoUnitario: number | null; subtotal: number;
+      professores: number; precoProfessor: number | null; subtotalProfessor: number;
     }
     const porCong = new Map<number, { id: number; nome: string; classes: Item[] }>();
     for (const c of classes) {
@@ -163,6 +183,8 @@ export async function GET() {
       const cat = normalizar(c.tipoClasse ?? "");
       const preco = precoAlunoDe.get(cat) ?? null;
       const alunos = c._count.alunos;
+      const precoProf = precoProfessorDe.get(cat) ?? null;
+      const professores = c.pessoaCargos.length;
       g.classes.push({
         classeId: c.id,
         classe: c.nome,
@@ -173,22 +195,34 @@ export async function GET() {
         alunos,
         precoUnitario: preco,
         subtotal: preco !== null ? Number((preco * alunos).toFixed(2)) : 0,
+        professores,
+        precoProfessor: precoProf,
+        subtotalProfessor: precoProf !== null ? Number((precoProf * professores).toFixed(2)) : 0,
       });
     }
+
+    const dataLimitePagamento = config?.dataLimite ?? dataLimitePadrao(hoje);
+    const dataLimitePedido = config?.dataLimitePedido ?? null;
 
     const congregacoes = [...porCong.values()]
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
       .map((g) => {
-        const revistas = g.classes.reduce((s, c) => s + c.alunos, 0);
-        const totalDevido = Number(g.classes.reduce((s, c) => s + c.subtotal, 0).toFixed(2));
+        // "Revistas" conta aluno + professor: as duas são revistas pedidas de
+        // verdade, não só a do aluno.
+        const revistas = g.classes.reduce((s, c) => s + c.alunos + c.professores, 0);
+        const totalDevido = Number(
+          g.classes.reduce((s, c) => s + c.subtotal + c.subtotalProfessor, 0).toFixed(2),
+        );
         const pago = Number((pagoPorCong.get(g.id) ?? 0).toFixed(2));
+        const saldo = Number((totalDevido - pago).toFixed(2));
         return {
           congId: g.id,
           nome: g.nome,
           revistas,
           totalDevido,
           pago,
-          saldo: Number((totalDevido - pago).toFixed(2)),
+          saldo,
+          situacao: situacaoDaCongregacao({ hoje, totalDevido, pago, dataLimitePagamento }),
           semPreco: g.classes.filter((c) => !c.categoriaEncontrada).length,
           classes: g.classes,
           pagamentos: (baixasPorCong.get(g.id) ?? []).map((p) => ({
@@ -203,22 +237,55 @@ export async function GET() {
 
     const totalDevido = Number(congregacoes.reduce((s, c) => s + c.totalDevido, 0).toFixed(2));
     const totalPago = Number(congregacoes.reduce((s, c) => s + c.pago, 0).toFixed(2));
+    const saldoTotal = Number((totalDevido - totalPago).toFixed(2));
     const padrao = dataLimitePadrao(hoje);
 
+    // As três contagens do painel — "sem-pedido" (nenhuma classe/aluno ativo
+    // no trimestre) fica de fora das três, porque não há o que pagar.
+    const comPedido = congregacoes.filter((c) => c.totalDevido > 0);
+    const congregacoesPagas = comPedido.filter((c) => c.situacao === "quitado").length;
+    const congregacoesAtrasadas = comPedido.filter((c) => c.situacao === "atraso").length;
+    const congregacoesPendentes = comPedido.length - congregacoesPagas - congregacoesAtrasadas;
+    const congregacoesSemPedido = congregacoes.length - comPedido.length;
+
+    const diasPrazoPagamento = diasRestantes(hoje, dataLimitePagamento);
+    const diasPrazoPedido = dataLimitePedido ? diasRestantes(hoje, dataLimitePedido) : null;
+
     return {
-      trimestre: tri,
-      dataLimite: config?.dataLimite ? soDia(config.dataLimite) : soDia(padrao),
+      trimestre: { ...tri, tema: config?.tema ?? null },
+      dataLimite: soDia(dataLimitePagamento),
       dataLimitePadrao: soDia(padrao),
       dataLimiteDefinida: Boolean(config?.dataLimite),
-      podeDefinirLimite: !recorte, // só o campo define a data-limite geral
+      dataLimitePagamento: soDia(dataLimitePagamento),
+      dataLimitePedido: dataLimitePedido ? soDia(dataLimitePedido) : null,
+      podeDefinirLimite: !recorte, // só o campo define os prazos e o tema
+      prazos: {
+        pagamento: { dias: diasPrazoPagamento, nivel: nivelDoPrazo(diasPrazoPagamento) },
+        pedido: diasPrazoPedido !== null ? { dias: diasPrazoPedido, nivel: nivelDoPrazo(diasPrazoPedido) } : null,
+      },
+      situacao: situacaoDoTrimestre({
+        hoje, totalDevido, saldo: saldoTotal, dataLimitePedido, dataLimitePagamento,
+      }),
       precos: tabelaPrecos,
       congregacoes,
       resumo: {
         revistas: congregacoes.reduce((s, c) => s + c.revistas, 0),
+        congregacoes: congregacoes.length,
         totalDevido,
         totalPago,
-        saldo: Number((totalDevido - totalPago).toFixed(2)),
+        saldo: saldoTotal,
+        percentualPago: totalDevido > 0 ? Math.round((totalPago / totalDevido) * 1000) / 10 : null,
+        congregacoesPagas,
+        congregacoesPendentes,
+        congregacoesAtrasadas,
+        congregacoesSemPedido,
       },
+      // Alertas só olham congregações com pedido de verdade E que o acesso
+      // atual alcança — a mesma lista que o recorte já filtrou acima.
+      alertas: gerarAlertasRevistas(
+        congregacoes.map((c) => ({ congId: c.congId, nome: c.nome, totalDevido: c.totalDevido, pago: c.pago, saldo: c.saldo })),
+        { hoje, dataLimitePagamento },
+      ),
     };
   });
 }
@@ -314,46 +381,75 @@ export async function DELETE(req: Request) {
 }
 
 /* ------------------------------------------------------------------ *
- * PUT — definir a data-limite do trimestre (decisão do campo)
+ * PUT — definir tema, prazo de pedido e prazo de pagamento do trimestre
+ * (decisão do campo — cada campo é opcional e só muda o que veio no corpo)
  * ------------------------------------------------------------------ */
+
+function validarData(valor: unknown, rotulo: string): string | null | undefined {
+  if (valor === undefined) return undefined; // não veio — não mexe
+  if (valor === null) return null; // veio explicitamente para apagar
+  if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    throw new Error(`${rotulo} inválida.`);
+  }
+  return valor;
+}
 
 export async function PUT(req: Request) {
   const { sessao, recusa } = await exigirEscrita("revistas");
   if (recusa) return recusa;
 
-  // A data-limite é geral do campo — uma secretária de congregação não a define.
+  // Tema e prazos são gerais do campo — uma secretária de congregação não os define.
   if (recorteDaSessao(sessao)) {
-    return erro("Só a administração do campo define a data-limite.", 403);
+    return erro("Só a administração do campo define o tema e os prazos.", 403);
   }
 
-  let corpo: { dataLimite?: string | null };
+  let corpo: { dataLimite?: string | null; dataLimitePedido?: string | null; tema?: string | null };
   try {
     corpo = await req.json();
   } catch {
     return erro("Corpo da requisição inválido.", 400);
   }
 
-  const valor = corpo.dataLimite;
-  if (valor !== null && (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor))) {
-    return erro("Data inválida.", 400);
+  let dataLimite: string | null | undefined;
+  let dataLimitePedido: string | null | undefined;
+  try {
+    dataLimite = validarData(corpo.dataLimite, "Data-limite de pagamento");
+    dataLimitePedido = validarData(corpo.dataLimitePedido, "Data-limite de pedido");
+  } catch (e) {
+    return erro((e as Error).message, 400);
+  }
+  const tema = corpo.tema === undefined ? undefined : (corpo.tema?.trim() || null);
+
+  if (dataLimite === undefined && dataLimitePedido === undefined && tema === undefined) {
+    return erro("Nada para atualizar.", 400);
   }
 
   return responder(async () => {
     const tri = trimestreDe(new Date());
-    const data = valor ? new Date(`${valor}T00:00:00Z`) : null;
+    const dados: { dataLimite?: Date | null; dataLimitePedido?: Date | null; tema?: string | null } = {};
+    if (dataLimite !== undefined) dados.dataLimite = dataLimite ? new Date(`${dataLimite}T00:00:00Z`) : null;
+    if (dataLimitePedido !== undefined) {
+      dados.dataLimitePedido = dataLimitePedido ? new Date(`${dataLimitePedido}T00:00:00Z`) : null;
+    }
+    if (tema !== undefined) dados.tema = tema;
+
     await prisma.trimestreRevista.upsert({
       where: { trimestre: tri.chave },
-      create: { trimestre: tri.chave, dataLimite: data },
-      update: { dataLimite: data },
+      create: { trimestre: tri.chave, ...dados },
+      update: dados,
     });
+
+    const partes: string[] = [];
+    if (dataLimite !== undefined) partes.push(dataLimite ? `prazo de pagamento em ${dataLimite}` : "prazo de pagamento voltou ao padrão");
+    if (dataLimitePedido !== undefined) partes.push(dataLimitePedido ? `prazo de pedido em ${dataLimitePedido}` : "prazo de pedido removido");
+    if (tema !== undefined) partes.push(tema ? `tema "${tema}"` : "tema removido");
+
     registrar({
       sessao,
       acao: "UPDATE",
       entidade: "Trimestres_Revistas",
-      descricao: valor
-        ? `Data-limite do ${tri.rotulo} definida para ${valor}.`
-        : `Data-limite do ${tri.rotulo} voltou ao padrão.`,
+      descricao: `${tri.rotulo}: ${partes.join(", ")}.`,
     });
-    return { ok: true, dataLimite: valor };
+    return { ok: true, dataLimite, dataLimitePedido, tema };
   });
 }

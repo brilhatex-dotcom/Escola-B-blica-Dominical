@@ -185,8 +185,10 @@ há como importar o que não existe, e um cadastro em branco daria uma tela que 
 funciona depois de alguém digitar tudo de novo.
 
 O que existe são os alunos por classe e a tabela de preços (35 linhas, reais).
-Com as duas, o pedido nasce pronto: uma revista por aluno ativo. Resultado real:
-**290 revistas, R$ 3.062,00**.
+Com as duas, o pedido nasce pronto: uma revista por aluno ativo. Resultado real
+na Fase 09: **290 revistas, R$ 3.062,00** — número que mudou na Fase 15a (abaixo)
+ao somar a Revista do Professor, que a tabela de preços já tinha e o cálculo
+ignorava.
 
 O `tipoClasse` é texto livre e a tabela de preços usa as próprias chaves; o
 casamento é por normalização. **O que não casa fica de fora do valor**, e a tela
@@ -196,6 +198,69 @@ menor que o real, com aparência de conferido.
 O ajuste de quantidade é **rascunho e some ao sair**, e a tela avisa. Um número
 que a pessoa digita e o sistema esquece sem avisar é pior do que um rascunho
 assumido.
+
+### Fase 15a — Central de Revistas CPAD: painel do trimestre e alertas
+
+O pedido original ("Central de Gestão de Revistas CPAD") reconstrói o módulo
+inteiro — dashboard financeiro com gráficos, cards por congregação com ícones,
+categorias novas (Discipulado, Apoio, Visuais, Material Complementar),
+comprovante de pagamento anexado, impressão profissional, histórico com
+comparativos entre trimestres, exportação PDF/Excel/CSV. Equivale a 5–6 fases
+somadas, do mesmo tamanho do pedido de BI que já foi feito por partes. O
+usuário escolheu começar pelo **painel e os alertas** — a peça que não depende
+de infraestrutura nova (upload de arquivo) nem de preços que ainda não
+existem.
+
+**O que mudou no cálculo do pedido:**
+
+- **Revista do Professor somada.** A tabela de preços (35 linhas) sempre teve
+  uma linha `mestre-*` por categoria — a Revista do Professor — e o cálculo só
+  usava as linhas `aluno-*`. Agora cada classe soma `professores × preço do
+  professor da categoria`, com `professores` contado de `PessoaCargos` (cargo
+  "Professor", vínculo ativo daquela classe) — a mesma fonte que a tela de
+  Classes já usa. Uma classe sem professor vinculado soma zero nessa linha, não
+  inventa um.
+- **Discipulado, Revistas de Apoio, Visuais e Material Complementar** não
+  entraram — não têm preço cadastrado em lugar nenhum do sistema, e o usuário
+  vai informar os valores para uma próxima sub-fase.
+
+**Situação não é um campo salvo — é calculada**, do mesmo jeito que o IGS da
+Central de Relatórios. O pedido original descreve quatro estados (Aberto,
+Fechado, Pago, Em atraso) como se o pedido fosse submetido até uma data — mas
+ele não é: nasce pronto a partir dos alunos ativos, sem passo de "enviar".
+Redefinição honesta em `lib/revistas/situacao.ts`:
+
+| Situação | Quando |
+|---|---|
+| Aberto | saldo em aberto, dentro dos prazos |
+| **Fechado** | o prazo de PEDIDO passou (só existe se a administração definir um), o de PAGAMENTO ainda não |
+| Pago | saldo do campo inteiro chegou a zero |
+| Em atraso | passou do prazo de pagamento com saldo positivo |
+
+Sem `dataLimitePedido` definida (o padrão — não existe regra natural para
+um prazo que ninguém pediu), a situação nunca passa por "Fechado": pula direto
+de Aberto para Pago/Em atraso.
+
+**Prazo em destaque, três cores.** `nivelDoPrazo()` classifica os dias
+restantes: verde (＞14 dias), amarelo (≤14), vermelho (≤3 ou vencido) — os
+mesmos três do pedido original, com o vermelho dividido em "urgente" e
+"vencido" só no texto, não na cor.
+
+**Um alerta por congregação, o mais urgente vence.** Em vez de somar alertas
+concorrentes para a mesma congregação, `gerarAlertasRevistas()` escolhe UM,
+por prioridade: pagamento vencido (crítico) > prazo encerrando em até 14 dias
+(atenção, ou crítico se faltam 3 dias ou menos) > nenhum pagamento registrado
+(atenção) > sem pedido no trimestre (nenhuma classe/aluno ativo — atenção). Uma
+congregação com prazo ainda longe e nada pago não gera alerta — é o andamento
+normal do início do trimestre, não um aviso.
+
+Verificado com `npm run verificar:revistas`: **27 asserções**, sobre os
+limites exatos de cada nível de prazo, as cinco situações de congregação, os
+quatro estados do trimestre e a prioridade dos alertas — tudo sem banco.
+
+**Precisa aplicar no banco:** `prisma/aplicar-fase-15a.sql` — duas colunas
+novas em `Trimestres_Revistas` (`tema`, `dataLimitePedido`), as duas nulas em
+todo trimestre já cadastrado.
 
 ---
 

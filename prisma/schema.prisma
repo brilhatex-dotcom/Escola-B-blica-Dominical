@@ -289,10 +289,21 @@ model PagamentoRevista {
 
 /// A data-limite de pagamento de um trimestre — em geral a licao 02 do proximo
 /// trimestre, mas editavel. Uma linha por trimestre.
+///
+/// `dataLimitePedido` (Fase 15a) e um prazo SEPARADO, opcional e sem padrao:
+/// o pedido em si nao tem passo de "enviar" (nasce calculado dos alunos
+/// ativos), entao nao ha uma regra natural de quando ele "fecha" como ha para
+/// o pagamento. Fica de fora da tela ate a administracao do campo definir um
+/// valor — nunca aparece um prazo que ninguem escolheu.
+///
+/// `tema` e so exibicao (ex.: "A Grandeza da Graca de Deus") — nao alimenta
+/// calculo nenhum.
 model TrimestreRevista {
-  trimestre  String    @id
-  dataLimite DateTime? @db.Date
-  atualizado DateTime  @updatedAt
+  trimestre        String    @id
+  dataLimite       DateTime? @db.Date
+  dataLimitePedido DateTime? @db.Date
+  tema             String?
+  atualizado       DateTime  @updatedAt
 
   @@map("Trimestres_Revistas")
 }
