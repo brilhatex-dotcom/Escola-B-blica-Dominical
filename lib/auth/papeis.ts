@@ -310,6 +310,14 @@ export function papelDoCargo(nomeDoCargo: string): Papel | null {
  * técnica, não é o pastor, e dar a ela o nome de um cargo da igreja faria o
  * organograma mentir. Quem é o quê se resolve atribuindo cargos — e a tela de
  * Usuários mostra, conta por conta, qual acesso é presumido e qual é de fato.
+ *
+ * Fase 18 acrescentou três valores NOVOS de `perfil`, para "Novo Login"
+ * (`/dashboard/usuarios`) poder criar login de campo — Gestor Local,
+ * Supervisor da EBD e Secretário Geral do Campo — sem passar por Liderança.
+ * Continua sendo o mesmo mecanismo de sempre (`perfil` → papel presumido),
+ * não uma segunda lista de acesso: quem quiser trocar esse acesso para "de
+ * verdade" (não presumido) ainda faz isso ligando a conta a uma pessoa e um
+ * cargo, do jeito de sempre.
  */
 export function papelHerdado(perfil: string): Papel {
   if (perfil === "master") return "administrador";
@@ -318,8 +326,18 @@ export function papelHerdado(perfil: string): Papel {
   // alunos, visitantes, lições e revistas, só na congregação da conta. As 19
   // contas herdadas nunca usam este valor, então nada delas muda.
   if (perfil === "secretario") return "secretario-local";
+  if (perfil === "gestor-local") return "gestor-local";
+  if (perfil === "supervisor") return "supervisor";
+  if (perfil === "secretario-geral") return "secretario-geral";
   return "dirigente";
 }
+
+/**
+ * Os valores de `perfil` que representam acesso de CAMPO — usado por
+ * `/api/usuarios` e pelo formulário de Novo Login para saber quando a conta
+ * NÃO precisa (e não deve) estar presa a uma congregação.
+ */
+export const PERFIS_DE_CAMPO = ["gestor-local", "supervisor", "secretario-geral"] as const;
 
 /* ------------------------------------------------------------------ *
  * As perguntas que o resto do sistema faz

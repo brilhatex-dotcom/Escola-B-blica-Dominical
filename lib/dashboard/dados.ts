@@ -4,6 +4,7 @@ import type {
   Atividade,
   Compromisso,
   DadosPainel,
+  Destaques,
   Estrutura,
   Indicador,
   Lider,
@@ -152,6 +153,21 @@ const aniversariantes: Aniversariante[] = [
   { id: "n4", nome: "Pedro Henrique Alves", classe: "Crianças", diaMes: "08-11", idade: 9, foto: null },
 ];
 
+const destaques: Destaques = {
+  periodo: {
+    mensal: { de: "2026-08-01", ate: "2026-08-06" },
+    trimestral: { de: "2026-07-01", ate: "2026-08-06" },
+  },
+  congregacao: {
+    mensal: { nomes: ["Cong. Bandeiras"], score: 91.5, taxaFrequencia: 88, taxaVisitantes: 95, domingos: 4 },
+    trimestral: { nomes: ["Cong. Bandeiras"], score: 87.2, taxaFrequencia: 84, taxaVisitantes: 90.4, domingos: 9 },
+  },
+  classe: {
+    mensal: { nomes: ["Jovens"], score: 96, taxaFrequencia: 92, taxaVisitantes: 100, domingos: 4 },
+    trimestral: { nomes: ["Adultos", "Jovens"], score: 89.5, taxaFrequencia: 90, taxaVisitantes: 89, domingos: 9 },
+  },
+};
+
 const agenda: Compromisso[] = [
   { id: "c1", tipo: "ebd", titulo: "Escola Bíblica Dominical", local: "Templo — Campo de Betânia", quando: "2026-08-09T08:00:00" },
   { id: "c2", tipo: "culto", titulo: "Culto da Família", local: "Templo — Campo de Betânia", quando: "2026-08-09T18:00:00" },
@@ -193,6 +209,7 @@ export async function painelDeExemplo(hoje = new Date()): Promise<DadosPainel> {
     atividades,
     aniversariantes,
     agenda,
+    destaques,
   };
 }
 

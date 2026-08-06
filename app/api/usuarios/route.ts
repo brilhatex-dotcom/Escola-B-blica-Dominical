@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { erro, responder } from "@/lib/api";
 import { exigirEscrita, exigirLeitura } from "@/lib/auth/guarda";
 import { montarAcesso } from "@/lib/auth/acesso";
-import { papelPrincipal, rotuloDoPapel } from "@/lib/auth/papeis";
+import { papelPrincipal, PERFIS_DE_CAMPO, rotuloDoPapel } from "@/lib/auth/papeis";
 import { gerarHash } from "@/lib/auth/senha";
 import { registrar } from "@/lib/auditoria";
 import { normalizarLogin } from "@/lib/auth/login";
@@ -119,7 +119,7 @@ export async function GET() {
  * Criar e ajustar contas — para cada secretária ter o seu login
  * ------------------------------------------------------------------ */
 
-const PERFIS_PERMITIDOS = ["secretario", "coord"] as const;
+const PERFIS_PERMITIDOS = ["secretario", "coord", ...PERFIS_DE_CAMPO] as const;
 
 /** Regras mínimas da senha inicial. Simples de propósito (ver lib/auth/senha). */
 function criticarSenha(s: string): string | null {
@@ -157,12 +157,17 @@ export async function POST(req: Request) {
   const login = normalizarLogin(corpo.login ?? "");
   const nome = corpo.nome?.trim() ?? "";
   const senha = corpo.senha ?? "";
-  const congId = corpo.congId;
   const perfil = corpo.perfil ?? "secretario";
+  // Gestor Local, Supervisor da EBD e Secretário Geral do Campo respondem
+  // pelo campo inteiro — a conta não pertence a uma congregação, e exigir
+  // uma aqui obrigaria escolher uma ao acaso, o que mentiria sobre o alcance
+  // real da conta na tela de Usuários.
+  const ehPerfilDeCampo = PERFIS_DE_CAMPO.includes(perfil as (typeof PERFIS_DE_CAMPO)[number]);
+  const congId = ehPerfilDeCampo ? null : corpo.congId;
 
   if (login.length < 3) return erro("O login precisa ter ao menos 3 letras, sem espaços.", 400);
   if (!nome) return erro("Informe o nome da pessoa.", 400);
-  if (!Number.isInteger(congId)) return erro("Escolha a congregação da conta.", 400);
+  if (!ehPerfilDeCampo && !Number.isInteger(congId)) return erro("Escolha a congregação da conta.", 400);
   if (!PERFIS_PERMITIDOS.includes(perfil as (typeof PERFIS_PERMITIDOS)[number])) {
     return erro("Tipo de acesso inválido.", 400);
   }
@@ -172,8 +177,10 @@ export async function POST(req: Request) {
   const jaExiste = await prisma.usuario.findUnique({ where: { login }, select: { id: true } });
   if (jaExiste) return erro(`Já existe uma conta com o login "${login}".`, 409);
 
-  const cong = await prisma.congregacao.findUnique({ where: { id: congId! }, select: { id: true, nome: true } });
-  if (!cong) return erro("Congregação não encontrada.", 404);
+  const cong = congId
+    ? await prisma.congregacao.findUnique({ where: { id: congId }, select: { id: true, nome: true } })
+    : null;
+  if (!ehPerfilDeCampo && !cong) return erro("Congregação não encontrada.", 404);
 
   const hash = await gerarHash(senha);
 
@@ -182,7 +189,7 @@ export async function POST(req: Request) {
       const maior = await tx.usuario.aggregate({ _max: { id: true } });
       const id = (maior._max.id ?? 0) + 1;
       return tx.usuario.create({
-        data: { id, login, nome, senha: hash, perfil, congId: congId!, ativo: true },
+        data: { id, login, nome, senha: hash, perfil, congId, ativo: true },
         select: { id: true, login: true, nome: true },
       });
     });
@@ -191,8 +198,8 @@ export async function POST(req: Request) {
       sessao,
       acao: "CREATE",
       entidade: "Usuarios",
-      descricao: `Conta "${criado.login}" (${nome}) criada para ${cong.nome?.trim() || `Congregação ${cong.id}`}.`,
-      congId: congId!,
+      descricao: `Conta "${criado.login}" (${nome}) criada para ${cong ? cong.nome?.trim() || `Congregação ${cong.id}` : "o campo inteiro"}.`,
+      congId: congId ?? undefined,
     });
 
     return { ok: true, ...criado };

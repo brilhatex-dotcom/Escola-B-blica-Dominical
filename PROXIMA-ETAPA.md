@@ -1,9 +1,10 @@
-# Continuação — Fase 15c ou o próximo pedido do usuário (confirme antes de escolher)
+# Continuação — o próximo pedido do usuário (confirme antes de escolher)
 
-> Fase 17 (Relatório Semanal + saudação) foi entregue depois da 16, também
-> fora da ordem proposta — o usuário segue mandando ajustes concretos ao vivo,
-> testando o portal publicado. Isso é esperado neste projeto: trate cada
-> pedido novo como a prioridade do momento, não como quebra do plano.
+> Fase 18 (contas de campo, aniversariantes liberados, Destaque) foi entregue
+> depois da 17, também fora de qualquer ordem proposta anteriormente — o
+> usuário segue mandando ajustes concretos ao vivo, testando o portal
+> publicado. Isso é esperado neste projeto: trate cada pedido novo como a
+> prioridade do momento, não como quebra do plano.
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -56,6 +57,48 @@ Substitui um sistema antigo em Google Apps Script.
 | 15b | **Central de Revistas CPAD — o pedido é digitado e confirmado (tela "Fazer Pedido")** |
 | 16 | **Três ajustes pedidos ao vivo: Grupo B edita a liderança local, Alunos em caixinhas por classe, seletor de trimestre em Revistas** |
 | 17 | **Relatório Semanal (modelo da Superintendência das EDs) + saudação completa do Dashboard** |
+| 18 | **Novo Login cria contas de campo (Gestor Local/Supervisor/Secretário Geral), aniversariantes liberados pra todo o campo, cartão Congregação/Classe Destaque no Dashboard** |
+
+## O que a Fase 18 entregou (para não refazer)
+
+Três pedidos na mesma mensagem, a partir de um print do "Novo login" com só
+duas opções de acesso.
+
+1. **Novo Login também cria conta de campo.** `PERFIS_DE_CAMPO` (novo, em
+   `lib/auth/papeis.ts`) soma **Gestor Local**, **Supervisor da EBD** e
+   **Secretário Geral do Campo** ao formulário — os três com acesso total,
+   igual à administração (`podeGravar(..., "usuarios")` → `true`). É o mesmo
+   `papelHerdado()` de sempre (perfil de texto livre → papel presumido),
+   só reconhecendo mais três palavras — não é um segundo sistema de acesso.
+   Conta de campo é criada com `congId: null` (campo já era opcional, sem
+   migração). No formulário (`app/dashboard/usuarios/page.tsx`), o campo
+   Congregação desaparece quando o tipo escolhido é de campo, e o texto de
+   ajuda muda. Dirigente/Professor/Secretário congregacional continuam
+   presos à própria congregação — não mudou, só foi confirmado.
+   `npm run verificar:permissoes`, seção 12b: **12 novas asserções**.
+2. **Aniversariantes perderam o recorte por completo** — pedido explícito
+   pra quebrar a regra que vale pro resto do portal. `/api/aniversariantes`
+   não filtra mais por congregação da sessão, pra ninguém, com comentário no
+   código explicando a exceção (mesmo padrão de `lerLideranca()`). Tela já
+   não tinha filtro de congregação na interface — zero mudança de tela,
+   só o servidor parou de recortar.
+3. **Cartão "Destaque" no Dashboard** (`DestaqueCard`, novo componente,
+   entre Liderança e Atividades Recentes) — Congregação Destaque e Classe
+   Destaque, mês e trimestre, alternador na própria tela. Nota =
+   **média de duas taxas** (`lib/dashboard/destaque.ts`,
+   `calcularDestaque`): assiduidade (presentes÷chamados) e "trouxe gente"
+   (domingos-com-visitante÷domingos-com-chamada — taxa, não total bruto, pra
+   não premiar sempre a congregação maior). Piso de 3 domingos com chamada
+   no período; empate exato mostra todos os nomes juntos. Congregação
+   Destaque é do campo inteiro pra todo mundo (mesma exceção de
+   aniversariantes/liderança); Classe Destaque continua com o recorte normal
+   (comparar classes de congregações de tamanhos muito diferentes não ajuda
+   quem só vê uma congregação). `npm run verificar:destaque` (novo script):
+   **18 asserções**, incluindo o teste central de que uma congregação
+   PEQUENA com taxa maior vence uma GRANDE com taxa menor, mesmo trazendo
+   menos visitante bruto.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ## O que a Fase 17 entregou (para não refazer)
 

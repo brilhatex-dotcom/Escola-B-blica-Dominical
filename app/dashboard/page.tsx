@@ -6,6 +6,7 @@ import { GraduationCap, School, UserRoundCheck, Users } from "lucide-react";
 import { AgendaCard } from "@/components/dashboard/AgendaCard";
 import { BirthdayCard } from "@/components/dashboard/BirthdayCard";
 import { DashboardCard } from "@/components/dashboard/DashboardCard";
+import { DestaqueCard } from "@/components/dashboard/DestaqueCard";
 import { LeadershipCard } from "@/components/dashboard/LeadershipCard";
 import { StructureStrip } from "@/components/dashboard/StructureStrip";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -168,6 +169,7 @@ export default function DashboardPage() {
           tempo todo e sao consultadas de relance.
         */}
         <LeadershipCard lideranca={dados.lideranca} />
+        <DestaqueCard destaques={dados.destaques} />
         <RecentActivity atividades={dados.atividades} />
         <BirthdayCard aniversariantes={dados.aniversariantes} hoje={hoje} />
         <AgendaCard agenda={dados.agenda} />

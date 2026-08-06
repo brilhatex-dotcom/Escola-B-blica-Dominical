@@ -453,6 +453,109 @@ caso real reportado ("Ir.ª Jéssica Sousa" → "Irmã Jéssica").
 
 ---
 
+## Fase 18 — contas de campo, aniversariantes pra todo mundo, e o Destaque
+
+Um print do "Novo login" com só duas opções de acesso, e um pedido direto:
+"o sistema só dá acesso a dois usuários, coloque o Gestor do Campo, Supervisão
+da EBD, e os Secretários gerais do campo — esses têm acesso a tudo". Junto,
+dois pedidos menores na mesma mensagem: liberar os aniversariantes pra todo o
+campo, e um cartão novo de "Congregação Destaque" e "Classe Destaque" no
+Dashboard.
+
+### Novo Login também cria conta de campo
+
+Até aqui, "Novo login" só criava contas presas a uma congregação —
+Secretário(a) ou Dirigente. `PERFIS_DE_CAMPO` (novo, em `lib/auth/papeis.ts`)
+soma três tipos: **Gestor Local**, **Supervisor da EBD** e **Secretário Geral
+do Campo**. Não é um segundo sistema de acesso: é o mesmo mecanismo antigo de
+`papelHerdado()` — que já presumia o papel de uma conta sem `pessoaId` a
+partir do texto livre `Usuario.perfil` (`"master"` → administrador,
+`"secretario"` → secretário local) — estendido para reconhecer mais três
+palavras (`"gestor-local"`, `"supervisor"`, `"secretario-geral"`), cada uma
+mapeada para o papel de administrador de fato (`podeGravar(..., "usuarios")`
+dá `true`, igual à administração).
+
+Uma conta de campo é criada **sem congregação** — `congId: null`, campo que já
+era opcional no schema, sem migração nenhuma. No formulário, o campo
+"Congregação" desaparece assim que o tipo de acesso escolhido é um dos três
+de campo, e o texto de ajuda muda para avisar: "Essa conta enxerga e grava em
+TODO o campo, todas as congregações — o mesmo acesso da administração."
+
+Dirigente, Professor e Secretário(a) congregacional continuam presos à
+própria congregação — isso já era assim, não mudou nesta fase; o pedido foi
+só confirmado, não alterado.
+
+`npm run verificar:permissoes` ganhou a seção 12b: **12 novas asserções**
+conferindo que as três contas de campo caem no papel certo, sem congregação,
+com escopo `"campo"` e com permissão de administrar usuários.
+
+### Aniversariantes — a única tela sem recorte, por decisão explícita
+
+"Atenção pode libera os aniversariantes para que todos vejam de todo o
+campo" — um pedido direto pra QUEBRAR a regra de recorte que vale pra quase
+tudo no portal. `/api/aniversariantes` perdeu o recorte por completo (não é
+mais opcional por parâmetro: nunca filtra por congregação da sessão), com um
+comentário grande no código explicando a exceção — o mesmo padrão já usado em
+`lerLideranca()` ("a liderança do campo não se recorta: é institucional").
+Aniversário é celebração da igreja toda, não segredo de congregação — quem só
+enxerga a própria congregação no resto do portal passa a ver os
+aniversariantes do campo inteiro aqui. A tela `/dashboard/aniversariantes` já
+não tinha filtro de congregação nenhum na interface, então bastou tirar o
+recorte do servidor — zero mudança de tela.
+
+### Congregação Destaque e Classe Destaque — quem mais foi assíduo e trouxe gente
+
+Pedido: "crie um campo no dashboard congregação destaque e classe destaque.
+aqueles que pelas chamadas mais foram assíduos e que levaram pessoas não
+crentes ou mesmos visitantes crentes. o destaque é feito mensal e
+trimestral."
+
+Novo cartão no Dashboard (`DestaqueCard`, entre "Liderança do Campo" e
+"Atividades Recentes"), com um alternador Mês/Trimestre, mostrando a
+congregação e a classe destaque de cada período.
+
+**A nota é a MÉDIA de duas taxas, nunca um total bruto** — a mesma disciplina
+de "taxa, nunca total" já usada no Ranking e na Central de BI, pra não
+premiar sempre quem é maior:
+
+- **Assiduidade** = presentes ÷ chamados (não presentes brutos).
+- **Trouxe gente** = domingos com visitante ÷ domingos com chamada (não o
+  número de visitantes — uma congregação de 80 pessoas traz mais visitante
+  bruto que uma de 15 quase por acaso; contar bruto premiaria o tamanho, não
+  o esforço). "Visitante" aqui inclui tanto quem não é crente quanto o
+  visitante crente, como pedido.
+- **Score = média das duas** — metade do peso pra vir sempre, metade pra
+  trazer gente.
+- Piso de **3 domingos com chamada** no período (`DESTAQUE_MINIMO_DOMINGOS`,
+  o mesmo piso do Ranking e dos Certificados) — sem isso, um único domingo
+  perfeito não vira "destaque" por sorte.
+- Empate exato: TODOS os empatados aparecem juntos (`nomes: string[]`), igual
+  ao "1º Lugar" do Relatório Semanal — nunca escolhe um sozinho pra mentir
+  sobre o empate.
+
+**Recorte: Congregação Destaque é do campo inteiro pra todo mundo** (mesma
+exceção de aniversariantes e liderança — a comparação só faz sentido vendo o
+campo todo, e a liderança pediu que todo mundo visse quem se destacou).
+**Classe Destaque SE recorta** — comparar a classe de uma congregação de 80
+pessoas com a de uma de 15 mistura populações diferentes, e quem só enxerga a
+própria congregação não tem o que fazer com o resultado de outra; aqui o
+recorte de acesso de sempre continua valendo.
+
+A conta pura da nota (`calcularDestaque`, `lib/dashboard/destaque.ts`) foi
+separada da consulta ao banco (`lerDestaquesDoAgrupamento`,
+`lib/dashboard/consultas.ts`) especificamente pra poder ser conferida sem
+Postgres — mesmo padrão de `lib/relatorios/indices.ts` e
+`lib/revistas/situacao.ts`.
+
+`npm run verificar:destaque` (novo script): **18 asserções**, incluindo o
+teste central — uma congregação PEQUENA (taxa 75%) vence uma GRANDE (taxa
+50%) mesmo trazendo menos visitante bruto, provando que o total nunca decide
+sozinho.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"

@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { lerInt, responder } from "@/lib/api";
-import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
+import { exigirLeitura } from "@/lib/auth/guarda";
 
 /**
  * Aniversariantes do mês.
@@ -19,8 +19,21 @@ import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
  * para resolver um problema que não existe.
  * ============================================================================
  *
+ * ============================================================================
+ * A ÚNICA TELA SEM RECORTE POR CONGREGAÇÃO — POR DECISÃO EXPLÍCITA (FASE 18)
+ *
+ * Toda outra rota do portal intersecta o pedido com o recorte do acesso: um
+ * Dirigente nunca vê o que é de outra congregação. Aniversariantes é a
+ * exceção, e é deliberada — a liderança pediu que todo mundo, inclusive quem
+ * só vê a própria congregação, enxergue os aniversariantes do CAMPO INTEIRO.
+ * Faz sentido pastoral: aniversário é celebração da igreja toda, não segredo
+ * de uma congregação. `exigirLeitura` continua valendo (precisa estar
+ * logado e o módulo precisa estar liberado para o papel), só não há
+ * `recorteDaSessao` aplicado ao resultado.
+ * ============================================================================
+ *
  *   ?mes=8      1 a 12 (padrão: o mês corrente)
- *   ?cong=3     uma congregação
+ *   ?cong=3     uma congregação — filtro livre, não precisa ser a própria
  */
 export const dynamic = "force-dynamic";
 
@@ -35,7 +48,7 @@ interface Linha {
 }
 
 export async function GET(req: Request) {
-  const { sessao, recusa } = await exigirLeitura("aniversariantes");
+  const { recusa } = await exigirLeitura("aniversariantes");
   if (recusa) return recusa;
 
   return responder(async () => {
@@ -45,23 +58,9 @@ export async function GET(req: Request) {
     const mes = pedido && pedido >= 1 && pedido <= 12 ? pedido : hoje.getMonth() + 1;
     const congPedida = lerInt(url, "cong");
 
-    const recorte = recorteDaSessao(sessao);
-    /*
-     * O filtro da tela NUNCA amplia o recorte do acesso — só o estreita.
-     *
-     * Sem esta interseção, um Dirigente digitaria `?cong=1` na barra de
-     * endereço e veria os aniversariantes de outra congregação. O filtro é
-     * conveniência de quem vê muitas; o recorte é limite de quem vê poucas.
-     */
-    const permitidas = recorte?.in;
-    const alvo =
-      congPedida !== null && (!permitidas || permitidas.includes(congPedida))
-        ? [congPedida]
-        : permitidas;
-
-    const filtro = alvo
-      ? Prisma.sql` AND a."congId" IN (${Prisma.join(alvo.length ? alvo : [-1])})`
-      : Prisma.empty;
+    // Sem recorte de propósito (ver o bloco acima) — o filtro `?cong=` é só
+    // conveniência de tela, livre para qualquer congregação do campo.
+    const filtro = congPedida !== null ? Prisma.sql` AND a."congId" = ${congPedida}` : Prisma.empty;
 
     const linhas = await prisma.$queryRaw<Linha[]>`
       SELECT a.id, a.nome, a.nasc, a.tel,

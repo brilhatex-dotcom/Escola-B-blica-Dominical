@@ -165,6 +165,33 @@ export interface Lider {
 }
 
 /* ------------------------------------------------------------------ *
+ * Destaque — assiduidade + visitantes trazidos, mensal e trimestral
+ * ------------------------------------------------------------------ */
+
+/**
+ * Quem se destacou — combina DUAS taxas, nunca totais brutos.
+ *
+ * `taxaFrequencia`: presentes ÷ chamados no período. `taxaVisitantes`:
+ * domingos com pelo menos um visitante ÷ domingos com chamada no período —
+ * não o número de visitantes, que favoreceria sempre a congregação maior.
+ * `score` é a média das duas. `nomes` pode ter mais de um em caso de empate
+ * — o destaque nunca escolhe um vencedor arbitrário entre iguais.
+ */
+export interface Destaque {
+  nomes: string[];
+  score: number;
+  taxaFrequencia: number;
+  taxaVisitantes: number;
+  domingos: number;
+}
+
+export interface Destaques {
+  periodo: { mensal: { de: DataISO; ate: DataISO }; trimestral: { de: DataISO; ate: DataISO } };
+  congregacao: { mensal: Destaque | null; trimestral: Destaque | null };
+  classe: { mensal: Destaque | null; trimestral: Destaque | null };
+}
+
+/* ------------------------------------------------------------------ *
  * O painel inteiro
  * ------------------------------------------------------------------ */
 
@@ -212,4 +239,5 @@ export interface DadosPainel {
   atividades: Atividade[];
   aniversariantes: Aniversariante[];
   agenda: Compromisso[];
+  destaques: Destaques;
 }

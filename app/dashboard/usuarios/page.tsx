@@ -19,7 +19,7 @@ import {
 import { iniciais } from "@/lib/dashboard/formato";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { normalizarLogin } from "@/lib/auth/login";
-import type { Escopo, Papel } from "@/lib/auth/papeis";
+import { PERFIS_DE_CAMPO, type Escopo, type Papel } from "@/lib/auth/papeis";
 
 /**
  * Usuários — as contas de acesso do portal.
@@ -57,6 +57,9 @@ interface Cong {
   id: number;
   nome: string;
 }
+
+/** Os valores aceitos por "Tipo de acesso" em Novo Login — ver `PERFIS_PERMITIDOS` em `/api/usuarios`. */
+type Perfil = "secretario" | "coord" | (typeof PERFIS_DE_CAMPO)[number];
 
 function normalizar(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
@@ -277,9 +280,11 @@ function FormNovaConta({
   const [login, setLogin] = useState("");
   const [senha, setSenha] = useState("");
   const [congId, setCongId] = useState<number | "">("");
-  const [perfil, setPerfil] = useState<"secretario" | "coord">("secretario");
+  const [perfil, setPerfil] = useState<Perfil>("secretario");
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  const perfilDeCampo = PERFIS_DE_CAMPO.includes(perfil as (typeof PERFIS_DE_CAMPO)[number]);
 
   async function criar() {
     setSalvando(true);
@@ -288,7 +293,13 @@ function FormNovaConta({
       const res = await fetch("/api/usuarios", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome, login, senha, congId: congId === "" ? undefined : congId, perfil }),
+        body: JSON.stringify({
+          nome,
+          login,
+          senha,
+          congId: perfilDeCampo || congId === "" ? undefined : congId,
+          perfil,
+        }),
       });
       const corpo = await res.json();
       if (!res.ok) throw new Error(corpo?.erro ?? "Não foi possível criar a conta.");
@@ -340,38 +351,55 @@ function FormNovaConta({
         </label>
         <Campo rotulo="Senha inicial" valor={senha} aoMudar={setSenha} placeholder="Mínimo 6 caracteres" tipo="text" />
 
-        <label className="flex flex-col gap-1">
-          <span className="text-[0.7rem] uppercase tracking-[0.1em] text-brand-200/50">Congregação</span>
-          <select
-            value={congId}
-            onChange={(e) => setCongId(e.target.value ? Number(e.target.value) : "")}
-            className="h-10 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-[0.84rem] text-brand-50 focus:border-gold-400/35 focus:outline-none [&>option]:bg-brand-900"
-          >
-            <option value="">Escolha…</option>
-            {congregacoes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nome}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/*
+          Some quando o acesso é de CAMPO: Gestor Local, Supervisor e
+          Secretário Geral não pertencem a uma congregação, e pedir uma aqui
+          obrigaria escolher uma ao acaso — a conta mentiria sobre o próprio
+          alcance.
+        */}
+        {!perfilDeCampo && (
+          <label className="flex flex-col gap-1">
+            <span className="text-[0.7rem] uppercase tracking-[0.1em] text-brand-200/50">Congregação</span>
+            <select
+              value={congId}
+              onChange={(e) => setCongId(e.target.value ? Number(e.target.value) : "")}
+              className="h-10 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-[0.84rem] text-brand-50 focus:border-gold-400/35 focus:outline-none [&>option]:bg-brand-900"
+            >
+              <option value="">Escolha…</option>
+              {congregacoes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="flex flex-col gap-1 sm:col-span-2">
           <span className="text-[0.7rem] uppercase tracking-[0.1em] text-brand-200/50">Tipo de acesso</span>
           <select
             value={perfil}
-            onChange={(e) => setPerfil(e.target.value as "secretario" | "coord")}
+            onChange={(e) => setPerfil(e.target.value as Perfil)}
             className="h-10 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-[0.84rem] text-brand-50 focus:border-gold-400/35 focus:outline-none [&>option]:bg-brand-900"
           >
-            <option value="secretario">Secretário(a) — chamada, alunos, visitantes, lições e revistas</option>
-            <option value="coord">Dirigente — o mesmo, mais classes e professores</option>
+            <optgroup label="Só a própria congregação">
+              <option value="secretario">Secretário(a) — chamada, alunos, visitantes, lições e revistas</option>
+              <option value="coord">Dirigente — o mesmo, mais classes e professores</option>
+            </optgroup>
+            <optgroup label="O campo inteiro">
+              <option value="gestor-local">Gestor Local — acesso total, igual à administração</option>
+              <option value="supervisor">Supervisor da EBD — acesso total, igual à administração</option>
+              <option value="secretario-geral">Secretário Geral do Campo — acesso total, igual à administração</option>
+            </optgroup>
           </select>
         </label>
       </div>
 
       <p className="mt-2 text-[0.72rem] text-brand-200/45">
-        A conta só enxerga e só grava na congregação escolhida. Passe a senha à secretária
-        e peça que a troque no primeiro acesso.
+        {perfilDeCampo
+          ? "Essa conta enxerga e grava em TODO o campo, todas as congregações — o mesmo acesso da administração."
+          : "A conta só enxerga e só grava na congregação escolhida."}{" "}
+        Passe a senha e peça que troque no primeiro acesso.
       </p>
 
       {msg && <p className="mt-2 text-[0.8rem] text-flame-400">{msg}</p>}

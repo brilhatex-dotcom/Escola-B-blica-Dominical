@@ -1,10 +1,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma, temBanco } from "@/lib/prisma";
+import { calcularDestaque, inicioDoMes, inicioDoTrimestre } from "./destaque";
 import type {
   Aniversariante,
   Atividade,
   Compromisso,
   DadosPainel,
+  Destaque,
+  Destaques,
   Estrutura,
   Indicador,
   Lider,
@@ -455,7 +458,15 @@ async function lerAtividades(recorte: Recorte): Promise<Atividade[]> {
   }));
 }
 
-async function lerAniversariantes(hoje: Date, recorte: Recorte): Promise<Aniversariante[]> {
+/**
+ * Aniversariantes NÃO se recortam por congregação — a mesma exceção
+ * deliberada de `lerLideranca()`, agora por pedido explícito da liderança
+ * (Fase 18): aniversário é celebração da igreja toda, não de uma
+ * congregação só, então todo mundo vê os do campo inteiro aqui — inclusive
+ * quem só enxerga a própria congregação no resto do portal. Ver
+ * `/api/aniversariantes` para a mesma regra na tela dedicada.
+ */
+async function lerAniversariantes(hoje: Date): Promise<Aniversariante[]> {
   /*
    * Aniversario nao tem ano, entao a comparacao e por mes e dia. A janela de 15
    * dias atravessa a virada do mes — daí o OR: em 28 de agosto, quem faz
@@ -470,7 +481,7 @@ async function lerAniversariantes(hoje: Date, recorte: Recorte): Promise<Anivers
     SELECT a.id, a.nome, a.nasc, c.nome AS classe
     FROM "Alunos" a
     LEFT JOIN "Classes" c ON c.id = a."classeId"
-    WHERE a.ativo AND a.nasc IS NOT NULL${recorteSql(Prisma.sql`a."congId"`, recorte)}
+    WHERE a.ativo AND a.nasc IS NOT NULL
       AND (
         to_char(a.nasc, 'MM-DD') BETWEEN to_char(${hoje}::date, 'MM-DD') AND to_char(${limite}::date, 'MM-DD')
         OR (
@@ -532,6 +543,96 @@ async function lerAgenda(hoje: Date, recorte: Recorte): Promise<Compromisso[]> {
 }
 
 /* ------------------------------------------------------------------ *
+ * Destaque — assiduidade + visitantes, mensal e trimestral (Fase 18)
+ *
+ * A conta (as duas taxas, o piso mínimo, o empate) é pura e mora em
+ * `lib/dashboard/destaque.ts`, testada sem banco em
+ * `scripts/verificar-destaque.mts`. Aqui só busca as linhas.
+ * ------------------------------------------------------------------ */
+
+interface LinhaBrutaDestaque {
+  chave: number;
+  nome: string | null;
+  domingos: number;
+  chamados: number;
+  presentes: number;
+  domingosComVisitante: number;
+}
+
+async function lerDestaquesDoAgrupamento(
+  coluna: "congId" | "classeId",
+  de: Date,
+  ate: Date,
+  recorte: Recorte,
+): Promise<Destaque | null> {
+  const colunaSql = coluna === "congId" ? Prisma.sql`"congId"` : Prisma.sql`"classeId"`;
+  const nomeTabela = coluna === "congId" ? Prisma.sql`"Congregacoes"` : Prisma.sql`"Classes"`;
+  const colunaRecorte = coluna === "congId" ? Prisma.sql`f."congId"` : Prisma.sql`c."congId"`;
+
+  const linhas = await prisma.$queryRaw<LinhaBrutaDestaque[]>`
+    WITH chamadas AS (
+      SELECT f.${colunaSql} AS chave, f.data,
+             COUNT(*) AS chamados,
+             COUNT(*) FILTER (WHERE f.presente) AS presentes
+      FROM "Frequencias" f
+      WHERE f.data >= ${de} AND f.data <= ${ate} AND f.${colunaSql} IS NOT NULL
+        ${recorteSql(colunaRecorte, recorte)}
+      GROUP BY f.${colunaSql}, f.data
+    ),
+    visitas AS (
+      SELECT v.${colunaSql} AS chave, v.data
+      FROM "Visitantes" v
+      WHERE v.data >= ${de} AND v.data <= ${ate} AND v.${colunaSql} IS NOT NULL
+      GROUP BY v.${colunaSql}, v.data
+    )
+    SELECT
+      c.chave,
+      n.nome,
+      COUNT(DISTINCT c.data)::int AS domingos,
+      SUM(c.chamados)::int AS chamados,
+      SUM(c.presentes)::int AS presentes,
+      COUNT(DISTINCT vv.data)::int AS "domingosComVisitante"
+    FROM chamadas c
+    LEFT JOIN visitas vv ON vv.chave = c.chave AND vv.data = c.data
+    LEFT JOIN ${nomeTabela} n ON n.id = c.chave
+    GROUP BY c.chave, n.nome
+  `;
+
+  return calcularDestaque(
+    linhas.map((l) => ({ ...l, nome: l.nome?.trim() || `#${l.chave}` })),
+  );
+}
+
+async function lerDestaques(hoje: Date, recorte: Recorte): Promise<Destaques> {
+  const inicioMes = inicioDoMes(hoje);
+  const inicioTri = inicioDoTrimestre(hoje);
+
+  const [congMensal, congTrimestral, classeMensal, classeTrimestral] = await Promise.all([
+    // Congregação Destaque NÃO se recorta — a mesma exceção de aniversariantes
+    // e liderança (Fase 18): é uma comparação do campo inteiro, e a liderança
+    // pediu que todo mundo visse quem se destacou, não só quem enxerga tudo.
+    lerDestaquesDoAgrupamento("congId", inicioMes, hoje, undefined),
+    lerDestaquesDoAgrupamento("congId", inicioTri, hoje, undefined),
+    // Classe Destaque SE recorta: comparar a classe de uma congregação de 80
+    // pessoas com a de uma de 15 mistura populações diferentes, e quem só
+    // enxerga a própria congregação não tem o que fazer com o resultado de
+    // outra. Aqui o recorte de acesso continua valendo.
+    lerDestaquesDoAgrupamento("classeId", inicioMes, hoje, recorte),
+    lerDestaquesDoAgrupamento("classeId", inicioTri, hoje, recorte),
+  ]);
+
+  const paraISO = (d: Date) => soData(d).toISOString().slice(0, 10);
+  return {
+    periodo: {
+      mensal: { de: paraISO(inicioMes), ate: paraISO(hoje) },
+      trimestral: { de: paraISO(inicioTri), ate: paraISO(hoje) },
+    },
+    congregacao: { mensal: congMensal, trimestral: congTrimestral },
+    classe: { mensal: classeMensal, trimestral: classeTrimestral },
+  };
+}
+
+/* ------------------------------------------------------------------ *
  * Entrada
  * ------------------------------------------------------------------ */
 
@@ -563,7 +664,7 @@ export async function lerPainel(
   const recorte: Recorte =
     quem && quem.escopo === "congregacao" ? { in: quem.congIds } : undefined;
 
-  const [indicadores, estrutura, lideranca, frequencia, resumo, atividades, aniversariantes, agenda] =
+  const [indicadores, estrutura, lideranca, frequencia, resumo, atividades, aniversariantes, agenda, destaques] =
     await Promise.all([
       lerIndicadores(domingo, recorte),
       lerEstrutura(recorte),
@@ -573,8 +674,9 @@ export async function lerPainel(
       lerFrequencia(hoje, recorte),
       lerResumo(hoje, domingo, recorte),
       lerAtividades(recorte),
-      lerAniversariantes(hoje, recorte),
+      lerAniversariantes(hoje),
       lerAgenda(hoje, recorte),
+      lerDestaques(hoje, recorte),
     ]);
 
   const congregacaoDoTitulo =
@@ -604,6 +706,7 @@ export async function lerPainel(
     atividades,
     aniversariantes,
     agenda,
+    destaques,
   };
 }
 

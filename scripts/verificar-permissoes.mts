@@ -138,6 +138,17 @@ ok(
   "a conta técnica NÃO se apresenta como um cargo da igreja",
 );
 
+console.log("\n12b. Fase 18 — Novo Login também cria conta de CAMPO");
+ok(papelHerdado("gestor-local") === "gestor-local", '"gestor-local" → Gestor Local');
+ok(papelHerdado("supervisor") === "supervisor", '"supervisor" → Supervisor da EBD');
+ok(papelHerdado("secretario-geral") === "secretario-geral", '"secretario-geral" → Secretário Geral do Campo');
+for (const perfil of ["gestor-local", "supervisor", "secretario-geral"] as const) {
+  const acesso = montarAcesso({ id: 99, perfil, congId: null, pessoaId: null }, []);
+  ok(acesso.escopo === "campo", `conta "${perfil}" sem congregação → escopo de campo`);
+  ok(acesso.congIds.length === 0, `conta "${perfil}" não carrega lista de congregações`);
+  ok(podeGravar(acesso.papeis, "usuarios"), `conta "${perfil}" administra contas, igual à administração`);
+}
+
 console.log("\n13. o acesso apurado a partir de uma conta");
 const semPessoa = montarAcesso({ id: 6, perfil: "coord", congId: 4, pessoaId: null }, []);
 ok(semPessoa.escopo === "congregacao", "conta de congregação → escopo de congregação");
