@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { MapPin, PartyPopper } from "lucide-react";
+import { MapPin, PartyPopper, Pencil, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
+import { Button } from "@/components/ui/button";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { AvisoDeGravacao } from "@/components/crud/AvisoDeGravacao";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useCrud } from "@/components/crud/useCrud";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Eventos do campo.
@@ -27,6 +33,12 @@ interface Evento {
 const fmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
 
 export default function EventosPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("agenda-eventos");
+  const { aviso, limparAviso, recarga, gravar } = useCrud();
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<Evento | null>(null);
+
   const [passados, setPassados] = useState(false);
   const [itens, setItens] = useState<Evento[] | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -49,11 +61,17 @@ export default function EventosPage() {
       }
     })();
     return () => controle.abort();
-  }, [passados]);
+  }, [passados, recarga]);
 
   return (
     <>
       <CabecalhoModulo icone={PartyPopper} titulo="Eventos" descricao="Congressos, encontros e programações" total={itens?.length ?? null}>
+        {podeMexer && (
+          <Button size="sm" onClick={() => setCriando(true)}>
+            <Plus className="h-4 w-4" />
+            Novo evento
+          </Button>
+        )}
         <div role="group" className="flex gap-0.5 rounded-lg bg-white/5 p-0.5">
           {([[false, "Próximos"], [true, "Realizados"]] as const).map(([v, r]) => (
             <button key={r} type="button" onClick={() => setPassados(v)} aria-pressed={passados === v}
@@ -64,6 +82,8 @@ export default function EventosPage() {
           ))}
         </div>
       </CabecalhoModulo>
+
+      <AvisoDeGravacao mensagem={aviso} aoFechar={limparAviso} />
 
       {erro ? <EstadoErro mensagem={erro} />
       : itens === null ? <EsqueletoLista linhas={5} />
@@ -87,7 +107,18 @@ export default function EventosPage() {
                     {e.local}
                   </p>
                 </div>
-                {e.emCurso && <Badge variant="alerta">acontecendo</Badge>}
+                <div className="flex shrink-0 items-center gap-2">
+                  {e.emCurso && <Badge variant="alerta">acontecendo</Badge>}
+                {podeMexer && (
+                  <AcoesDoRegistro
+                    nome={e.titulo}
+                    onEditar={() => setEmEdicao(e)}
+                    onExcluir={async () => {
+                      await gravar(`/api/agenda/eventos/${e.id}`, "DELETE");
+                    }}
+                  />
+                )}
+                </div>
               </div>
 
               <p className="mt-3 border-t border-white/8 pt-3 text-[0.8rem] tabular-nums text-brand-100/80">
@@ -107,6 +138,59 @@ export default function EventosPage() {
           ))}
         </div>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Novo evento"
+        descricao="Deixe a data de término em branco se o evento durar um dia só."
+        campos={CAMPOS_EVENTO}
+        valores={{ titulo: "", tipo: "evento", data: "", dataFim: "", local: "", descricao: "", obs: "" }}
+        rotuloGravar="Criar evento"
+        aoGravar={(v) => gravar("/api/agenda/eventos", "POST", v)}
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar evento"
+        campos={CAMPOS_EVENTO}
+        valores={{
+          titulo: emEdicao?.titulo ?? "",
+          tipo: emEdicao?.tipo ?? "evento",
+          data: emEdicao?.inicio?.slice(0, 10) ?? "",
+          dataFim: emEdicao?.fim?.slice(0, 10) ?? "",
+          local: emEdicao?.local ?? "",
+          descricao: emEdicao?.descricao ?? "",
+          obs: emEdicao?.obs ?? "",
+        }}
+        aoGravar={(v) => gravar(`/api/agenda/eventos/${emEdicao?.id}`, "PATCH", v)}
+      />
     </>
   );
 }
+
+const CAMPOS_EVENTO: readonly CampoForm[] = [
+  { chave: "titulo", rotulo: "Título", obrigatorio: true, largo: true },
+  { chave: "data", rotulo: "Início", tipo: "data", obrigatorio: true },
+  {
+    chave: "dataFim",
+    rotulo: "Término",
+    tipo: "data",
+    ajuda: "Em branco = evento de um dia só.",
+  },
+  {
+    chave: "tipo",
+    rotulo: "Tipo",
+    tipo: "lista",
+    opcoes: [
+      { valor: "evento", rotulo: "Evento" },
+      { valor: "culto", rotulo: "Culto" },
+      { valor: "ebd", rotulo: "EBD" },
+      { valor: "congresso", rotulo: "Congresso" },
+    ],
+  },
+  { chave: "local", rotulo: "Local" },
+  { chave: "descricao", rotulo: "Descrição", tipo: "area" },
+  { chave: "obs", rotulo: "Observação", tipo: "area" },
+];

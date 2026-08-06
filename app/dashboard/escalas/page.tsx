@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CalendarRange, ExternalLink, FileText } from "lucide-react";
+import { CalendarRange, ExternalLink, FileText, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Alert } from "@/components/ui/alert";
 import {
   CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
+import { Button } from "@/components/ui/button";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { AvisoDeGravacao } from "@/components/crud/AvisoDeGravacao";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useCrud } from "@/components/crud/useCrud";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Escalas de culto.
@@ -27,6 +33,12 @@ interface Escala {
 const fmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 export default function EscalasPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("escalas");
+  const { aviso, limparAviso, recarga, gravar } = useCrud();
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<Escala | null>(null);
+
   const [dados, setDados] = useState<{ itens: Escala[]; mesAtualTemEscala: boolean } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -48,7 +60,7 @@ export default function EscalasPage() {
       }
     })();
     return () => controle.abort();
-  }, []);
+  }, [recarga]);
 
   return (
     <>
@@ -57,7 +69,16 @@ export default function EscalasPage() {
         titulo="Escalas"
         descricao="Escalas de culto do mês"
         total={dados?.itens.length ?? null}
-      />
+      >
+        {podeMexer && (
+          <Button size="sm" onClick={() => setCriando(true)}>
+            <Plus className="h-4 w-4" />
+            Publicar escala
+          </Button>
+        )}
+      </CabecalhoModulo>
+
+      <AvisoDeGravacao mensagem={aviso} aoFechar={limparAviso} />
 
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={4} />
@@ -132,6 +153,17 @@ export default function EscalasPage() {
                         Abrir a escala
                         <ExternalLink className="h-3.5 w-3.5" />
                       </a>
+
+                      {podeMexer && (
+                        <AcoesDoRegistro
+                          nome={e.titulo}
+                          onEditar={() => setEmEdicao(e)}
+                          aviso={`A escala "${e.titulo}" sai do portal. O arquivo em si continua no Drive — o portal apenas registrava qual arquivo valia para aquele mês.`}
+                          onExcluir={async () => {
+                            await gravar(`/api/escalas/${e.id}`, "DELETE");
+                          }}
+                        />
+                      )}
                     </div>
                   </article>
                 ))}
@@ -140,6 +172,53 @@ export default function EscalasPage() {
           </div>
         </>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Publicar escala do mês"
+        descricao="O portal registra QUAL arquivo vale para qual mês. O PDF continua no Drive."
+        campos={CAMPOS_ESCALA}
+        valores={{ titulo: "", mesAno: "", url: "", nomeArquivo: "", obs: "" }}
+        rotuloGravar="Publicar"
+        aoGravar={(v) => gravar("/api/escalas", "POST", v)}
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar escala"
+        campos={CAMPOS_ESCALA}
+        valores={{
+          titulo: emEdicao?.titulo ?? "",
+          mesAno: emEdicao?.mes?.slice(0, 7) ?? "",
+          url: emEdicao?.url ?? "",
+          nomeArquivo: emEdicao?.arquivo ?? "",
+          obs: emEdicao?.obs ?? "",
+        }}
+        aoGravar={(v) => gravar(`/api/escalas/${emEdicao?.id}`, "PATCH", v)}
+      />
     </>
   );
 }
+
+const CAMPOS_ESCALA: readonly CampoForm[] = [
+  { chave: "titulo", rotulo: "Título", obrigatorio: true, largo: true },
+  {
+    chave: "mesAno",
+    rotulo: "Mês (AAAA-MM)",
+    obrigatorio: true,
+    placeholder: "2026-08",
+    ajuda: "Só o mês — o dia da publicação é registrado à parte.",
+  },
+  {
+    chave: "url",
+    rotulo: "Endereço do arquivo",
+    obrigatorio: true,
+    largo: true,
+    placeholder: "https://drive.google.com/…",
+    ajuda: "O portal não guarda o PDF; ele registra onde o arquivo oficial está.",
+  },
+  { chave: "nomeArquivo", rotulo: "Nome do arquivo", largo: true },
+  { chave: "obs", rotulo: "Observação", tipo: "area" },
+];

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { BookMarked, CircleCheck, CircleDashed } from "lucide-react";
+import { BookMarked, CircleCheck, CircleDashed, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +11,13 @@ import {
   EstadoErro,
   EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
+import { Button } from "@/components/ui/button";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { AvisoDeGravacao } from "@/components/crud/AvisoDeGravacao";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useCrud } from "@/components/crud/useCrud";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
+import { CATEGORIAS_DE_CLASSE, rotuloDaCategoria } from "@/lib/ebd/categorias";
 
 /**
  * Lições do trimestre, e o que cada classe já ministrou.
@@ -35,6 +42,12 @@ interface Licao {
 const fmtData = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
 
 export default function LicoesPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("licoes");
+  const { aviso, limparAviso, recarga, gravar } = useCrud();
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<Licao | null>(null);
+
   const [ano, setAno] = useState<number | null>(null);
   const [trim, setTrim] = useState<string>("");
   const [dados, setDados] = useState<{
@@ -72,7 +85,7 @@ export default function LicoesPage() {
       }
     })();
     return () => controle.abort();
-  }, [ano, trim]);
+  }, [ano, trim, recarga]);
 
   const hoje = new Date().toISOString().slice(0, 10);
 
@@ -84,7 +97,13 @@ export default function LicoesPage() {
         descricao="Lições do trimestre e o que cada classe ministrou"
         total={dados?.itens.length ?? null}
       >
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {podeMexer && (
+            <Button size="sm" onClick={() => setCriando(true)}>
+              <Plus className="h-4 w-4" />
+              Nova lição
+            </Button>
+          )}
           <label className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem]">
             <span className="shrink-0 text-brand-200/55">Ano</span>
             <input
@@ -111,6 +130,8 @@ export default function LicoesPage() {
           </label>
         </div>
       </CabecalhoModulo>
+
+      <AvisoDeGravacao mensagem={aviso} aoFechar={limparAviso} />
 
       {erro ? (
         <EstadoErro mensagem={erro} />
@@ -146,7 +167,7 @@ export default function LicoesPage() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[0.86rem] text-brand-50">{l.titulo}</p>
                   <p className="truncate text-[0.72rem] text-brand-200/50">
-                    {l.trim} · {l.tipoClasse}
+                    {l.trim} · {rotuloDaCategoria(l.tipoClasse)}
                   </p>
                 </div>
 
@@ -170,12 +191,83 @@ export default function LicoesPage() {
                   ) : (
                     <Badge variant="neutro">a ministrar</Badge>
                   )}
+
+                  {podeMexer && (
+                    <AcoesDoRegistro
+                      nome={l.titulo}
+                      onEditar={() => setEmEdicao(l)}
+                      aviso={
+                        deram !== null
+                          ? `Esta lição já foi ministrada por ${deram} ${deram === 1 ? "classe" : "classes"} — o portal vai recusar a exclusão, porque apagá-la apagaria a prova de que elas estavam em dia.`
+                          : undefined
+                      }
+                      onExcluir={async () => {
+                        await gravar(`/api/licoes/${l.id}`, "DELETE");
+                      }}
+                    />
+                  )}
                 </div>
               </motion.li>
             );
           })}
         </ul>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Nova lição"
+        descricao="A lição é do campo e vale para todas as classes daquela categoria."
+        campos={CAMPOS_LICAO}
+        valores={{ titulo: "", data: "", trim: "", tipoClasse: "" }}
+        rotuloGravar="Cadastrar"
+        aoGravar={(v) => gravar("/api/licoes", "POST", v)}
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar lição"
+        campos={CAMPOS_LICAO}
+        valores={{
+          titulo: emEdicao?.titulo ?? "",
+          data: emEdicao?.data?.slice(0, 10) ?? "",
+          trim: emEdicao?.trim ?? "",
+          tipoClasse: emEdicao?.tipoClasse ?? "",
+        }}
+        aoGravar={(v) => gravar(`/api/licoes/${emEdicao?.id}`, "PATCH", v)}
+      />
     </>
   );
 }
+
+const CAMPOS_LICAO: readonly CampoForm[] = [
+  {
+    chave: "titulo",
+    rotulo: "Título",
+    obrigatorio: true,
+    largo: true,
+    placeholder: "Lição 5: O Juízo contra Sodoma e Gomorra",
+  },
+  { chave: "data", rotulo: "Domingo", tipo: "data", obrigatorio: true },
+  {
+    chave: "trim",
+    rotulo: "Trimestre",
+    tipo: "lista",
+    obrigatorio: true,
+    opcoes: [
+      { valor: "1T", rotulo: "1º trimestre" },
+      { valor: "2T", rotulo: "2º trimestre" },
+      { valor: "3T", rotulo: "3º trimestre" },
+      { valor: "4T", rotulo: "4º trimestre" },
+    ],
+  },
+  {
+    chave: "tipoClasse",
+    rotulo: "Categoria de classe",
+    tipo: "lista",
+    obrigatorio: true,
+    opcoes: CATEGORIAS_DE_CLASSE.map((c) => ({ valor: c.chave, rotulo: c.rotulo })),
+    ajuda: "A mesma lição vale para todas as classes desta categoria, no campo inteiro.",
+  },
+];

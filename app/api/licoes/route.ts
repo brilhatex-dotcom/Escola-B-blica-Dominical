@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { lerInt, responder } from "@/lib/api";
 import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
+import { dataCivil, erro, lerCorpo, texto } from "@/lib/api";
+import { escopoDeEscrita } from "@/lib/auth/escopo";
+import { criarComIdHerdado } from "@/lib/api/legado";
+import { CATEGORIAS } from "@/lib/ebd/categorias";
 
 /**
  * Lições do trimestre, e o que cada classe já ministrou.
@@ -92,4 +96,67 @@ export async function GET(req: Request) {
       total: licoes.length,
     };
   });
+}
+
+/**
+ * Cadastrar uma lição do trimestre.
+ *
+ * ============================================================================
+ * A LIÇÃO É DO CAMPO, E POR CATEGORIA — NÃO POR CLASSE
+ *
+ * `Licoes.escopo` vale "categoria" nas 228 linhas herdadas, e `classeId` está
+ * vazio em todas. Não é descuido do cadastro antigo: a revista de Adultos é a
+ * mesma em todas as congregações, e a lição do 3º domingo de agosto é a mesma
+ * para todas as classes de Adultos do campo.
+ *
+ * Cadastrar lição por classe criaria 29 cópias da mesma lição de Adultos, uma
+ * por classe — e a primeira correção de título teria de ser feita 29 vezes.
+ * Por isso `tipoClasse` é obrigatório e `classeId` fica nulo.
+ * ============================================================================
+ */
+export async function POST(req: Request) {
+  const { recusa } = await escopoDeEscrita("licoes");
+  if (recusa) return recusa;
+
+  const corpo = await lerCorpo(req);
+  if (!corpo) return erro("Corpo da requisição inválido.", 400);
+
+  const titulo = texto(corpo.titulo, 300);
+  if (!titulo) return erro("Informe o título da lição.", 400);
+
+  const data = dataCivil(corpo.data);
+  if (!data) return erro("Informe o domingo da lição (YYYY-MM-DD).", 400);
+
+  const tipoClasse = texto(corpo.tipoClasse, 40);
+  if (!tipoClasse || !CATEGORIAS.includes(tipoClasse)) {
+    return erro("Escolha a categoria de classe da lição.", 400);
+  }
+
+  /* "1T".."4T" — o formato do sistema antigo. Fora disso, o filtro de trimestre
+     da tela simplesmente deixaria de achar a lição. */
+  const trim = texto(corpo.trim, 4) ?? "";
+  if (!/^[1-4]T$/.test(trim)) return erro("Trimestre inválido — use 1T, 2T, 3T ou 4T.", 400);
+
+  const ano = Number.isInteger(corpo.ano) ? (corpo.ano as number) : data.getUTCFullYear();
+
+  return responder(async () =>
+    criarComIdHerdado(
+      (tx) => tx.licao,
+      (tx, id) =>
+        tx.licao.create({
+          data: {
+            id,
+            ano,
+            data,
+            escopo: "categoria",
+            tipoClasse,
+            titulo,
+            trim,
+            classeId: null,
+            congId: null,
+          },
+          select: { id: true, titulo: true },
+        }),
+    ),
+  );
 }

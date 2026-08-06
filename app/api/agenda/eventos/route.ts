@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { lerInt, responder } from "@/lib/api";
 import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
+import { dataCivil, erro, lerCorpo, texto, textoOpcional } from "@/lib/api";
+import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
+import { criarComIdHerdado } from "@/lib/api/legado";
 
 /**
  * Eventos do campo.
@@ -62,4 +65,70 @@ export async function GET(req: Request) {
       passados,
     };
   });
+}
+
+/**
+ * Cadastrar um evento.
+ *
+ * ============================================================================
+ * `dataFim` NUNCA FICA VAZIA
+ *
+ * O sistema antigo guarda início e fim. Um evento de um dia só tem os dois
+ * iguais — e é isso que a rota grava quando o fim não é informado.
+ *
+ * Deixar `dataFim` nula pareceria inofensivo e quebraria a agenda inteira: a
+ * lista de "próximos" filtra por `dataFim` (senão um congresso de três dias
+ * sumiria no segundo dia, que é o pior momento para desaparecer), e um nulo ali
+ * tiraria o evento de todas as consultas sem erro nenhum.
+ * ============================================================================
+ */
+export async function POST(req: Request) {
+  const { recusa, congId: doAcesso, sessao } = await escopoDeEscrita("agenda-eventos");
+  if (recusa) return recusa;
+
+  const corpo = await lerCorpo(req);
+  if (!corpo) return erro("Corpo da requisição inválido.", 400);
+
+  const titulo = texto(corpo.titulo, 160);
+  if (!titulo) return erro("Informe o título do evento.", 400);
+
+  const data = dataCivil(corpo.data);
+  if (!data) return erro("Informe a data do evento (YYYY-MM-DD).", 400);
+
+  const dataFim = dataCivil(corpo.dataFim) ?? data;
+  if (dataFim < data) return erro("A data de término é anterior à de início.", 400);
+
+  /*
+   * Evento sem congregação é do CAMPO — e o campo inteiro o enxerga.
+   * Quem só alcança uma congregação não pode criar evento de campo: o evento
+   * nasce na congregação dele.
+   */
+  const congId = doAcesso ? (sessao?.congIds[0] ?? null) : congPedida(corpo.congId);
+  exigirCongregacaoPermitida(doAcesso, congId ?? undefined);
+
+  return responder(async () =>
+    criarComIdHerdado(
+      (tx) => tx.evento,
+      (tx, id) =>
+        tx.evento.create({
+          data: {
+            id,
+            titulo,
+            descricao: textoOpcional(corpo.descricao, 1000) ?? "",
+            tipo: texto(corpo.tipo, 40) ?? "evento",
+            local: textoOpcional(corpo.local, 160) ?? "",
+            data,
+            dataFim,
+            obs: textoOpcional(corpo.obs, 500),
+            congId,
+          },
+          select: { id: true, titulo: true },
+        }),
+    ),
+  );
+}
+
+/** A congregação pedida, ou `null` para evento do campo inteiro. */
+function congPedida(valor: unknown): number | null {
+  return Number.isInteger(valor) ? (valor as number) : null;
 }
