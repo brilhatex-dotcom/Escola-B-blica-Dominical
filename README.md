@@ -556,6 +556,104 @@ Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ---
 
+## Fase 19 — o prontuário da congregação (drill-down do Painel)
+
+Um pedido extenso, com a seção "Saúde da EBD por Congregação" do Painel como
+ponto de partida: cada cartão devia abrir uma central completa de informações
+daquela congregação — cabeçalho, resumo, gráficos, classes, professores,
+visitantes, indicadores automáticos, análise em texto, comparativos, ranking,
+alertas e histórico.
+
+### `/dashboard/congregacoes/[id]` — clique no cartão, abre o prontuário
+
+Todo cartão do Painel (inclusive os "dados insuficientes") agora é um link.
+Uma rota nova, `/api/relatorios/congregacao/[id]`, faz a apuração inteira
+numa chamada só — mesma disciplina do Painel geral (`/api/relatorios/painel`)
+de não montar a tela aos pedaços.
+
+**O que a tela mostra, tudo com dado real:**
+
+- **Cabeçalho**: nome, Dirigente/Vice-Dirigente/Secretário Local (de
+  `PessoaCargos`, igual à tela de Congregações), telefone (o do Dirigente —
+  a congregação em si não tem telefone próprio no cadastro), classes,
+  professores, alunos, e o IGS com a classificação.
+- **Resumo geral**: matriculados, professores, classes, visitantes,
+  frequência média, IGS, crescimento.
+- **Frequência domingo a domingo**: gráfico de linhas e de barras
+  (presentes/ausentes/visitantes), só com os domingos que de fato tiveram
+  chamada — um domingo sem registro não vira um ponto de "zero", que
+  mentiria que a igreja não se reuniu.
+- **Evolução mensal** (12 meses) e **evolução anual** (todo o histórico,
+  ano a ano) — reaproveita o `GraficoEvolucao` que já existia no Painel para
+  o mensal, e um `GraficoEvolucaoAnual` novo para o anual.
+- **Indicadores automáticos**: maior/menor frequência (por TAXA), melhor/pior
+  domingo (por NÚMERO de presentes — pergunta diferente de propósito, ver
+  comentário em `lib/relatorios/congregacao.ts`), domingo com mais
+  visitantes.
+- **Análise das classes** (tabela, com indicador verde/amarelo/vermelho) e
+  **análise dos professores** (frequência média da classe, chamadas
+  realizadas, visitantes recebidos, tempo na função — calculado a partir de
+  `PessoaCargo.inicio` —, crescimento da classe). Clicar no nome da classe
+  abre a tela de classe que já existia.
+- **Visitantes**: total, variação, e "recorrentes" — nomes que voltam em 2+
+  domingos (contagem por coincidência de nome normalizado, dito explicitamente
+  na tela: não existe cadastro único de visitante como existe de aluno).
+- **Análise automática** (texto por regra, mesmo molde de
+  `lib/relatorios/analise.ts`) e **alertas** (reaproveita `gerarAlertas()`
+  já existente, escopados só a esta congregação).
+- **Comparativos e ranking**: sempre mostra a comparação com a MÉDIA do
+  campo (é uma soma agregada, não expõe nenhuma congregação em particular).
+  "Melhor/pior congregação" e a posição no ranking (frequência, visitantes,
+  crescimento, chamadas, alunos, IGS) só aparecem para quem enxerga o campo
+  inteiro — um Dirigente vendo a própria congregação NÃO recebe nomes de
+  outras congregações no corpo da resposta, mesmo sabendo o `id` de outra e
+  tentando pela URL.
+- **Histórico**: linha do tempo a partir de `Auditoria` (existente desde a
+  Fase 12), filtrada pela congregação.
+- Botões **Imprimir/PDF** (o mesmo `window.print()` das outras três telas com
+  impressão do portal — o diálogo de impressão do navegador já salva em PDF),
+  **Exportar CSV** (a tabela de classes, que o Excel abre direto) e
+  **Compartilhar** (Web Share API, com cópia do link como alternativa).
+
+### A mesma conta, para todas as congregações, sempre — só a resposta muda
+
+Ranking e "melhor/pior congregação" só existem comparando o campo inteiro.
+Em vez de calcular isso de dois jeitos (um "de verdade" para quem vê tudo,
+outro escondendo nomes para o Grupo B), a rota sempre apura TODAS as
+congregações e só decide, no fim, o que entra no JSON. Isso evita a
+divergência clássica desse tipo de atalho — o IGS que a própria congregação
+vê tem que ser exatamente a nota que ela ocupa no ranking, porque é a MESMA
+variável, não duas contas parecidas.
+
+### O que ficou deliberadamente de fora, e por quê
+
+- **"Visitantes convertidos em alunos"**: não existe vínculo no banco entre
+  um `Visitante` e o `Aluno` em que ele eventualmente virou. Inventar por
+  coincidência de nome erraria tanto quanto acertaria.
+- **Meta da congregação** (barra de progresso): precisa de um número que
+  alguém define e persiste — o sistema hoje não guarda meta nenhuma. A tela
+  mostra um aviso "Em breve", não uma meta inventada.
+- **Foto, Cidade/Bairro**: `Congregacao` só tem `nome` no cadastro. Mostrar
+  esses campos sempre vazios, sem nenhum jeito de preenchê-los, seria pior
+  que não mostrar.
+- **Mapa**: espaço reservado ("Em breve"), como pedido — sem coordenada
+  nenhuma no cadastro para desenhar um mapa de verdade.
+- **Exportar PDF/Excel "de verdade"**: o botão Imprimir já entrega um PDF
+  (é o que "imprimir" em qualquer navegador faz ao escolher "Salvar como
+  PDF"), e o CSV abre no Excel — gerar um `.xlsx` binário ou um PDF
+  server-side seria a mesma saída por um caminho mais caro, sem ganho real
+  para quem usa.
+
+`lib/relatorios/congregacao.ts` concentra a conta pura (indicador de cor,
+tempo na função, visitantes recorrentes, posição no ranking, indicadores
+automáticos, variação mês a mês, análise em texto) — testável sem Postgres,
+mesmo padrão de `lib/relatorios/indices.ts` e `lib/dashboard/destaque.ts`.
+`npm run verificar:congregacao` (novo): **32 asserções**.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"

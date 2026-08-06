@@ -18,6 +18,7 @@
     "verificar:revistas": "tsx scripts/verificar-revistas.mts",
     "verificar:saudacao": "tsx scripts/verificar-saudacao.mts",
     "verificar:destaque": "tsx scripts/verificar-destaque.mts",
+    "verificar:congregacao": "tsx scripts/verificar-congregacao.mts",
     "verificar:pwa": "node scripts/verificar-pwa.mjs",
     "verificar:dashboard": "node scripts/verificar-dashboard.mjs",
     "db:generate": "prisma generate",

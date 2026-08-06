@@ -1,7 +1,7 @@
 # Continuação — o próximo pedido do usuário (confirme antes de escolher)
 
-> Fase 18 (contas de campo, aniversariantes liberados, Destaque) foi entregue
-> depois da 17, também fora de qualquer ordem proposta anteriormente — o
+> Fase 19 (prontuário da congregação, drill-down do Painel) foi entregue
+> depois da 18, também fora de qualquer ordem proposta anteriormente — o
 > usuário segue mandando ajustes concretos ao vivo, testando o portal
 > publicado. Isso é esperado neste projeto: trate cada pedido novo como a
 > prioridade do momento, não como quebra do plano.
@@ -58,6 +58,44 @@ Substitui um sistema antigo em Google Apps Script.
 | 16 | **Três ajustes pedidos ao vivo: Grupo B edita a liderança local, Alunos em caixinhas por classe, seletor de trimestre em Revistas** |
 | 17 | **Relatório Semanal (modelo da Superintendência das EDs) + saudação completa do Dashboard** |
 | 18 | **Novo Login cria contas de campo (Gestor Local/Supervisor/Secretário Geral), aniversariantes liberados pra todo o campo, cartão Congregação/Classe Destaque no Dashboard** |
+| 19 | **Prontuário da congregação — drill-down completo a partir do cartão do Painel: cabeçalho, resumo, gráficos, classes, professores, visitantes, indicadores, análise, comparativos, ranking, alertas, histórico** |
+
+## O que a Fase 19 entregou (para não refazer)
+
+Pedido extenso: cada cartão de "Saúde da EBD por Congregação" no Painel devia
+abrir uma central completa — praticamente um prontuário administrativo da
+congregação.
+
+1. **`/dashboard/congregacoes/[id]`** (nova) + **`/api/relatorios/congregacao/[id]`**
+   (nova) — cabeçalho (Dirigente/Vice/Secretário Local, telefone do Dirigente,
+   classes/professores/alunos, IGS), resumo geral, frequência domingo a
+   domingo (linha e barras), evolução mensal (12 meses) e anual (todo o
+   histórico), indicadores automáticos (maior/menor frequência por TAXA,
+   melhor/pior domingo por NÚMERO de presentes — perguntas diferentes de
+   propósito), tabela de classes com indicador verde/amarelo/vermelho, tabela
+   de professores (frequência da classe, chamadas, visitantes, tempo na
+   função, crescimento), visitantes (recorrência por nome normalizado),
+   análise automática em texto (mesmo molde de `lib/relatorios/analise.ts`),
+   alertas (reaproveita `gerarAlertas()`), comparativo com a média do campo
+   (sempre) e ranking/"melhor-pior congregação" (só para quem enxerga o campo
+   inteiro — nunca vaza nome de outra congregação para o Grupo B, mesmo pela
+   URL), histórico (a partir de `Auditoria`, existente desde a Fase 12).
+   Botões Imprimir/PDF (`window.print()`), Exportar CSV, Compartilhar.
+2. **A MESMA conta roda para todas as congregações sempre** — o recorte só
+   decide o que ENTRA NO JSON no final, nunca o que entra no cálculo. Evita a
+   divergência clássica de "a nota que a própria congregação vê" ser
+   diferente de "a nota que ela ocupa no ranking".
+3. **Cartões do Painel viraram links** — inclusive os "dados insuficientes".
+4. **Ficou de fora, de propósito** (documentado na tela e no README): metas
+   com barra de progresso (precisa de dado que o sistema não guarda ainda),
+   foto/cidade/bairro da congregação (não existem no cadastro), mapa (sem
+   coordenada), "visitantes convertidos em alunos" (sem vínculo no banco),
+   PDF/Excel binário "de verdade" (Imprimir já é PDF pelo navegador, CSV já
+   abre no Excel).
+5. `lib/relatorios/congregacao.ts` (novo) — a conta pura, testável sem banco.
+   `npm run verificar:congregacao` (novo): **32 asserções**.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ## O que a Fase 18 entregou (para não refazer)
 

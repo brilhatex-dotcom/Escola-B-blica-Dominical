@@ -349,16 +349,17 @@ export default function PainelRelatoriosPage() {
                   </p>
                   <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                     {porFaixa.semDado.map((c) => (
-                      <div
+                      <Link
                         key={c.congId}
-                        className="glass-panel rounded-xl p-3.5 opacity-50"
+                        href={`/dashboard/congregacoes/${c.congId}`}
+                        className="glass-panel block rounded-xl p-3.5 opacity-50 transition-opacity duration-300 hover:opacity-80"
                         title="Menos de 3 chamadas registradas no período — nota insuficiente para uma leitura confiável."
                       >
                         <p className="truncate text-[0.84rem] text-brand-50">{c.nome}</p>
                         <p className="mt-0.5 text-[0.7rem] text-brand-200/50">
                           {c.chamadas} {c.chamadas === 1 ? "chamada registrada" : "chamadas registradas"}
                         </p>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -536,6 +537,12 @@ function IndicadorComTendencia({
   );
 }
 
+/**
+ * Cada cartão abre o prontuário completo da congregação (Fase 19) — cabeçalho,
+ * resumo, gráficos, classes, professores, visitantes, ranking, histórico. O
+ * cartão em si continua mostrando só o resumo de sempre: o clique é o convite
+ * a aprofundar, não uma pista escondida.
+ */
 function CongregacaoCartao({ c }: { c: CongregacaoBI }) {
   const cor = c.classificacao ? CORES_FAIXA[c.classificacao.faixa] : "#8aa5d0";
   const TendIcone =
@@ -546,7 +553,10 @@ function CongregacaoCartao({ c }: { c: CongregacaoBI }) {
         : TrendingDown;
 
   return (
-    <div className="glass-panel rounded-xl p-3.5">
+    <Link
+      href={`/dashboard/congregacoes/${c.congId}`}
+      className="glass-panel block rounded-xl p-3.5 transition-colors duration-300 hover:border-gold-400/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/60"
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="min-w-0 truncate text-[0.86rem] text-brand-50">{c.nome}</p>
         <span
@@ -575,7 +585,7 @@ function CongregacaoCartao({ c }: { c: CongregacaoBI }) {
           </span>
         )}
       </div>
-    </div>
+    </Link>
   );
 }
 
