@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verificarSenha } from "@/lib/auth/senha";
 import { criarSessao, temSegredo } from "@/lib/auth/sessao";
+import { formasDoLogin } from "@/lib/auth/login";
 import { registrar } from "@/lib/auditoria";
 import { acessoDaConta } from "@/lib/auth/acesso";
 import { papelPrincipal } from "@/lib/auth/papeis";
@@ -53,7 +54,26 @@ export async function POST(req: Request) {
   }
 
   try {
-    const usuario = await prisma.usuario.findUnique({ where: { login } });
+    /*
+     * A conta é procurada nas formas em que ela pode ter sido gravada.
+     *
+     * Primeiro o texto EXATO — é assim que estão as 19 contas herdadas da
+     * planilha, uma delas com maiúscula e cedilha (`Graça`). Depois a forma
+     * normalizada, que é como a tela de Usuários grava as contas novas.
+     *
+     * Sem isto, uma secretária cadastrada como "Maria Bandeiras" (gravada
+     * "mariabandeiras") digitava o próprio nome e ouvia "Usuário ou senha
+     * inválidos" — com a mensagem, que é a mesma para login inexistente e senha
+     * errada, mandando procurar o problema na senha.
+     *
+     * A ordem importa: exato primeiro, para que uma conta antiga nunca seja
+     * ofuscada por outra de nome parecido em caixa baixa.
+     */
+    let usuario = null;
+    for (const forma of formasDoLogin(login)) {
+      usuario = await prisma.usuario.findUnique({ where: { login: forma } });
+      if (usuario) break;
+    }
 
     const { ok, precisaTrocar } = await verificarSenha(
       senha,
