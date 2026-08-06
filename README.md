@@ -317,6 +317,73 @@ tocar em nenhuma tabela existente.
 
 ---
 
+## Fase 16 — três ajustes pedidos ao vivo, testando o portal publicado
+
+Feedback direto, testando `/dashboard` já no ar: (1) usuários normais também
+podem e devem editar quem são os professores locais, o dirigente e o
+secretário; (2) a lista de Alunos devia vir organizada em caixinhas por
+classe; (3) o Pedido de Lição precisava de um seletor de trimestre — a
+pergunta era se ficava travado num trimestre só, ou se mudava sozinho.
+
+### 1. O Grupo B agora define a própria liderança local
+
+Até aqui, **ninguém** tinha como trocar o professor de uma classe pela tela —
+a Fase 05 já *lia* `PessoaCargos` certo, mas não existia rota nenhuma para
+*escrever*. E definir Dirigente/Vice/Secretário Local de uma congregação
+(`GerirResponsaveis`, desde os "Refinamentos") exigia a permissão
+`hierarquia`, que só o campo tem — um Dirigente não conseguia dizer quem era
+o Vice da própria congregação.
+
+- **`/api/classes/[id]/professores`** (nova): `POST` adiciona (pessoa
+  existente, aluno promovido, ou nome novo — mesma busca unificada de
+  `/api/pessoas/candidatos`), `DELETE` encerra o vínculo (`fim`, nunca
+  apaga). Mesma permissão de editar a classe (`classes`, recortada por
+  congregação) — não uma trava nova.
+- **`/api/congregacoes/dirigente` ganhou o recorte que faltava.** A rota
+  aceitava `congId` de QUALQUER congregação sem conferir nada — inofensivo
+  enquanto só o campo (que já vê tudo) a usava, mas deixaria de ser inofensivo
+  no instante em que o Grupo B ganhasse acesso. Agora `escopoDeEscrita` +
+  `exigirCongregacaoPermitida` garantem que o `congId` do pedido é
+  exatamente o da sessão.
+- **A permissão virou `congregacoes`** (que o Grupo B já tinha, recortada),
+  em vez de `hierarquia` (que continua só do campo — Pastor Presidente,
+  Supervisor… nunca ficam ao alcance de uma congregação). `GerirResponsaveis`
+  e a tela de Congregações passaram a checar `congregacoes`.
+- **`/api/pessoas/candidatos`** (a busca usada nos dois seletores) exigia ver
+  a aba **Professores** — que o Grupo B não tem, por decisão explícita da
+  liderança (ver "Escola Bíblica", abaixo). Em vez de abrir essa aba,
+  `exigirLeituraDeAlguma(["professores", "congregacoes", "classes"])` (nova,
+  em `lib/auth/guarda.ts`) libera a BUSCA para quem tem qualquer uma das
+  três — sem reabrir o cadastro geral de pessoas do campo.
+- Verificado com `npm run verificar:permissoes`: nova seção conferindo que o
+  Grupo B grava `congregacoes`/`classes` mas continua sem `hierarquia` e sem
+  ver `professores`.
+
+### 2. Alunos em caixinhas por classe
+
+`/dashboard/alunos` era uma lista corrida — respondia "quantos alunos
+existem", não "quem está na Adolescentes". Os mesmos dados, agrupados por
+`classe.id` (com "Sem classe" numa caixinha própria, nunca escondida) e
+ordenados por nome de classe, viram um grid de cartões — a mesma unidade que
+a secretaria já usa para pensar (é nela que a chamada acontece, dela que sai
+o pedido de revista).
+
+### 3. Trimestre atual muda sozinho; agora dá para ver os dois
+
+A dúvida era legítima: `trimestreDe(hoje)` é recalculado a cada carregamento
+da página a partir da data de hoje, então o "trimestre atual" **já mudava
+sozinho** quando o calendário virava — só não havia como *ver* isso
+acontecer, nem olhar o próximo trimestre a partir do Painel (só de dentro de
+Fazer Pedido).
+
+`/dashboard/revistas` ganhou o mesmo seletor Atual/Próximo que Fazer Pedido
+já tinha, com uma frase fixa explicando o automatismo. Escolher "Próximo
+trimestre" no Painel e depois abrir "Fazer Pedido" de uma congregação carrega
+o mesmo período (`?trimestre=` na URL) — não troca sozinho no meio do
+caminho.
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"

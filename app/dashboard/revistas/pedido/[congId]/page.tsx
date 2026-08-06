@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ArrowLeft, BadgeCheck, ClipboardList, Loader2, Lock, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/alert";
@@ -36,7 +37,11 @@ const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2
 
 export default function FazerPedidoPage({ params }: { params: Promise<{ congId: string }> }) {
   const { congId } = use(params);
-  const [periodo, setPeriodo] = useState<"proximo" | "atual">("proximo");
+  // Chegando da tela principal com "?trimestre=atual", abre já no atual —
+  // senão, o padrão continua sendo o próximo (a CPAD recebe pedido com
+  // antecedência).
+  const trimestreDaUrl = useSearchParams().get("trimestre");
+  const [periodo, setPeriodo] = useState<"proximo" | "atual">(trimestreDaUrl === "atual" ? "atual" : "proximo");
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [quantidades, setQuantidades] = useState<Record<string, string>>({});

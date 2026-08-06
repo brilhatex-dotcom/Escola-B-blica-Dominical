@@ -36,7 +36,7 @@ const CARGOS = [
 
 type CargoChave = (typeof CARGOS)[number]["chave"];
 
-interface Candidato {
+export interface Candidato {
   tipo: "pessoa" | "aluno" | "novo";
   id: number;
   nome: string;
@@ -44,12 +44,21 @@ interface Candidato {
   subtitulo: string;
 }
 
-function Seletor({
+/**
+ * A busca de "quem vai receber este cargo" — pessoa, aluno a promover, ou
+ * nome novo. Exportado porque `GerirProfessoresDaClasse` (Fase 16) usa a
+ * mesma busca para outro cargo (Professor), com outro formato de lista
+ * (vários professores por classe, não um só "vago/ocupado").
+ */
+export function Seletor({
   aoEscolher,
   aoCancelar,
+  permiteVago = true,
 }: {
   aoEscolher: (c: Candidato | null) => void;
   aoCancelar: () => void;
+  /** "Deixar o cargo vago" só faz sentido num cargo de UM titular (Dirigente). */
+  permiteVago?: boolean;
 }) {
   const [termo, setTermo] = useState("");
   const [resultados, setResultados] = useState<Candidato[]>([]);
@@ -169,13 +178,15 @@ function Seletor({
         </button>
       )}
 
-      <button
-        type="button"
-        onClick={() => aoEscolher(null)}
-        className="mt-1 w-full rounded-lg px-2.5 py-2 text-left text-[0.76rem] text-brand-200/55 transition-colors hover:bg-white/5 hover:text-brand-100"
-      >
-        Deixar o cargo vago
-      </button>
+      {permiteVago && (
+        <button
+          type="button"
+          onClick={() => aoEscolher(null)}
+          className="mt-1 w-full rounded-lg px-2.5 py-2 text-left text-[0.76rem] text-brand-200/55 transition-colors hover:bg-white/5 hover:text-brand-100"
+        >
+          Deixar o cargo vago
+        </button>
+      )}
     </div>
   );
 }
@@ -190,7 +201,11 @@ export function GerirResponsaveis({
   aoMudar?: () => void;
 }) {
   const { podeGravar } = useAcesso();
-  const editavel = podeGravar("hierarquia");
+  // "congregacoes", não "hierarquia": estes três cargos são de CONGREGAÇÃO
+  // (Dirigente/Vice/Secretário Local) — quem dirige a própria congregação
+  // pode defini-los. Os cargos de CAMPO continuam só em Administração →
+  // Liderança, que usa /api/lideranca e a permissão "hierarquia".
+  const editavel = podeGravar("congregacoes");
 
   const [editando, setEditando] = useState<CargoChave | null>(null);
   const [salvando, setSalvando] = useState<CargoChave | null>(null);

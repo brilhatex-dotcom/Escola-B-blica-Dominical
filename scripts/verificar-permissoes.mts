@@ -209,5 +209,15 @@ ok(
 );
 ok(itemAtivo("/dashboard/alunos/12") === "alunos", "subtela de um aluno acende Alunos");
 
+console.log("\n16. Fase 16 — o grupo B define a própria liderança local, mas não a do campo");
+for (const p of CONGREGACAO) {
+  ok(podeGravar([p], "congregacoes"), `${rotuloDoPapel(p)} define dirigente/vice/secretário da PRÓPRIA congregação`);
+  ok(podeGravar([p], "classes"), `${rotuloDoPapel(p)} continua definindo quem dá aula (professor) na PRÓPRIA classe`);
+  // O que NÃO muda: hierarquia (cargos de CAMPO) e a aba Professores (cadastro
+  // de gente do campo inteiro) continuam fora do alcance do grupo B.
+  ok(!podeGravar([p], "hierarquia"), `${rotuloDoPapel(p)} NÃO define cargos do CAMPO (Pastor Presidente, Supervisor…)`);
+  ok(!podeVer([p], "professores"), `${rotuloDoPapel(p)} continua sem ver a aba Professores`);
+}
+
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM\n" : `\n${falhas} FALHA(S)\n`);
 process.exit(falhas === 0 ? 0 : 1);

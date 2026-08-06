@@ -1,4 +1,4 @@
-# Continuação — Fase 15c: Central de Revistas CPAD (cards e gráficos financeiros)
+# Continuação — Fase 15c ou o próximo pedido do usuário (confirme antes de escolher)
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -49,6 +49,54 @@ Substitui um sistema antigo em Google Apps Script.
 | 14b | **Central de Relatórios (BI) — gráficos avançados: evolução, radar e comparativo** |
 | 15a | **Central de Revistas CPAD — painel do trimestre e alertas** |
 | 15b | **Central de Revistas CPAD — o pedido é digitado e confirmado (tela "Fazer Pedido")** |
+| 16 | **Três ajustes pedidos ao vivo: Grupo B edita a liderança local, Alunos em caixinhas por classe, seletor de trimestre em Revistas** |
+
+## O que a Fase 16 entregou (para não refazer)
+
+Feedback direto do usuário testando `/dashboard` já publicado (screenshots
+reais, não descrição) — três pedidos numa mensagem só, tratados como um
+único round de ajustes (não uma fase-mega nova, cada um pequeno e concreto).
+
+1. **Grupo B (Dirigente, Vice, Secretário Local, Professor) agora define a
+   própria liderança local** — quem dá aula em cada classe, e quem é
+   Dirigente/Vice/Secretário Local da PRÓPRIA congregação. Antes disso:
+   - Não existia rota NENHUMA para trocar o professor de uma classe — a
+     tela só apontava pra Liderança, que nunca soube de classe nenhuma.
+     Nova: `/api/classes/[id]/professores` (POST adiciona, DELETE encerra),
+     mesma permissão de editar a classe (`classes`).
+   - `/api/congregacoes/dirigente` (Dirigente/Vice/Secretário Local) exigia
+     `hierarquia` (só campo) e **não conferia o `congId`** — um buraco que
+     só não doía porque só o campo (que já vê tudo) usava a rota. Trocado
+     para `congregacoes` (o Grupo B já tem, recortada) + `escopoDeEscrita` +
+     `exigirCongregacaoPermitida` novos ali.
+   - `/api/pessoas/candidatos` (a busca dos dois seletores) exigia
+     `professores`, que o Grupo B não tem por decisão explícita da
+     liderança (Fase 09). `exigirLeituraDeAlguma` (nova em
+     `lib/auth/guarda.ts`) libera a busca por QUALQUER UMA de
+     `["professores", "congregacoes", "classes"]`, sem reabrir a aba.
+   - `lib/pessoas/resolver.ts` (novo): `pessoaDeAluno`/`pessoaDeNome`
+     extraídos de `congregacoes/dirigente` para `classes/[id]/professores`
+     reusar, sem duplicar ~60 linhas.
+   - `components/dashboard/GerirProfessoresDaClasse.tsx` (novo): lista de
+     pílulas removíveis + busca para adicionar — diferente de
+     `GerirResponsaveis` (um titular só por cargo), aqui é vários professores
+     por classe. `Seletor` foi exportado de `GerirResponsaveis.tsx` para os
+     dois reaproveitarem a mesma busca.
+   - `npm run verificar:permissoes` ganhou a seção 16 conferindo que o
+     Grupo B grava `congregacoes`/`classes` mas continua sem `hierarquia`
+     nem visão de `professores`.
+2. **`/dashboard/alunos` virou um grid de caixinhas por classe** (antes:
+   lista corrida). Agrupado por `classe.id`, "Sem classe" numa caixinha
+   própria (nunca escondida), ordenado por nome da classe. Puramente visual
+   — a API não mudou.
+3. **`/dashboard/revistas` ganhou o seletor Atual/Próximo** (o mesmo que
+   Fazer Pedido já tinha), com uma frase fixa explicando que "trimestre
+   atual" já mudava sozinho (é recalculado a cada carga da página, a partir
+   de hoje) — só não dava pra VER isso nem olhar o próximo do Painel. O link
+   "Fazer Pedido" de cada card carrega `?trimestre=` para abrir no mesmo
+   período que estava selecionado.
+
+Nenhuma tabela nova, nenhum SQL para aplicar nesta fase.
 
 ## A Fase 15 — Central de Revistas CPAD — e o corte combinado com o usuário
 

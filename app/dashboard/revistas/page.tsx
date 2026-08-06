@@ -77,6 +77,7 @@ const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 const fmtData = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 export default function RevistasPage() {
+  const [periodo, setPeriodo] = useState<"atual" | "proximo">("atual");
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
@@ -86,7 +87,7 @@ export default function RevistasPage() {
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch("/api/revistas", { cache: "no-store" });
+      const res = await fetch(`/api/revistas?trimestre=${periodo}`, { cache: "no-store" });
       if (!res.ok) throw Object.assign(new Error(), { status: res.status });
       setDados(await res.json());
       setErro(null);
@@ -94,9 +95,9 @@ export default function RevistasPage() {
       const status = (e as { status?: number }).status;
       setErro(status === 403 ? "O seu acesso não permite ver o pedido." : "Não foi possível carregar o pedido.");
     }
-  }, []);
+  }, [periodo]);
 
-  useEffect(() => { void carregar(); }, [carregar]);
+  useEffect(() => { setDados(null); void carregar(); }, [carregar]);
 
   return (
     <>
@@ -106,6 +107,21 @@ export default function RevistasPage() {
         descricao={dados ? dados.trimestre.rotulo : "Revistas por congregação"}
         total={dados?.congregacoes.length ?? null}
       >
+        <div className="flex gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1">
+          {(["atual", "proximo"] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setPeriodo(p)}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-[0.78rem] transition-colors duration-300",
+                periodo === p ? "bg-gold-400/15 text-gold-200" : "text-brand-200/60 hover:text-brand-100",
+              )}
+            >
+              {p === "atual" ? "Trimestre atual" : "Próximo trimestre"}
+            </button>
+          ))}
+        </div>
         {dados && (
           <button
             type="button"
@@ -117,6 +133,12 @@ export default function RevistasPage() {
           </button>
         )}
       </CabecalhoModulo>
+
+      <p className="-mt-2 mb-4 text-[0.74rem] text-brand-200/45">
+        "Trimestre atual" muda sozinho quando a data virar o trimestre seguinte — não precisa mexer em
+        nada. Use "Próximo trimestre" para acompanhar o pedido que está sendo feito agora, com
+        antecedência.
+      </p>
 
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={6} />
@@ -178,6 +200,7 @@ export default function RevistasPage() {
                 <CartaoCongregacao
                   key={c.congId}
                   cong={c}
+                  periodo={periodo}
                   aberto={aberta === c.congId}
                   aoAlternar={() => setAberta(aberta === c.congId ? null : c.congId)}
                   editavel={editavel}
@@ -470,8 +493,8 @@ const BADGE_SITUACAO_CONG: Record<SituacaoCongregacao, { texto: string; variant:
   "sem-pedido": { texto: "sem pedido", variant: "neutro" },
 };
 
-function CartaoCongregacao({ cong, aberto, aoAlternar, editavel, aoMudar }: {
-  cong: CongPedido; aberto: boolean; aoAlternar: () => void; editavel: boolean; aoMudar: () => void;
+function CartaoCongregacao({ cong, periodo, aberto, aoAlternar, editavel, aoMudar }: {
+  cong: CongPedido; periodo: "atual" | "proximo"; aberto: boolean; aoAlternar: () => void; editavel: boolean; aoMudar: () => void;
 }) {
   const pct = cong.totalDevido > 0 ? Math.min(100, (cong.pago / cong.totalDevido) * 100) : 0;
   const quitado = cong.situacao === "quitado";
@@ -538,7 +561,7 @@ function CartaoCongregacao({ cong, aberto, aoAlternar, editavel, aoMudar }: {
             </div>
             {editavel && (
               <Link
-                href={`/dashboard/revistas/pedido/${cong.congId}`}
+                href={`/dashboard/revistas/pedido/${cong.congId}?trimestre=${periodo}`}
                 className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gold-400/30 bg-gold-400/10 px-3 py-1.5 text-[0.78rem] font-medium text-gold-200 transition-colors hover:bg-gold-400/20"
               >
                 <ClipboardList className="h-3.5 w-3.5" />

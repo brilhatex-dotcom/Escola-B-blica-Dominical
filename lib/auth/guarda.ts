@@ -90,6 +90,26 @@ export async function exigirLeitura(chave: string): Promise<Autorizacao> {
   return auth;
 }
 
+/**
+ * Como `exigirLeitura`, mas passa se QUALQUER UMA das chaves for enxergada.
+ *
+ * Existe para rotas de apoio que servem mais de uma tela com públicos
+ * diferentes — por exemplo, `/api/pessoas/candidatos` serve tanto a
+ * Hierarquia do campo (chave "professores") quanto Congregações/Classes do
+ * Grupo B (chave "congregacoes"/"classes"), e nenhum papel isolado tem as
+ * duas. Continua sendo "ver exige ver": quem não enxerga NENHUMA das chaves
+ * é recusado.
+ */
+export async function exigirLeituraDeAlguma(chaves: readonly string[]): Promise<Autorizacao> {
+  const auth = await exigirSessao();
+  if (auth.recusa || !auth.sessao) return auth;
+
+  if (!chaves.some((chave) => podeVer(auth.sessao!.papeis, chave))) {
+    return { sessao: auth.sessao, recusa: recusaDeAcesso() };
+  }
+  return auth;
+}
+
 /** Exige que o acesso possa GRAVAR num módulo. */
 export async function exigirEscrita(chave: string): Promise<Autorizacao> {
   const auth = await exigirSessao();
