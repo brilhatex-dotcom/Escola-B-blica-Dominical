@@ -23,6 +23,7 @@ import {
   Settings,
   ShieldCheck,
   Sliders,
+  Sparkles,
   TriangleAlert,
   Trophy,
   UserRound,
@@ -239,9 +240,16 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
     icone: FileText,
     itens: [
       {
+        chave: "rel-painel",
+        rotulo: "Painel",
+        href: "/dashboard/relatorios",
+        icone: Sparkles,
+        descricao: "Índice de Saúde por congregação, alertas e análise automática",
+      },
+      {
         chave: "rel-frequencia",
         rotulo: "Frequência",
-        href: "/dashboard/relatorios",
+        href: "/dashboard/relatorios/frequencia",
         icone: FileText,
         descricao: "Índices de frequência por período, congregação e classe",
       },

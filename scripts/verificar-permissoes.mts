@@ -200,7 +200,13 @@ ok(
   itemAtivo("/dashboard/relatorios/ranking") === "rel-ranking",
   "/dashboard/relatorios/ranking acende Ranking, e não Frequência",
 );
-ok(itemAtivo("/dashboard/relatorios") === "rel-frequencia", "/dashboard/relatorios");
+// Desde a Fase 08b (Central de BI), /dashboard/relatorios é o Painel — a
+// Frequência detalhada mudou para /dashboard/relatorios/frequencia.
+ok(itemAtivo("/dashboard/relatorios") === "rel-painel", "/dashboard/relatorios acende Painel");
+ok(
+  itemAtivo("/dashboard/relatorios/frequencia") === "rel-frequencia",
+  "/dashboard/relatorios/frequencia acende Frequência",
+);
 ok(itemAtivo("/dashboard/alunos/12") === "alunos", "subtela de um aluno acende Alunos");
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM\n" : `\n${falhas} FALHA(S)\n`);

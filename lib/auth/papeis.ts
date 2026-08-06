@@ -85,6 +85,7 @@ const VE_A_CONGREGACAO = [
   "aniversariantes",
   "licoes",
   "revistas",
+  "rel-painel",
   "rel-frequencia",
   "rel-ranking",
   "rel-faltas",

@@ -663,6 +663,8 @@ Os comandos de banco estão em [README-IMPORT.md](./README-IMPORT.md).
 ```bash
 npm run verificar:offline     # camada offline, no Node (fake-indexeddb)
 npm run verificar:permissoes  # a matriz de papéis e o menu, no Node
+npm run verificar:login       # nome de usuário e senha, no Node
+npm run verificar:bi          # Índice de Saúde, alertas e análise, no Node
 ```
 
 ```bash
@@ -1261,6 +1263,7 @@ só na hora de exibir.
 | `/api/visitantes` | recebidos, do mais recente ao mais antigo |
 | `/api/chamada` | GET a chamada do dia, POST grava a classe inteira |
 | `/api/relatorios` | frequência por classe e ofertas do período |
+| `/api/relatorios/painel` | Índice de Saúde por congregação, IGE do campo, alertas e análise |
 | `/api/agenda` | eventos e reuniões numa lista só, mais as escalas |
 | `/api/lideranca` | GET a hierarquia, POST troca quem ocupa um cargo |
 | `/api/diagnostico` | com qual banco o app está falando |
@@ -1289,6 +1292,81 @@ O que o relatório **não** faz é dividir presenças pelo número de alunos de 
 para achar a taxa de um domingo de março. O cadastro não guarda histórico de
 matrícula; uma classe que dobrou desde então apareceria com metade da frequência
 real, e o número pareceria confiável.
+
+### A Central de Relatórios (BI) — o cérebro, não a tabela
+
+`/dashboard/relatorios` deixou de ser a tela de frequência e virou o **Painel**:
+um número (o Índice Geral da EBD), as 14 congregações agrupadas por faixa de
+saúde, alertas automáticos e uma leitura em texto — tudo pensado para responder
+"onde eu olho primeiro" em menos de dois minutos. A frequência detalhada, que
+era o conteúdo antigo desta rota, mudou para
+`/dashboard/relatorios/frequencia` e continua exatamente como estava.
+
+O pedido original — uma Central de BI completa, com dezenas de gráficos,
+comparativos, exportação em PDF/Excel e um segundo índice por professor —
+equivalia a cinco ou seis fases somadas. Esta entrega é a primeira: o motor de
+cálculo, o Índice de Saúde e os alertas. Gráficos adicionais, comparativos
+cruzados e exportação ficam para as próximas.
+
+#### O Índice de Saúde (IGS) usa só o que é medido de verdade
+
+O pedido original incluía "crescimento de alunos", "participação dos
+professores" e "cumprimento das atividades da EBD" como componentes da nota.
+Nenhum dos três tem dado por trás: o cadastro **não guarda histórico de
+matrícula** (o motivo já documentado acima, em *Relatórios comparam por
+MÉDIA*), não existe **presença de professor** — só de aluno —, e "atividades
+da EBD" não é uma tabela em lugar nenhum. Inventar um número para eles seria
+pior do que não ter o índice: pareceria medição e seria palpite.
+
+A nota (0 a 100) combina cinco componentes, todos calculáveis a partir de
+`Frequencias` e `Visitantes`:
+
+| Componente | Peso | O que mede |
+|---|---:|---|
+| Frequência | 35 | presentes ÷ chamadas do período |
+| Regularidade | 20 | domingos com chamada registrada ÷ domingos do período |
+| Tendência | 20 | frequência da 2ª metade do período vs. a 1ª |
+| Visitantes | 15 | visitantes recebidos na 2ª metade vs. a 1ª |
+| Faltosos recorrentes | 10 | penalidade — alunos com 3+ faltas seguidas |
+
+Congregação sem visitante nenhum no período não é congregação "falhando em
+receber visita" — não houve visita para medir. Por isso um componente ausente
+**não vira zero**: o peso dele é redistribuído entre os que sobraram, na mesma
+proporção relativa. Com todos os cinco ausentes, a nota é `null` — não existe
+nota de coisa nenhuma, e a tela diz "dados insuficientes" em vez de mostrar um
+zero que pareceria uma avaliação real.
+
+O IGE (o número do Campo) usa a **mesma fórmula sobre a soma de tudo**, não a
+média das notas de cada congregação — evita o paradoxo de Simpson de misturar
+congregações de tamanhos muito diferentes, o mesmo cuidado que já existe no
+Ranking, que compara por taxa e não por total.
+
+Faixas: 🟢 90–100 Excelente · 🟢 80–89 Muito Boa · 🟡 60–79 Atenção · 🔴 abaixo
+de 60 Crítica. Uma congregação com menos de 3 chamadas registradas no período
+(o mesmo piso do Ranking e dos Certificados) não recebe nota — aparece à parte,
+como "dados insuficientes", em vez de uma nota baixa que confundiria "não deu
+para medir" com "está indo mal".
+
+#### Alertas e análise são geração por REGRA, não por um modelo de IA
+
+O pedido chamava esta área de "Análise com Inteligência Artificial". O que está
+implementado é texto gerado por **regra fixa**: cada frase é um molde
+preenchido com um número que a rota já calculou — nunca um resumo escrito por
+um modelo de linguagem consultando o banco. Um LLM pode arredondar para o lado
+errado e dizer que uma congregação cresceu quando na verdade caiu, e ninguém
+perceberia até conferir a tabela; regra fixa não erra desse jeito — ou a
+condição bate com o número, ou a frase não aparece. A arquitetura
+(`lib/relatorios/analise.ts`) está pronta para trocar o gerador por uma chamada
+de IA de verdade no dia em que isso fizer sentido: a função recebe os mesmos
+dados já apurados, sem nenhum acesso a banco.
+
+Pela mesma razão do Índice, os alertas **não** incluem "professor ausente" nem
+"classe sem crescimento há seis meses" — os dois exigiriam dado que não existe,
+e um alerta fabricado pareceria tão confiável quanto os cinco reais.
+
+Verificado com `npm run verificar:bi`: **47 asserções**, sobre os cálculos, a
+classificação em faixas e a geração de alertas e texto — tudo sem banco, porque
+são funções puras.
 
 ### A escala de culto não é um compromisso
 
