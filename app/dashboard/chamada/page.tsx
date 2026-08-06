@@ -162,6 +162,21 @@ function domingoMaisRecente(): string {
 }
 
 export default function ChamadaPage() {
+  const { podeGravar, escopo } = useAcesso();
+  /*
+   * Quem enxerga o campo inteiro escolhe a CONGREGAÇÃO primeiro.
+   *
+   * Com uma classe só, a lista solta de 53 é visual — dá pra reconhecer
+   * "Jovens" ou "Adulto Masculino" de cabeça. Pra quem vê o campo inteiro, a
+   * mesma lista vira 53 nomes soltos sem dizer de qual congregação é cada
+   * um. Nascendo de `escopo`, e não de um interruptor manual, ninguém
+   * precisa configurar nada: quem só tem a própria congregação nunca vê o
+   * passo extra, porque pra ela não existe ambiguidade nenhuma pra resolver.
+   */
+  const precisaEscolherCong = escopo === "campo";
+
+  const [congregacoes, setCongregacoes] = useState<Array<{ id: number; nome: string }>>([]);
+  const [congId, setCongId] = useState<number | null>(null);
   const [classes, setClasses] = useState<Array<{ id: number; nome: string }>>([]);
   const [classeId, setClasseId] = useState<number | null>(null);
   const [data, setData] = useState<string>("");
@@ -178,7 +193,6 @@ export default function ChamadaPage() {
   /** A tela esta mostrando o que ficou guardado, e nao o que o servidor tem. */
   const [semServidor, setSemServidor] = useState(false);
 
-  const { podeGravar } = useAcesso();
   const podeGravarVisitante = podeGravar("visitantes");
   const [incluindoVisitante, setIncluindoVisitante] = useState(false);
   /** Visitantes recebidos nesta classe, neste dia. */
@@ -189,8 +203,42 @@ export default function ChamadaPage() {
   // outro dia para quem esta em Pernambuco.
   useEffect(() => setData(domingoMaisRecente()), []);
 
+  // Quem vê o campo inteiro escolhe a congregação primeiro.
   useEffect(() => {
-    void fetch("/api/classes")
+    if (!precisaEscolherCong) return;
+    void fetch("/api/congregacoes")
+      .then((r) => r.json())
+      .then((d) => {
+        const lista = (d.itens ?? []).map((c: { id: number; nome: string }) => ({
+          id: c.id,
+          nome: c.nome || `Congregação ${c.id}`,
+        }));
+        setCongregacoes(lista);
+      })
+      .catch(() => setErro("Não foi possível carregar as congregações."));
+  }, [precisaEscolherCong]);
+
+  useEffect(() => {
+    /*
+     * Quem enxerga uma congregação só nunca vê o passo da congregação — a
+     * classe já vem filtrada pelo servidor, e a busca acontece assim que a
+     * tela abre.
+     *
+     * Quem enxerga o campo espera ESCOLHER a congregação antes: sem isso, a
+     * troca de congregação buscaria a lista inteira do campo (53 classes)
+     * para depois filtrar no navegador, e a pessoa veria por um instante
+     * classes de congregação nenhuma em particular.
+     */
+    if (precisaEscolherCong && congId === null) {
+      setClasses([]);
+      setClasseId(null);
+      return;
+    }
+
+    const url = new URL("/api/classes", window.location.origin);
+    if (precisaEscolherCong && congId !== null) url.searchParams.set("cong", String(congId));
+
+    void fetch(url)
       .then((r) => r.json())
       .then((d) => {
         const lista = (d.itens ?? []).map((c: { id: number; nome: string }) => ({
@@ -198,10 +246,14 @@ export default function ChamadaPage() {
           nome: c.nome,
         }));
         setClasses(lista);
-        setClasseId((atual) => atual ?? lista[0]?.id ?? null);
+        // Trocar de congregação troca a classe também: a selecionada pode não
+        // existir mais na lista nova.
+        setClasseId((atual) =>
+          atual && lista.some((c: { id: number }) => c.id === atual) ? atual : lista[0]?.id ?? null,
+        );
       })
       .catch(() => setErro("Não foi possível carregar as classes."));
-  }, []);
+  }, [precisaEscolherCong, congId]);
 
   useEffect(() => {
     if (!classeId || !data) return;
@@ -449,7 +501,20 @@ export default function ChamadaPage() {
         descricao="Marque a presença da classe neste domingo"
       >
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          <Filtro rotulo="Classe" opcoes={classes} valor={classeId} aoMudar={setClasseId} />
+          {precisaEscolherCong && (
+            <Filtro
+              rotulo="Congregação"
+              opcoes={congregacoes}
+              valor={congId}
+              aoMudar={setCongId}
+            />
+          )}
+          <Filtro
+            rotulo="Classe"
+            opcoes={classes}
+            valor={classeId}
+            aoMudar={setClasseId}
+          />
           <label className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem]">
             <span className="shrink-0 text-brand-200/55">Data</span>
             <input
@@ -499,7 +564,13 @@ export default function ChamadaPage() {
       {carregando ? (
         <EsqueletoLista />
       ) : !chamada ? (
-        <EstadoVazio mensagem="Escolha uma classe para começar." />
+        <EstadoVazio
+          mensagem={
+            precisaEscolherCong && congId === null
+              ? "Escolha a congregação para começar."
+              : "Escolha uma classe para começar."
+          }
+        />
       ) : chamada.alunos.length === 0 ? (
         <EstadoVazio
           mensagem={`A classe ${chamada.classe.nome} não tem alunos ativos.`}
