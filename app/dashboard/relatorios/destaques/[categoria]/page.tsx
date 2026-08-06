@@ -75,7 +75,9 @@ export default function DetalheDestaquePage({ params }: { params: Promise<{ cate
         setErro(null);
         const res = await fetch(`/api/relatorios/destaques?${params}`, { signal: controle.signal, cache: "no-store" });
         const corpo = await res.json();
-        if (!res.ok) throw new Error(corpo?.erro ?? `HTTP ${res.status}`);
+        if (!res.ok) {
+          throw new Error([corpo?.erro, corpo?.motivo].filter(Boolean).join(" — ") || `HTTP ${res.status}`);
+        }
         setDados(corpo);
 
         const detalhe = (corpo.categorias as Categorias)[chave];

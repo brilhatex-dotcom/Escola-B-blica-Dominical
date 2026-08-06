@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { erro, responder } from "@/lib/api";
+import { erro } from "@/lib/api";
 import { escopoDaRota } from "@/lib/auth/escopo";
 import { dataOu, MINIMO_DE_CHAMADAS, recorteSql } from "@/lib/relatorios/comum";
 import { inicioDoMes, inicioDoTrimestre } from "@/lib/dashboard/destaque";
@@ -75,7 +76,7 @@ export async function GET(req: Request) {
     ate = hoje;
   }
 
-  return responder(async () => {
+  try {
     const ctx: Contexto = { de, ate };
     const [congregacoes, classes, professores] = await Promise.all([
       metricasCongregacoes(ctx),
@@ -178,13 +179,27 @@ export async function GET(req: Request) {
     const vejoOCampoTodo = recorte === undefined;
     const hallDaFama = vejoOCampoTodo ? await montarHallDaFama(hoje) : null;
 
-    return {
+    return NextResponse.json({
       periodo: { de: iso(de), ate: iso(ate), modo },
       categorias,
       hallDaFama,
       vejoOCampoTodo,
-    };
-  });
+    });
+  } catch (e) {
+    /*
+     * O erro de verdade vai no corpo da resposta, temporariamente — o mesmo
+     * padrão já usado em `/api/painel` (campo `motivo`) para quem administra
+     * conseguir descrever o problema sem precisar abrir o log da Vercel. Uma
+     * rota nova e grande como esta tem mais chance de esbarrar num detalhe do
+     * banco de produção que o ambiente de desenvolvimento não replica —
+     * melhor mostrar o motivo técnico aqui do que só "não foi possível".
+     */
+    console.error("[destaques] falhou:", e);
+    return NextResponse.json(
+      { erro: "Não foi possível calcular os destaques.", motivo: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }
 
 function iso(d: Date): string {
