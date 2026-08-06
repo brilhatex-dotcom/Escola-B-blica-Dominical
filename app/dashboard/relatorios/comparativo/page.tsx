@@ -147,7 +147,9 @@ export default function ComparativoPage() {
         url.searchParams.set("cong", selecionadas.join(","));
         const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
         const corpo = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(corpo.erro ?? `HTTP ${res.status}`);
+        if (!res.ok) {
+          throw new Error([corpo?.erro, corpo?.motivo].filter(Boolean).join(" — ") || `HTTP ${res.status}`);
+        }
         setDados(corpo);
       } catch (e) {
         if ((e as Error).name === "AbortError") return;

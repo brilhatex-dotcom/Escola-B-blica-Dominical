@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { erro, responder } from "@/lib/api";
+import { erro } from "@/lib/api";
 import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 import { dataOu, MINIMO_DE_CHAMADAS, periodoPadrao, recorteSql } from "@/lib/relatorios/comum";
 import {
@@ -50,7 +51,7 @@ export async function GET(req: Request) {
   const problema = validarSelecaoComparativo(ids);
   if (problema) return erro(problema, 400);
 
-  return responder(async () => {
+  try {
     const { de: deP, ate: ateP } = periodoPadrao();
     const de = dataOu(url.searchParams.get("de"), deP);
     const ate = dataOu(url.searchParams.get("ate"), ateP);
@@ -236,10 +237,22 @@ export async function GET(req: Request) {
       };
     });
 
-    return {
+    return NextResponse.json({
       periodo: { de: de.toISOString().slice(0, 10), ate: ate.toISOString().slice(0, 10) },
       congregacoes,
       limites: { minimo: COMPARATIVO_MINIMO, maximo: COMPARATIVO_MAXIMO },
-    };
-  });
+    });
+  } catch (e) {
+    /*
+     * O erro de verdade vai no corpo da resposta, temporariamente — o mesmo
+     * padrão já usado em `/api/relatorios/destaques` e `/api/painel` (campo
+     * `motivo`), para quem administra conseguir descrever o problema sem
+     * precisar abrir o log da Vercel.
+     */
+    console.error("[comparativo] falhou:", e);
+    return NextResponse.json(
+      { erro: "Não foi possível calcular o comparativo.", motivo: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
 }
