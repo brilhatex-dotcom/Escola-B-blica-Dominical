@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Phone, UserRoundPlus } from "lucide-react";
+import { Check, MapPin, Phone, Plus, UserRoundPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   CabecalhoModulo,
   EsqueletoLista,
@@ -11,6 +12,9 @@ import {
   EstadoVazio,
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { diaEMes, iniciais } from "@/lib/dashboard/formato";
 
 /**
@@ -25,6 +29,10 @@ interface VisitanteLista {
   id: number;
   nome: string;
   idade: number | null;
+  nasc: string | null;
+  local: string | null;
+  /** Calculada no servidor: da data de nascimento, ou da idade herdada. */
+  anos: number | null;
   tel: string | null;
   obs: string | null;
   data: string;
@@ -33,6 +41,34 @@ interface VisitanteLista {
 }
 
 export default function VisitantesPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("visitantes");
+
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<VisitanteLista | null>(null);
+  const [recarga, setRecarga] = useState(0);
+
+  /** Manda ao servidor e recarrega. Devolve a mensagem de erro, se houver. */
+  const gravar = useCallback(
+    async (url: string, metodo: string, corpo: unknown): Promise<string | void> => {
+      try {
+        const res = await fetch(url, {
+          method: metodo,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) return dados.erro ?? "Não foi possível salvar.";
+        if (dados.mensagem) setAviso(dados.mensagem);
+        setRecarga((n) => n + 1);
+      } catch {
+        return "Sem resposta do servidor. Verifique a conexão.";
+      }
+    },
+    [],
+  );
+
   const [classe, setClasse] = useState<number | null>(null);
   const [classes, setClasses] = useState<Array<{ id: number; nome: string }>>([]);
   const [itens, setItens] = useState<VisitanteLista[] | null>(null);
@@ -79,7 +115,7 @@ export default function VisitantesPage() {
       }
     })();
     return () => controle.abort();
-  }, [classe]);
+  }, [classe, recarga]);
 
   return (
     <>
@@ -89,8 +125,23 @@ export default function VisitantesPage() {
         descricao="Recebidos na Escola Bíblica, do mais recente ao mais antigo"
         total={total}
       >
-        <Filtro rotulo="Classe" opcoes={classes} valor={classe} aoMudar={setClasse} />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Filtro rotulo="Classe" opcoes={classes} valor={classe} aoMudar={setClasse} />
+          {podeMexer && (
+            <Button size="sm" onClick={() => setCriando(true)}>
+              <Plus className="h-4 w-4" />
+              Novo visitante
+            </Button>
+          )}
+        </div>
       </CabecalhoModulo>
+
+      {aviso && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-2.5 text-[0.82rem] text-emerald-200">
+          <Check className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{aviso}</span>
+        </div>
+      )}
 
       {erro ? (
         <EstadoErro mensagem={erro} />
@@ -135,15 +186,127 @@ export default function VisitantesPage() {
                     {v.tel}
                   </span>
                 )}
-                {v.idade !== null && <Badge variant="neutro">{v.idade} anos</Badge>}
+                {v.local && (
+                  <span className="hidden max-w-[10rem] items-center gap-1.5 truncate text-[0.74rem] text-brand-200/55 md:flex">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{v.local}</span>
+                  </span>
+                )}
+                {/*
+                  `anos` vem calculado do servidor porque a fonte muda conforme a
+                  época do registro: nos visitantes novos sai da data de
+                  nascimento; nos 89 herdados, do número solto que a planilha
+                  trazia. A tela não precisa saber de qual dos dois veio.
+                */}
+                {v.anos !== null && <Badge variant="neutro">{v.anos} anos</Badge>}
                 <span className="w-16 shrink-0 text-right text-[0.74rem] tabular-nums text-brand-200/55">
                   {diaEMes(new Date(v.data))}
                 </span>
+
+                {podeMexer && (
+                  <AcoesDoRegistro
+                    nome={v.nome}
+                    onEditar={() => setEmEdicao(v)}
+                    aviso={`${v.nome} será excluído definitivamente. Visitante não tem histórico ligado, então não há o que arquivar.`}
+                    onExcluir={async () => {
+                      await gravar(`/api/visitantes/${v.id}`, "DELETE", {});
+                    }}
+                  />
+                )}
               </div>
             </motion.li>
           ))}
         </ul>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Novo visitante"
+        descricao="A congregação vem da classe escolhida."
+        campos={camposDoVisitante(classes)}
+        valores={{
+          nome: "",
+          classeId: classe ? String(classe) : "",
+          data: hojeCivil(),
+          nasc: "",
+          local: "",
+          tel: "",
+          obs: "",
+        }}
+        rotuloGravar="Registrar"
+        aoGravar={(v) =>
+          gravar("/api/visitantes", "POST", {
+            nome: v.nome,
+            classeId: v.classeId ? Number(v.classeId) : null,
+            data: v.data,
+            nasc: v.nasc || null,
+            local: v.local,
+            tel: v.tel,
+            obs: v.obs,
+          })
+        }
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar visitante"
+        campos={camposDoVisitante(classes).filter((c) => c.chave !== "classeId" && c.chave !== "data")}
+        valores={{
+          nome: emEdicao?.nome ?? "",
+          nasc: emEdicao?.nasc?.slice(0, 10) ?? "",
+          local: emEdicao?.local ?? "",
+          tel: emEdicao?.tel ?? "",
+          obs: emEdicao?.obs ?? "",
+        }}
+        aoGravar={(v) =>
+          gravar(`/api/visitantes/${emEdicao?.id}`, "PATCH", {
+            nome: v.nome,
+            nasc: v.nasc || null,
+            local: v.local,
+            tel: v.tel,
+            obs: v.obs,
+          })
+        }
+      />
     </>
   );
+}
+
+/**
+ * Hoje, no fuso do aparelho.
+ *
+ * Calculado no cliente, e não no servidor: o servidor roda em UTC, num data
+ * center, e às 22h de um sábado em Recife ele já está no domingo — o visitante
+ * de sábado seria registrado no dia seguinte.
+ */
+function hojeCivil(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+function camposDoVisitante(classes: Array<{ id: number; nome: string }>): readonly CampoForm[] {
+  return [
+    { chave: "nome", rotulo: "Nome do visitante", obrigatorio: true, largo: true },
+    { chave: "data", rotulo: "Data da visita", tipo: "data", obrigatorio: true },
+    {
+      chave: "classeId",
+      rotulo: "Classe que visitou",
+      tipo: "lista",
+      opcoes: classes.map((c) => ({ valor: String(c.id), rotulo: c.nome })),
+      ajuda: "Deixe em branco se a pessoa não entrou em nenhuma sala.",
+    },
+    { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+    {
+      chave: "local",
+      rotulo: "Onde mora",
+      placeholder: "bairro, sítio ou povoado",
+      ajuda: "Texto livre — a zona rural do campo não cabe numa lista de bairros.",
+    },
+    { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+    { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
+  ];
 }

@@ -24,6 +24,7 @@ import { FormularioModal, type CampoForm } from "@/components/crud/FormularioMod
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { CATEGORIAS_DE_CLASSE, faixaSugerida, rotuloDaCategoria } from "@/lib/ebd/categorias";
 import { idadeEm } from "@/lib/ebd/idade";
+import { POSICOES, nomeComTratamento, rotuloDaPosicao } from "@/lib/ebd/posicoes";
 import { diaEMes, iniciais } from "@/lib/dashboard/formato";
 
 /**
@@ -53,6 +54,7 @@ interface AlunoDaClasse {
   nasc: string | null;
   tel: string | null;
   resp: string | null;
+  posicao: string | null;
   ativo: boolean;
   presencas: number;
 }
@@ -81,8 +83,15 @@ interface DetalheClasse {
 }
 
 const CAMPOS_ALUNO: readonly CampoForm[] = [
-  { chave: "nome", rotulo: "Nome do aluno", obrigatorio: true, largo: true },
+  { chave: "nome", rotulo: "Nome completo", obrigatorio: true, largo: true },
   { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+  {
+    chave: "posicao",
+    rotulo: "Posição no ministério",
+    tipo: "lista",
+    opcoes: POSICOES.map((p) => ({ valor: p.chave, rotulo: p.rotulo })),
+    ajuda: "Define o tratamento (Pr., Ev., Pb., Dc., Aux.). Não é cargo da EBD.",
+  },
   { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
   {
     chave: "resp",
@@ -343,9 +352,12 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
                 </span>
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[0.86rem] text-brand-50">{a.nome}</p>
+                  <p className="truncate text-[0.86rem] text-brand-50">
+                    {nomeComTratamento(a.nome, a.posicao)}
+                  </p>
                   <p className="truncate text-[0.72rem] text-brand-200/50">
                     {a.nasc ? `${idadeEm(a.nasc)} anos` : "idade não informada"}
+                    {a.posicao && ` · ${rotuloDaPosicao(a.posicao)}`}
                     {a.resp && ` · resp. ${a.resp}`}
                     {!a.ativo && " · arquivado"}
                   </p>
@@ -423,12 +435,13 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
         titulo="Matricular aluno"
         descricao={`Ele entra direto na classe ${classe.nome}.`}
         campos={CAMPOS_ALUNO}
-        valores={{ nome: "", nasc: "", tel: "", resp: "" }}
+        valores={{ nome: "", nasc: "", posicao: "", tel: "", resp: "" }}
         rotuloGravar="Matricular"
         aoGravar={(v) =>
           gravar("/api/alunos", "POST", {
             nome: v.nome,
             nasc: v.nasc || null,
+            posicao: v.posicao || null,
             tel: v.tel,
             resp: v.resp,
             classeId: classe.id,
@@ -444,6 +457,7 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
         valores={{
           nome: alunoEmEdicao?.nome ?? "",
           nasc: alunoEmEdicao?.nasc?.slice(0, 10) ?? "",
+          posicao: alunoEmEdicao?.posicao ?? "",
           tel: alunoEmEdicao?.tel ?? "",
           resp: alunoEmEdicao?.resp ?? "",
         }}
@@ -451,6 +465,7 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
           gravar(`/api/alunos/${alunoEmEdicao?.id}`, "PATCH", {
             nome: v.nome,
             nasc: v.nasc || null,
+            posicao: v.posicao || null,
             tel: v.tel,
             resp: v.resp,
           })

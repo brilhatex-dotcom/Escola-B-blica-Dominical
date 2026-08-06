@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- Visitantes: data de nascimento e onde mora
+-- Campos novos: visitante (nascimento e local) e aluno (posição no ministério)
 --
 -- COMO APLICAR (sem linha de comando):
 --   1. Abra o projeto ebd-betania no Neon (console.neon.tech)
@@ -33,6 +33,24 @@ ALTER TABLE "Visitantes" ADD COLUMN IF NOT EXISTS "local" TEXT;
 
 
 -- ────────────────────────────────────────────────────────────────────────────
+-- Alunos: posição no ministério
+--
+-- membro · auxiliar · diacono · presbitero · evangelista · pastor
+--
+-- Coluna NOVA e OPCIONAL: nasce nula nas 323 linhas herdadas, sem alterar
+-- nenhuma delas. É dela que sai o tratamento na exibição ("Pb. José Raimundo"),
+-- em vez de o tratamento ser digitado junto do nome — foi escrevê-lo à mão que
+-- fez o sistema antigo ter "Silvério" e "Aux. Silverio" como duas pessoas.
+--
+-- NÃO se confunde com `Cargos`/`PessoaCargos`, que guardam o que a pessoa faz
+-- na EBD e decidem o acesso ao portal. Um Presbítero pode não dar aula nenhuma,
+-- e um Professor pode ser Membro. Se fossem o mesmo campo, "Pastor" viraria um
+-- cargo da EBD e abriria portas que não são dele.
+-- ────────────────────────────────────────────────────────────────────────────
+ALTER TABLE "Alunos" ADD COLUMN IF NOT EXISTS "posicao" TEXT;
+
+
+-- ────────────────────────────────────────────────────────────────────────────
 -- Conferência
 --
 -- As duas colunas novas devem aparecer, e a contagem de visitantes e de idades
@@ -42,4 +60,6 @@ SELECT
   (SELECT count(*) FROM "Visitantes")                              AS "visitantes (esperado 89)",
   (SELECT count(*) FROM "Visitantes" WHERE "idade" IS NOT NULL)    AS "idades antigas preservadas",
   (SELECT count(*) FROM "Visitantes" WHERE "nasc"  IS NOT NULL)    AS "com data de nascimento",
-  (SELECT count(*) FROM "Visitantes" WHERE "local" IS NOT NULL)    AS "com local informado";
+  (SELECT count(*) FROM "Visitantes" WHERE "local" IS NOT NULL)    AS "com local informado",
+  (SELECT count(*) FROM "Alunos")                                  AS "alunos intactos (esperado 323)",
+  (SELECT count(*) FROM "Alunos" WHERE "posicao" IS NOT NULL)      AS "alunos com posicao (esperado 0)";

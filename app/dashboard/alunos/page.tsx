@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Cake, GraduationCap, Phone } from "lucide-react";
+import { Cake, Check, GraduationCap, Phone, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   CabecalhoModulo,
   CampoDeBusca,
@@ -12,6 +13,10 @@ import {
   EstadoVazio,
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
+import { POSICOES, rotuloDaPosicao } from "@/lib/ebd/posicoes";
 import { diaEMes, iniciais } from "@/lib/dashboard/formato";
 
 /**
@@ -28,6 +33,7 @@ interface AlunoLista {
   nasc: string | null;
   tel: string | null;
   resp: string | null;
+  posicao: string | null;
   ativo: boolean;
   classe: { id: number; nome: string; faixa: string } | null;
   congregacao: { id: number; nome: string } | null;
@@ -39,12 +45,42 @@ interface ClasseOpcao {
 }
 
 export default function AlunosPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("alunos");
+
   const [busca, setBusca] = useState("");
   const [classe, setClasse] = useState<number | null>(null);
   const [itens, setItens] = useState<AlunoLista[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [classes, setClasses] = useState<ClasseOpcao[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<AlunoLista | null>(null);
+  const [recarga, setRecarga] = useState(0);
+
+  /** Manda ao servidor e recarrega. Devolve a mensagem de erro, se houver. */
+  const gravar = useCallback(
+    async (url: string, metodo: string, corpo: unknown): Promise<string | void> => {
+      try {
+        const res = await fetch(url, {
+          method: metodo,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) return dados.erro ?? "Não foi possível salvar.";
+        // A resposta da exclusão diz se APAGOU ou apenas arquivou, e a tela
+        // repete isso: responder "excluído" e deixar o aluno na lista de
+        // inativos, sem avisar, ensina a não confiar no botão.
+        if (dados.mensagem) setAviso(dados.mensagem);
+        setRecarga((n) => n + 1);
+      } catch {
+        return "Sem resposta do servidor. Verifique a conexão.";
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void fetch("/api/classes")
@@ -90,7 +126,7 @@ export default function AlunosPage() {
       controle.abort();
       window.clearTimeout(t);
     };
-  }, [busca, classe]);
+  }, [busca, classe, recarga]);
 
   return (
     <>
@@ -108,8 +144,21 @@ export default function AlunosPage() {
             className="min-w-0 flex-1 sm:w-64 sm:flex-none"
           />
           <Filtro rotulo="Classe" opcoes={classes} valor={classe} aoMudar={setClasse} />
+          {podeMexer && (
+            <Button size="sm" onClick={() => setCriando(true)}>
+              <Plus className="h-4 w-4" />
+              Novo aluno
+            </Button>
+          )}
         </div>
       </CabecalhoModulo>
+
+      {aviso && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-2.5 text-[0.82rem] text-emerald-200">
+          <Check className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{aviso}</span>
+        </div>
+      )}
 
       {erro ? (
         <EstadoErro mensagem={erro} />
@@ -160,12 +209,109 @@ export default function AlunosPage() {
                     {a.tel}
                   </span>
                 )}
+                {/*
+                  A posição no ministério vem ANTES da faixa etária.
+                  "Pb." e "Dc." mudam como a pessoa é tratada na igreja; a faixa
+                  etária é atributo da classe, não dela.
+                */}
+                {a.posicao && <Badge variant="alerta">{rotuloDaPosicao(a.posicao)}</Badge>}
                 {a.classe?.faixa && <Badge variant="info">{a.classe.faixa}</Badge>}
+
+                {podeMexer && (
+                  <AcoesDoRegistro
+                    nome={a.nome}
+                    onEditar={() => setEmEdicao(a)}
+                    onExcluir={async () => {
+                      await gravar(`/api/alunos/${a.id}`, "DELETE", {});
+                    }}
+                  />
+                )}
               </div>
             </motion.li>
           ))}
         </ul>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Novo aluno"
+        descricao="A congregação vem da classe escolhida — não precisa informar."
+        campos={camposDoAluno(classes)}
+        valores={{ nome: "", classeId: classe ? String(classe) : "", nasc: "", posicao: "", tel: "", resp: "" }}
+        rotuloGravar="Matricular"
+        aoGravar={(v) =>
+          gravar("/api/alunos", "POST", {
+            nome: v.nome,
+            classeId: Number(v.classeId),
+            nasc: v.nasc || null,
+            posicao: v.posicao || null,
+            tel: v.tel,
+            resp: v.resp,
+          })
+        }
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar aluno"
+        campos={camposDoAluno(classes)}
+        valores={{
+          nome: emEdicao?.nome ?? "",
+          classeId: emEdicao?.classe ? String(emEdicao.classe.id) : "",
+          nasc: emEdicao?.nasc?.slice(0, 10) ?? "",
+          posicao: emEdicao?.posicao ?? "",
+          tel: emEdicao?.tel ?? "",
+          resp: emEdicao?.resp ?? "",
+        }}
+        aoGravar={(v) =>
+          gravar(`/api/alunos/${emEdicao?.id}`, "PATCH", {
+            nome: v.nome,
+            classeId: Number(v.classeId),
+            nasc: v.nasc || null,
+            posicao: v.posicao || null,
+            tel: v.tel,
+            resp: v.resp,
+          })
+        }
+      />
     </>
   );
+}
+
+/**
+ * Os campos do cadastro de aluno.
+ *
+ * É uma função, e não uma constante, porque a lista de classes só existe depois
+ * que o servidor responde. Uma constante montada na carga do módulo teria o
+ * seletor de classe permanentemente vazio.
+ */
+function camposDoAluno(classes: ClasseOpcao[]): readonly CampoForm[] {
+  return [
+    { chave: "nome", rotulo: "Nome completo", obrigatorio: true, largo: true },
+    {
+      chave: "classeId",
+      rotulo: "Classe",
+      tipo: "lista",
+      obrigatorio: true,
+      opcoes: classes.map((c) => ({ valor: String(c.id), rotulo: c.nome })),
+      ajuda: "A congregação do aluno acompanha a classe.",
+    },
+    { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+    {
+      chave: "posicao",
+      rotulo: "Posição no ministério",
+      tipo: "lista",
+      opcoes: POSICOES.map((p) => ({ valor: p.chave, rotulo: p.rotulo })),
+      ajuda: "Define o tratamento (Pr., Ev., Pb., Dc., Aux.). Não é cargo da EBD.",
+    },
+    { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+    {
+      chave: "resp",
+      rotulo: "Responsável",
+      largo: true,
+      ajuda: "Para crianças e adolescentes — quem procurar em caso de necessidade.",
+    },
+  ];
 }

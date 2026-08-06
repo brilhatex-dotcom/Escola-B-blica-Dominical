@@ -12,6 +12,7 @@ import {
   textoOpcional,
 } from "@/lib/api";
 import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
+import { CHAVES_POSICAO } from "@/lib/ebd/posicoes";
 import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 
 /**
@@ -93,6 +94,7 @@ export async function GET(req: Request) {
           nasc: true,
           tel: true,
           resp: true,
+          posicao: true,
           ativo: true,
           classe: { select: { id: true, nome: true, faixa: true } },
           congregacao: { select: { id: true, nome: true } },
@@ -125,6 +127,10 @@ export async function POST(req: Request) {
   const classeId = Number.isInteger(corpo.classeId) ? (corpo.classeId as number) : null;
   if (!classeId) return erro("Escolha a classe do aluno.", 400);
 
+  if (corpo.posicao && !posicaoValida(corpo.posicao)) {
+    return erro("Posição no ministério inválida.", 400);
+  }
+
   return responder(async () => {
     const classe = await prisma.classe.findUnique({
       where: { id: classeId },
@@ -142,6 +148,9 @@ export async function POST(req: Request) {
           nasc: dataCivil(corpo.nasc),
           tel: textoOpcional(corpo.tel, 30),
           resp: textoOpcional(corpo.resp, 120),
+          // Posicao desconhecida vira null em vez de ser gravada: um valor fora
+          // da lista nao teria tratamento nem ordem, e apareceria cru na tela.
+          posicao: posicaoValida(corpo.posicao),
           classeId: classe.id,
           congId: classe.congId,
           ativo: true,
@@ -150,4 +159,9 @@ export async function POST(req: Request) {
       });
     });
   });
+}
+
+/** A posição, se for uma das reconhecidas. Ver lib/ebd/posicoes.ts. */
+function posicaoValida(valor: unknown): string | null {
+  return typeof valor === "string" && CHAVES_POSICAO.includes(valor) ? valor : null;
 }

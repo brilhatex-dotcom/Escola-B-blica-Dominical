@@ -9,6 +9,7 @@ import {
 } from "@/lib/api";
 import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
 import { excluirOuArquivar } from "@/lib/api/exclusao";
+import { CHAVES_POSICAO } from "@/lib/ebd/posicoes";
 
 /**
  * Um aluno: editar e excluir.
@@ -77,6 +78,14 @@ export async function PATCH(req: Request, { params }: Contexto) {
         ...(corpo.nasc !== undefined ? { nasc: dataCivil(corpo.nasc) } : {}),
         ...(corpo.tel !== undefined ? { tel: textoOpcional(corpo.tel, 30) } : {}),
         ...(corpo.resp !== undefined ? { resp: textoOpcional(corpo.resp, 120) } : {}),
+        ...(corpo.posicao !== undefined
+          ? {
+              posicao:
+                typeof corpo.posicao === "string" && CHAVES_POSICAO.includes(corpo.posicao)
+                  ? corpo.posicao
+                  : null,
+            }
+          : {}),
         ...(classeId !== undefined ? { classeId } : {}),
         ...(congId !== undefined ? { congId } : {}),
         ...(typeof corpo.ativo === "boolean" ? { ativo: corpo.ativo } : {}),

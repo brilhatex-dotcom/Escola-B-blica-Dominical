@@ -116,6 +116,14 @@ model Aluno {
   /// estoura Int32 e telefone nao e aritmetica.
   tel      String?
   resp     String?
+  /// Posicao no ministerio: membro, auxiliar, diacono, presbitero, evangelista,
+  /// pastor. Ver lib/ebd/posicoes.ts.
+  ///
+  /// Coluna NOVA e opcional: nasce nula nas 323 linhas herdadas, sem alterar
+  /// nenhuma delas. NAO se confunde com `Cargos`/`PessoaCargos`, que guardam o
+  /// que a pessoa faz na EBD e decidem o acesso ao portal — um Presbitero pode
+  /// nao dar aula nenhuma, e um Professor pode ser Membro.
+  posicao  String?
   congId   Int?
   classeId Int?
   ativo    Boolean   @default(true)
