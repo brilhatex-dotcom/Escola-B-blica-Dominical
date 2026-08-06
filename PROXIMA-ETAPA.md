@@ -1,10 +1,10 @@
 # Continuação — o próximo pedido do usuário (confirme antes de escolher)
 
-> Fase 19 (prontuário da congregação, drill-down do Painel) foi entregue
-> depois da 18, também fora de qualquer ordem proposta anteriormente — o
-> usuário segue mandando ajustes concretos ao vivo, testando o portal
-> publicado. Isso é esperado neste projeto: trate cada pedido novo como a
-> prioridade do momento, não como quebra do plano.
+> Fase 20 (Destaque com período escolhido na tela) foi entregue depois da 19,
+> também fora de qualquer ordem proposta anteriormente — o usuário segue
+> mandando ajustes concretos ao vivo, testando o portal publicado. Isso é
+> esperado neste projeto: trate cada pedido novo como a prioridade do
+> momento, não como quebra do plano.
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -59,6 +59,26 @@ Substitui um sistema antigo em Google Apps Script.
 | 17 | **Relatório Semanal (modelo da Superintendência das EDs) + saudação completa do Dashboard** |
 | 18 | **Novo Login cria contas de campo (Gestor Local/Supervisor/Secretário Geral), aniversariantes liberados pra todo o campo, cartão Congregação/Classe Destaque no Dashboard** |
 | 19 | **Prontuário da congregação — drill-down completo a partir do cartão do Painel: cabeçalho, resumo, gráficos, classes, professores, visitantes, indicadores, análise, comparativos, ranking, alertas, histórico** |
+| 20 | **Destaque do Dashboard com período escolhido na tela (De/Até), além de Mês e Trimestre** |
+
+## O que a Fase 20 entregou (para não refazer)
+
+Pedido direto sobre o cartão "Destaque" (Fase 18): poder filtrar por data
+selecionável, além dos botões fixos de Mês/Trimestre.
+
+1. **`DestaqueCard`** ganhou uma terceira aba "Período", com dois campos de
+   data (De/Até). Mudar a data busca (com 350ms de espera, evitando uma
+   requisição por dígito) o destaque daquele intervalo exato, sem recarregar
+   o resto do Dashboard.
+2. **`/api/dashboard/destaque?de=&ate=`** (nova rota) — devolve só o que o
+   cartão precisa, chamando a mesma `lerDestaquesDoAgrupamento` de sempre
+   (agora exportada de `lib/dashboard/consultas.ts`). Valida as duas datas,
+   `de <= ate`, e um teto de 366 dias.
+3. Todas as regras do Destaque original continuam valendo sem exceção: piso
+   de 3 domingos com chamada, Congregação Destaque sem recorte (campo
+   inteiro), Classe Destaque recortada pelo acesso de quem pede.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ## O que a Fase 19 entregou (para não refazer)
 

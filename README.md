@@ -654,6 +654,49 @@ Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ---
 
+## Fase 20 — Destaque com período escolhido na tela
+
+Pedido direto sobre o cartão "Destaque" do Dashboard (Fase 18): além de Mês e
+Trimestre, poder escolher datas quaisquer.
+
+### Uma terceira aba, "Período", com dois seletores de data
+
+`DestaqueCard` ganhou uma terceira opção ao lado de Mês/Trimestre. Ao
+escolher "Período", aparecem dois campos de data (De/Até, iniciando no mês
+corrente) — mudar qualquer um deles busca o destaque daquele intervalo
+exato.
+
+### Por que uma rota nova, em vez de mais um parâmetro em `/api/painel`
+
+`/api/painel` monta o Dashboard inteiro numa chamada só, de propósito — a
+tela não pode montar aos pedaços na abertura. Mas isso significa que trocar
+só a data do Destaque não pode obrigar a recarregar os quatro números, o
+gráfico e as atividades recentes de novo — seria pedir o bolo inteiro para
+trocar a cobertura.
+
+`/api/dashboard/destaque?de=&ate=` (nova rota) devolve só o que o cartão
+precisa, chamando a MESMA função de sempre (`lerDestaquesDoAgrupamento`,
+agora exportada de `lib/dashboard/consultas.ts` — antes só `lerDestaques`
+a usava para o mês e o trimestre corrente). O resto do painel não é tocado.
+
+**Disciplinas mantidas do Destaque original (Fase 18), sem exceção pelo
+período ser livre:**
+- Congregação Destaque continua sem recorte (campo inteiro, para todos);
+  Classe Destaque continua recortada pelo acesso de quem pede.
+- O piso de 3 domingos com chamada continua valendo — um período de 2 dias
+  não produz vencedor nenhum, só "sem dado suficiente".
+- Intervalo limitado a 366 dias (`LIMITE_DIAS`) — não é sobre desempenho, é
+  sobre a pergunta continuar fazendo sentido: "destaque" pede um recorte de
+  tempo, não o histórico inteiro do campo de uma vez.
+
+A busca espera 350ms depois da última mudança de data antes de buscar (evita
+uma requisição por dígito digitado no campo), e o cartão mostra "Calculando…"
+e erros de rede só ali dentro — nunca derruba o resto do Dashboard.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"

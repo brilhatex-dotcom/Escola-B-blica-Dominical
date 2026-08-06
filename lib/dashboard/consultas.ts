@@ -559,7 +559,12 @@ interface LinhaBrutaDestaque {
   domingosComVisitante: number;
 }
 
-async function lerDestaquesDoAgrupamento(
+/**
+ * Exportada (e não só usada por `lerDestaques` abaixo) porque `/api/dashboard/destaque`
+ * (Fase 20) a chama direto, com um período ESCOLHIDO NA TELA — não apenas o
+ * mês ou o trimestre corrente. É a mesma conta, com `de`/`ate` livres.
+ */
+export async function lerDestaquesDoAgrupamento(
   coluna: "congId" | "classeId",
   de: Date,
   ate: Date,
