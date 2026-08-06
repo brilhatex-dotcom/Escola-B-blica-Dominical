@@ -628,12 +628,12 @@ async function metricasProfessores(ctx: Contexto, recorte: Recorte): Promise<Met
     WITH chamadas AS (
       SELECT f."classeId" AS chave, f.data, COUNT(*) AS chamados, COUNT(*) FILTER (WHERE f.presente) AS presentes
       FROM "Frequencias" f
-      WHERE f.data >= ${de} AND f.data <= ${ate} AND f."classeId" = ANY(${classeIds})
+      WHERE f.data >= ${de} AND f.data <= ${ate} AND f."classeId" IN (${Prisma.join(classeIds)})
       GROUP BY f."classeId", f.data
     ),
     visitas AS (
       SELECT v."classeId" AS chave, v.data FROM "Visitantes" v
-      WHERE v.data >= ${de} AND v.data <= ${ate} AND v."classeId" = ANY(${classeIds})
+      WHERE v.data >= ${de} AND v.data <= ${ate} AND v."classeId" IN (${Prisma.join(classeIds)})
       GROUP BY v."classeId", v.data
     )
     SELECT c.chave AS "classeId", COUNT(DISTINCT c.data)::int AS domingos, SUM(c.chamados)::int AS chamados,
