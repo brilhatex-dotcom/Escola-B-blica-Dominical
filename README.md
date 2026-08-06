@@ -195,9 +195,9 @@ casamento é por normalização. **O que não casa fica de fora do valor**, e a 
 diz quantas classes são — tratar categoria ausente como zero produziria um total
 menor que o real, com aparência de conferido.
 
-O ajuste de quantidade é **rascunho e some ao sair**, e a tela avisa. Um número
-que a pessoa digita e o sistema esquece sem avisar é pior do que um rascunho
-assumido.
+*(O parágrafo acima descrevia um ajuste de quantidade que era rascunho e sumia
+ao sair da tela — essa limitação foi substituída na Fase 15b pelo pedido de
+verdade, com rascunho salvo no banco e confirmação. Ver abaixo.)*
 
 ### Fase 15a — Central de Revistas CPAD: painel do trimestre e alertas
 
@@ -254,13 +254,66 @@ por prioridade: pagamento vencido (crítico) > prazo encerrando em até 14 dias
 congregação com prazo ainda longe e nada pago não gera alerta — é o andamento
 normal do início do trimestre, não um aviso.
 
-Verificado com `npm run verificar:revistas`: **27 asserções**, sobre os
-limites exatos de cada nível de prazo, as cinco situações de congregação, os
-quatro estados do trimestre e a prioridade dos alertas — tudo sem banco.
-
 **Precisa aplicar no banco:** `prisma/aplicar-fase-15a.sql` — duas colunas
 novas em `Trimestres_Revistas` (`tema`, `dataLimitePedido`), as duas nulas em
 todo trimestre já cadastrado.
+
+### Fase 15b — o pedido é DIGITADO e CONFIRMADO, não só calculado
+
+A Fase 15a calculava o total sozinha e só deixava registrar pagamento — não
+existia o momento de "a congregação decidiu e mandou o pedido de verdade". O
+usuário testou a tela e resumiu o problema numa frase: *"parece que só
+visualizo"*. E foi direto ao ponto sobre o que fazer com os números que já
+apareciam calculados: *"zere todos, pois elas vão colocar o novo pedido do IV
+trimestre"*.
+
+**O pedido virou um registro real**, não uma conta em memória:
+
+- Duas tabelas novas — `Pedidos_Revistas` (uma linha por congregação ×
+  trimestre: confirmado ou rascunho, quem e quando confirmou) e
+  `Pedidos_Revistas_Itens` (uma linha por categoria × tipo aluno/professor,
+  com a quantidade e o **preço travado no momento em que foi salva** — não uma
+  referência à tabela de preços, que pode mudar de trimestre a trimestre).
+- **Tela nova `/dashboard/revistas/pedido/[congId]`** ("Fazer Pedido", link em
+  cada card de congregação): uma linha por categoria e tipo, com o preço, um
+  campo de quantidade (que começa em branco — não pré-preenchido com o
+  cálculo automático, exatamente o "zere todos" pedido), e a sugestão
+  calculada ao lado só como referência. Dois botões: "Salvar rascunho" e
+  "Confirmar Pedido".
+- **Confirmar TRAVA.** Depois de confirmado, a quantidade e o preço não mudam
+  mais sozinhos — nem se um aluno sair da classe depois, nem se a tabela de
+  preços for atualizada no trimestre seguinte. Reabrir para editar de novo só
+  a administração do campo pode fazer (`podeReabrir`), a mesma regra de quem
+  define os prazos.
+- **O total que conta para pagamento agora vem do pedido CONFIRMADO, não do
+  cálculo.** Sem confirmação, o total é zero e a situação da congregação é
+  "sem-pedido" de verdade — não "esperando calcular". Isso zera exatamente os
+  números que o usuário pediu, para as duas telas (o cálculo automático
+  continua existindo, só que como "sugestão", claramente rotulado como tal em
+  toda a interface).
+- **Abre no PRÓXIMO trimestre, não no atual.** A CPAD recebe pedido com
+  antecedência — em agosto, a congregação já está encomendando o material de
+  outubro a dezembro. `lib/revistas/trimestre.ts` tem os dois cálculos
+  (`trimestreDe` para o em andamento, `proximoTrimestre` para o que abre por
+  padrão na tela de Fazer Pedido) e os dois usam a mesma chave
+  (`"4T-2026"`), só trocam qual é o padrão em cada rota.
+- **Corrigido de brinde:** o Berçário tem preço cadastrado só do "Manual do
+  Mestre" (`manual-mestre`, R$ 18) — uma chave diferente de `mestre-comum`
+  que as outras categorias usam. O código da Fase 15a não reconhecia essa
+  chave e o Berçário aparecia sem preço de professor nenhum;
+  `lib/revistas/precos.ts` agora entende as duas formas.
+- **O alerta "sem-pedido" sobe para crítico** quando o prazo do pedido
+  (`dataLimitePedido`) já passou sem confirmação — antes de haver um prazo de
+  pedido de verdade, isso não fazia sentido.
+
+Verificado com `npm run verificar:revistas`: **56 asserções** (27 da Fase 15a
++ 29 novas), cobrindo a escalada do alerta, os preços por categoria
+(inclusive o Berçário), as contas do pedido digitado e a escolha entre
+trimestre atual/próximo — tudo sem banco.
+
+**Precisa aplicar no banco:** `prisma/aplicar-fase-15b.sql` — cria as duas
+tabelas novas (`Pedidos_Revistas`, `Pedidos_Revistas_Itens`), vazias, sem
+tocar em nenhuma tabela existente.
 
 ---
 
@@ -1330,6 +1383,8 @@ só na hora de exibir.
 | `/api/relatorios` | frequência por classe e ofertas do período |
 | `/api/relatorios/painel` | Índice de Saúde por congregação, IGE do campo, alertas, análise e evolução mensal |
 | `/api/relatorios/comparativo` | 2 a 4 congregações lado a lado: componentes do IGS e evolução de 6 meses |
+| `/api/revistas` | pedido confirmado + sugestão calculada por congregação, pagamentos, prazos, alertas |
+| `/api/revistas/pedido` | GET o rascunho/confirmado de uma congregação, PUT salva, POST confirma ou reabre |
 | `/api/agenda` | eventos e reuniões numa lista só, mais as escalas |
 | `/api/lideranca` | GET a hierarquia, POST troca quem ocupa um cargo |
 | `/api/diagnostico` | com qual banco o app está falando |

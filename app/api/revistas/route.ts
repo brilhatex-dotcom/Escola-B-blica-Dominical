@@ -9,88 +9,58 @@ import {
   situacaoDaCongregacao,
   situacaoDoTrimestre,
 } from "@/lib/revistas/situacao";
+import {
+  agruparPrecos,
+  CATEGORIAS_OCULTAS,
+  NOME_CATEGORIA,
+  normalizarCategoria,
+  ORDEM_CATEGORIAS,
+  precoAlunoDeLista,
+  precoProfessorDeLista,
+} from "@/lib/revistas/precos";
+import { dataLimitePadrao, proximoTrimestre, soDia, trimestreDe } from "@/lib/revistas/trimestre";
 
 /**
- * Pedido de Lição — o que cada congregação precisa, quanto custa, e quanto já
- * foi pago.
+ * Pedido de Lição — o que cada congregação pediu de verdade, quanto custa, e
+ * quanto já foi pago.
  *
  * ============================================================================
- * O PEDIDO É CALCULADO; OS PAGAMENTOS SÃO REGISTRADOS
+ * O PEDIDO É DIGITADO E CONFIRMADO (FASE 15b) — O QUE ESTA ROTA CALCULA É A
+ * SUGESTÃO, NÃO MAIS O TOTAL A PAGAR
  *
- * A aba `Pedidos_Revistas` do sistema antigo veio vazia. O pedido de cada
- * classe é a contagem de alunos ativos × o preço da categoria — a conta pronta,
- * não uma folha em branco.
+ * Até a Fase 15a, o total de cada congregação era calculado sozinho (alunos
+ * ativos × preço da categoria) — não existia o momento de "a congregação
+ * decidiu e mandou o pedido de verdade". A Fase 15b criou esse momento em
+ * `/api/revistas/pedido`: lá a secretaria digita a quantidade de cada
+ * categoria e CONFIRMA, o que trava a quantidade e o preço daquele instante.
  *
- * O que a igreja precisava e não tinha é a BAIXA PARCIAL: fecha-se um pedido
- * grande e os alunos vão pagando aos poucos, de várias classes. Por isso cada
- * pagamento é uma linha em `Pagamentos_Revistas`, e o saldo é o total devido
- * menos a soma das baixas. A data-limite (em geral a lição 02 do próximo
- * trimestre) fica em `Trimestres_Revistas`, editável.
+ * Esta rota (`/api/revistas`) continua calculando a mesma conta de antes, mas
+ * agora só como SUGESTÃO (`sugestao` em cada congregação) — o número que a
+ * secretaria vê antes de digitar o pedido. O `totalDevido` usado para
+ * situação, saldo e alertas vem do `PedidoRevista` CONFIRMADO do trimestre;
+ * sem confirmação, é zero. Uma congregação sem pedido confirmado está em
+ * "sem-pedido" de verdade, não "aguardando calcular".
  * ============================================================================
  */
 export const dynamic = "force-dynamic";
-
-/* ---------- categorias e preços ---------- */
-
-function normalizar(s: string): string {
-  return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
-}
-
-// "Obreiros" foi removida do pedido, e "Jovens e Adultos" (a categoria juntada)
-// também: Jovens e Adultos são classes SEPARADAS, com preços próprios.
-const CATEGORIAS_OCULTAS = new Set(["obreiros", "jovenadult"]);
-
-// Nome de exibição e ordem preferida — a lista que a secretaria usa.
-const NOME_CATEGORIA: Record<string, string> = {
-  jardim: "Jardim de Infância",
-  juniores: "Juniores",
-  primarios: "Primários",
-  preadolesc: "Pré-Adolescentes",
-  adolesc: "Adolescentes",
-  juvenis: "Juvenis",
-  jovens: "Jovens",
-  adultos: "Adultos",
-  maternal: "Maternal",
-  bercario: "Berçário",
-};
-const ORDEM = Object.keys(NOME_CATEGORIA);
-
-/* ---------- trimestre e data-limite ---------- */
-
-function trimestreDe(hoje: Date): { chave: string; rotulo: string; q: number; ano: number } {
-  const q = Math.floor(hoje.getMonth() / 3) + 1;
-  const ano = hoje.getFullYear();
-  return { chave: `${q}T-${ano}`, rotulo: `${q}º trimestre de ${ano}`, q, ano };
-}
-
-/** A data-limite padrão: 2º domingo do 1º mês do PRÓXIMO trimestre (≈ lição 02). */
-function dataLimitePadrao(hoje: Date): Date {
-  const q = Math.floor(hoje.getMonth() / 3) + 1;
-  const mes = q === 4 ? 0 : q * 3; // 0-based: início do próximo trimestre
-  const ano = q === 4 ? hoje.getFullYear() + 1 : hoje.getFullYear();
-  const primeiro = new Date(Date.UTC(ano, mes, 1));
-  const primeiroDomingo = 1 + ((7 - primeiro.getUTCDay()) % 7);
-  return new Date(Date.UTC(ano, mes, primeiroDomingo + 7)); // 2º domingo
-}
-
-function soDia(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 
 /* ------------------------------------------------------------------ *
  * GET — o pedido do trimestre, por congregação
  * ------------------------------------------------------------------ */
 
-export async function GET() {
+export async function GET(req: Request) {
   const { sessao, recusa } = await exigirLeitura("revistas");
   if (recusa) return recusa;
 
   return responder(async () => {
     const recorte = recorteDaSessao(sessao);
     const hoje = new Date();
-    const tri = trimestreDe(hoje);
+    const url = new URL(req.url);
+    // A tela normalmente olha o trimestre em andamento (o que está sendo
+    // pago); a tela de Fazer Pedido pode pedir explicitamente o próximo.
+    const tri = url.searchParams.get("trimestre") === "proximo" ? proximoTrimestre(hoje) : trimestreDe(hoje);
 
-    const [classes, precos, pagamentos, config] = await Promise.all([
+    const [classes, precos, pagamentos, config, pedidos] = await Promise.all([
       prisma.classe.findMany({
         where: { ativa: true, congId: recorte },
         orderBy: [{ congId: "asc" }, { nome: "asc" }],
@@ -110,37 +80,32 @@ export async function GET() {
         orderBy: { criadoEm: "desc" },
       }),
       prisma.trimestreRevista.findUnique({ where: { trimestre: tri.chave } }),
+      prisma.pedidoRevista.findMany({
+        where: { trimestre: tri.chave, ...(recorte ? { congId: recorte } : {}) },
+        include: { itens: true, congregacao: { select: { id: true, nome: true } } },
+      }),
     ]);
 
     // Preço de referência (Revista do Aluno, capa comum) por categoria — e o
-    // mesmo para a Revista do Professor ("mestre-*"), que a tabela de preços
-    // já tinha e o pedido nunca somava.
+    // mesmo para a Revista do Professor, que a tabela de preços já tinha e o
+    // cálculo antigo não somava.
+    const porCategoria = agruparPrecos(
+      precos.map((p) => ({ key: p.key, categoria: p.categoria, label: p.label, preco: Number(p.preco) })),
+    );
     const precoAlunoDe = new Map<string, number>();
     const precoProfessorDe = new Map<string, number>();
-    const porCategoria = new Map<string, { key: string; label: string; preco: number }[]>();
-    for (const p of precos) {
-      const cat = normalizar(p.categoria);
-      const lista = porCategoria.get(cat) ?? [];
-      lista.push({ key: p.key, label: p.label, preco: Number(p.preco) });
-      porCategoria.set(cat, lista);
-    }
     for (const [cat, lista] of porCategoria) {
-      const comum = lista.find((x) => x.key === "aluno-comum");
-      const alunoMin = lista.filter((x) => x.key.startsWith("aluno")).sort((a, b) => a.preco - b.preco)[0];
-      const ref = comum ?? alunoMin ?? lista.sort((a, b) => a.preco - b.preco)[0];
-      if (ref) precoAlunoDe.set(cat, ref.preco);
-
-      const mestreComum = lista.find((x) => x.key === "mestre-comum");
-      const mestreMin = lista.filter((x) => x.key.startsWith("mestre")).sort((a, b) => a.preco - b.preco)[0];
-      const refProf = mestreComum ?? mestreMin;
-      if (refProf) precoProfessorDe.set(cat, refProf.preco);
+      const ref = precoAlunoDeLista(lista);
+      if (ref !== null) precoAlunoDe.set(cat, ref);
+      const refProf = precoProfessorDeLista(lista);
+      if (refProf !== null) precoProfessorDe.set(cat, refProf);
     }
 
     // Mini-tabela de preços (sem obreiros/jovenadult), na ordem preferida.
     const tabelaPrecos = [...porCategoria.keys()]
       .filter((c) => !CATEGORIAS_OCULTAS.has(c))
       .sort((a, b) => {
-        const ia = ORDEM.indexOf(a), ib = ORDEM.indexOf(b);
+        const ia = ORDEM_CATEGORIAS.indexOf(a), ib = ORDEM_CATEGORIAS.indexOf(b);
         return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
       })
       .map((c) => {
@@ -165,7 +130,11 @@ export async function GET() {
       baixasPorCong.set(p.congId, l);
     }
 
-    // Agrupa as classes por congregação.
+    // Pedidos (o registro de verdade) por congregação.
+    const pedidoPorCong = new Map<number, (typeof pedidos)[number]>();
+    for (const p of pedidos) pedidoPorCong.set(p.congId, p);
+
+    // Agrupa as classes por congregação — a SUGESTÃO calculada, não o pedido.
     interface Item {
       classeId: number; classe: string; faixa: string; categoria: string;
       categoriaRotulo: string; categoriaEncontrada: boolean;
@@ -180,7 +149,7 @@ export async function GET() {
       let g = porCong.get(cid);
       if (!g) { g = { id: cid, nome, classes: [] }; porCong.set(cid, g); }
 
-      const cat = normalizar(c.tipoClasse ?? "");
+      const cat = normalizarCategoria(c.tipoClasse ?? "");
       const preco = precoAlunoDe.get(cat) ?? null;
       const alunos = c._count.alunos;
       const precoProf = precoProfessorDe.get(cat) ?? null;
@@ -200,6 +169,14 @@ export async function GET() {
         subtotalProfessor: precoProf !== null ? Number((precoProf * professores).toFixed(2)) : 0,
       });
     }
+    // Congregações que já têm pedido (rascunho ou confirmado) mas nenhuma
+    // classe ativa entram também — senão o pedido some da lista.
+    for (const p of pedidos) {
+      if (!porCong.has(p.congId)) {
+        const nome = p.congregacao.nome?.trim() || `Congregação ${p.congId}`;
+        porCong.set(p.congId, { id: p.congId, nome, classes: [] });
+      }
+    }
 
     const dataLimitePagamento = config?.dataLimite ?? dataLimitePadrao(hoje);
     const dataLimitePedido = config?.dataLimitePedido ?? null;
@@ -207,22 +184,42 @@ export async function GET() {
     const congregacoes = [...porCong.values()]
       .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
       .map((g) => {
-        // "Revistas" conta aluno + professor: as duas são revistas pedidas de
-        // verdade, não só a do aluno.
-        const revistas = g.classes.reduce((s, c) => s + c.alunos + c.professores, 0);
-        const totalDevido = Number(
+        // A sugestão: o que o cálculo automático (alunos/professores ativos)
+        // aponta — só para comparação, nunca o valor a pagar.
+        const revistasSugeridas = g.classes.reduce((s, c) => s + c.alunos + c.professores, 0);
+        const totalSugerido = Number(
           g.classes.reduce((s, c) => s + c.subtotal + c.subtotalProfessor, 0).toFixed(2),
         );
+
+        const pedido = pedidoPorCong.get(g.id) ?? null;
+        const totalPedido = pedido
+          ? Number(pedido.itens.reduce((s, it) => s + it.quantidade * Number(it.precoUnitario), 0).toFixed(2))
+          : 0;
+        const revistasPedidas = pedido ? pedido.itens.reduce((s, it) => s + it.quantidade, 0) : 0;
+
+        // O que conta para pagamento/situação é o PEDIDO CONFIRMADO — sem
+        // confirmação, é zero: a congregação está em "sem-pedido" de verdade.
+        const totalDevido = pedido?.confirmado ? totalPedido : 0;
         const pago = Number((pagoPorCong.get(g.id) ?? 0).toFixed(2));
         const saldo = Number((totalDevido - pago).toFixed(2));
         return {
           congId: g.id,
           nome: g.nome,
-          revistas,
+          revistas: pedido?.confirmado ? revistasPedidas : 0,
           totalDevido,
           pago,
           saldo,
           situacao: situacaoDaCongregacao({ hoje, totalDevido, pago, dataLimitePagamento }),
+          pedido: pedido
+            ? {
+                confirmado: pedido.confirmado,
+                confirmadoEm: pedido.confirmadoEm?.toISOString() ?? null,
+                confirmadoPor: pedido.confirmadoPor,
+                total: totalPedido,
+                revistas: revistasPedidas,
+              }
+            : null,
+          sugestao: { revistas: revistasSugeridas, total: totalSugerido },
           semPreco: g.classes.filter((c) => !c.categoriaEncontrada).length,
           classes: g.classes,
           pagamentos: (baixasPorCong.get(g.id) ?? []).map((p) => ({
@@ -240,8 +237,8 @@ export async function GET() {
     const saldoTotal = Number((totalDevido - totalPago).toFixed(2));
     const padrao = dataLimitePadrao(hoje);
 
-    // As três contagens do painel — "sem-pedido" (nenhuma classe/aluno ativo
-    // no trimestre) fica de fora das três, porque não há o que pagar.
+    // As três contagens do painel — "sem-pedido" (nenhum pedido CONFIRMADO
+    // no trimestre) fica de fora das três, porque não há o que pagar ainda.
     const comPedido = congregacoes.filter((c) => c.totalDevido > 0);
     const congregacoesPagas = comPedido.filter((c) => c.situacao === "quitado").length;
     const congregacoesAtrasadas = comPedido.filter((c) => c.situacao === "atraso").length;
@@ -253,6 +250,7 @@ export async function GET() {
 
     return {
       trimestre: { ...tri, tema: config?.tema ?? null },
+      trimestreProximo: proximoTrimestre(hoje).chave,
       dataLimite: soDia(dataLimitePagamento),
       dataLimitePadrao: soDia(padrao),
       dataLimiteDefinida: Boolean(config?.dataLimite),
@@ -280,11 +278,11 @@ export async function GET() {
         congregacoesAtrasadas,
         congregacoesSemPedido,
       },
-      // Alertas só olham congregações com pedido de verdade E que o acesso
+      // Alertas só olham congregações com pedido CONFIRMADO E que o acesso
       // atual alcança — a mesma lista que o recorte já filtrou acima.
       alertas: gerarAlertasRevistas(
         congregacoes.map((c) => ({ congId: c.congId, nome: c.nome, totalDevido: c.totalDevido, pago: c.pago, saldo: c.saldo })),
-        { hoje, dataLimitePagamento },
+        { hoje, dataLimitePagamento, dataLimitePedido },
       ),
     };
   });
