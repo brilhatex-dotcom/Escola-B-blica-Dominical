@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
-import { exigirLeitura } from "@/lib/auth/guarda";
+import { erro, lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
+import { exigirEscrita, exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
+import { registrar } from "@/lib/auditoria";
 
 /**
  * Pessoas e os cargos que exercem.
@@ -80,6 +81,11 @@ export async function GET(req: Request) {
               classe: { select: { id: true, nome: true } },
             },
           },
+          // O login (se houver) ligado a esta pessoa — é o que a tela usa para
+          // oferecer "remover dos usuários" sem precisar de outra consulta.
+          usuario: {
+            select: { id: true, login: true, ativo: true, congId: true },
+          },
         },
       }),
     ]);
@@ -95,6 +101,61 @@ export async function GET(req: Request) {
       p,
       porPagina,
     );
+  });
+}
+
+/**
+ * DELETE ?pessoaId= — "remover dos usuários": desativa o login ligado a esta
+ * pessoa, sem apagar o cadastro dela nem os cargos que exerce.
+ *
+ * ============================================================================
+ * DESATIVAR, NÃO APAGAR
+ *
+ * A conta pode ter chamadas e auditoria já registradas em nome dela — apagar
+ * a linha quebraria esse histórico. `ativo:false` é o mesmo botão que a tela
+ * de Usuários já usa (AlternarAtivo): a pessoa continua no organograma, só
+ * deixa de conseguir entrar no portal.
+ *
+ * A permissão é a do módulo Professores (`exigirEscrita("professores")`), não
+ * a de Usuários — é daqui, olhando o cadastro de pessoas, que o pedido nasceu,
+ * e o Dirigente que gerencia professores não necessariamente administra
+ * contas em geral.
+ * ============================================================================
+ */
+export async function DELETE(req: Request) {
+  const { sessao, recusa } = await exigirEscrita("professores");
+  if (recusa) return recusa;
+
+  const url = new URL(req.url);
+  const pessoaId = lerInt(url, "pessoaId");
+  if (pessoaId === null) return erro("Informe a pessoa.", 400);
+
+  const usuario = await prisma.usuario.findUnique({
+    where: { pessoaId },
+    select: { id: true, login: true, ativo: true, congId: true, perfil: true },
+  });
+  if (!usuario) return erro("Esta pessoa não tem login de acesso.", 404);
+  if (usuario.perfil === "master") return erro("A conta master não pode ser removida por aqui.", 403);
+
+  const recorte = recorteDaSessao(sessao);
+  if (recorte && !(usuario.congId !== null && recorte.in.includes(usuario.congId))) {
+    return erro("O seu acesso não permite remover este login.", 403);
+  }
+
+  if (!usuario.ativo) {
+    return responder(async () => ({ ok: true, mudou: false }));
+  }
+
+  return responder(async () => {
+    await prisma.usuario.update({ where: { id: usuario.id }, data: { ativo: false } });
+    registrar({
+      sessao,
+      acao: "UPDATE",
+      entidade: "Usuarios",
+      descricao: `Login "${usuario.login}" removido a partir do cadastro de professores.`,
+      congId: usuario.congId,
+    });
+    return { ok: true, mudou: true };
   });
 }
 

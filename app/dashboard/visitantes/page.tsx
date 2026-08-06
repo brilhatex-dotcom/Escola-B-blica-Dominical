@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Phone, UserRoundPlus } from "lucide-react";
+import { Loader2, Phone, Trash2, UserRoundPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   CabecalhoModulo,
@@ -12,6 +12,7 @@ import {
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
 import { diaEMes, iniciais } from "@/lib/dashboard/formato";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Visitantes recebidos.
@@ -27,6 +28,8 @@ interface VisitanteLista {
   idade: number | null;
   tel: string | null;
   obs: string | null;
+  nascimento: string | null;
+  endereco: string | null;
   data: string;
   classe: { id: number; nome: string } | null;
   congregacao: { id: number; nome: string } | null;
@@ -38,6 +41,9 @@ export default function VisitantesPage() {
   const [itens, setItens] = useState<VisitanteLista[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [removendo, setRemovendo] = useState<number | null>(null);
+  const { podeGravar } = useAcesso();
+  const editavel = podeGravar("visitantes");
 
   useEffect(() => {
     void fetch("/api/classes")
@@ -48,38 +54,53 @@ export default function VisitantesPage() {
       .catch(() => setClasses([]));
   }, []);
 
+  async function carregar() {
+    try {
+      setErro(null);
+      const url = new URL("/api/visitantes", window.location.origin);
+      if (classe) url.searchParams.set("classe", String(classe));
+      url.searchParams.set("porPagina", "200");
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+      const dados = await res.json();
+      setItens(dados.itens);
+      setTotal(dados.total);
+    } catch (e) {
+      /*
+       * "O servidor não respondeu" era mentira quando ele respondia 500 — e
+       * mandava procurar problema na internet, que estava perfeita. A
+       * mensagem agora separa os dois casos: sem rede o `fetch` lança e não
+       * há `status`; com resposta de erro, o problema está no banco.
+       */
+      const status = (e as { status?: number }).status;
+      setErro(
+        status
+          ? "O servidor respondeu com erro. Isso costuma ser banco de dados não configurado — abra /api/diagnostico para ver o motivo."
+          : "Sem resposta do servidor. Verifique a conexão e tente de novo.",
+      );
+      setItens([]);
+    }
+  }
+
   useEffect(() => {
-    const controle = new AbortController();
-    (async () => {
-      try {
-        setErro(null);
-        const url = new URL("/api/visitantes", window.location.origin);
-        if (classe) url.searchParams.set("classe", String(classe));
-        url.searchParams.set("porPagina", "200");
-        const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
-        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
-        const dados = await res.json();
-        setItens(dados.itens);
-        setTotal(dados.total);
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        /*
-         * "O servidor não respondeu" era mentira quando ele respondia 500 — e
-         * mandava procurar problema na internet, que estava perfeita. A
-         * mensagem agora separa os dois casos: sem rede o `fetch` lança e não
-         * há `status`; com resposta de erro, o problema está no banco.
-         */
-        const status = (e as { status?: number }).status;
-        setErro(
-          status
-            ? "O servidor respondeu com erro. Isso costuma ser banco de dados não configurado — abra /api/diagnostico para ver o motivo."
-            : "Sem resposta do servidor. Verifique a conexão e tente de novo.",
-        );
-        setItens([]);
-      }
-    })();
-    return () => controle.abort();
+    void carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classe]);
+
+  async function remover(v: VisitanteLista) {
+    if (!window.confirm(`Remover o visitante "${v.nome}"?`)) return;
+    setRemovendo(v.id);
+    try {
+      const res = await fetch(`/api/visitantes?id=${v.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Não foi possível remover.");
+      setItens((atual) => (atual ? atual.filter((it) => it.id !== v.id) : atual));
+      setTotal((t) => (t !== null ? t - 1 : t));
+    } catch (e) {
+      window.alert((e as Error).message);
+    } finally {
+      setRemovendo(null);
+    }
+  }
 
   return (
     <>
@@ -124,6 +145,7 @@ export default function VisitantesPage() {
                   {v.congregacao?.nome && (
                     <span className="text-brand-200/40"> · {v.congregacao.nome}</span>
                   )}
+                  {v.endereco && <span className="text-brand-200/40"> · {v.endereco}</span>}
                 </p>
                 {v.obs && <p className="truncate text-[0.7rem] italic text-brand-200/40">{v.obs}</p>}
               </div>
@@ -135,10 +157,30 @@ export default function VisitantesPage() {
                     {v.tel}
                   </span>
                 )}
+                {v.nascimento && (
+                  <span className="hidden text-[0.72rem] tabular-nums text-brand-200/50 sm:inline">
+                    nasc. {diaEMes(new Date(v.nascimento))}
+                  </span>
+                )}
                 {v.idade !== null && <Badge variant="neutro">{v.idade} anos</Badge>}
                 <span className="w-16 shrink-0 text-right text-[0.74rem] tabular-nums text-brand-200/55">
                   {diaEMes(new Date(v.data))}
                 </span>
+                {editavel && (
+                  <button
+                    type="button"
+                    onClick={() => void remover(v)}
+                    disabled={removendo === v.id}
+                    aria-label={`Remover ${v.nome}`}
+                    className="rounded-lg p-1.5 text-brand-200/45 hover:bg-white/8 hover:text-flame-400"
+                  >
+                    {removendo === v.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                )}
               </div>
             </motion.li>
           ))}

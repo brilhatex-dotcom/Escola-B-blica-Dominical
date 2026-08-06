@@ -211,11 +211,18 @@ model Visitante {
   id       Int      @id
   legacyId Int?
   nome     String
-  /// "" em 43 linhas -> null.
+  /// "" em 43 linhas -> null. Campo do sistema antigo; a tela de "incluir
+  /// visitante" nao usa mais idade, e sim `nascimento` — mas a coluna
+  /// continua para nao apagar o que ja foi importado.
   idade    Int?
   /// Numero no export -> String (mesmo motivo de Aluno.tel).
   tel      String?
   obs      String?
+  /// Data de nascimento — o dado que a Chamada pede ao incluir um visitante,
+  /// no lugar da idade solta que o sistema antigo guardava.
+  nascimento DateTime? @db.Date
+  /// Onde mora ("local que mora"), em texto livre.
+  endereco   String?
   classeId Int?
   congId   Int?
   data     DateTime @db.Date

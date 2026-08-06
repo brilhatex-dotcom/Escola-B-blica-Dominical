@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Phone, TriangleAlert, UserRound } from "lucide-react";
+import { KeyRound, Loader2, Phone, TriangleAlert, UserRound, UserX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,6 +14,7 @@ import {
   EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
 import { iniciais } from "@/lib/dashboard/formato";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Pessoas e cargos.
@@ -46,6 +47,7 @@ interface PessoaLista {
   observacao: string | null;
   cargos: CargoDaPessoa[];
   totalCargos: number;
+  usuario: { id: number; login: string; ativo: boolean; congId: number | null } | null;
 }
 
 function Conteudo() {
@@ -57,6 +59,32 @@ function Conteudo() {
   const [itens, setItens] = useState<PessoaLista[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [removendo, setRemovendo] = useState<number | null>(null);
+  const { podeGravar } = useAcesso();
+  const editavel = podeGravar("professores");
+
+  async function removerLogin(p: PessoaLista) {
+    if (!p.usuario) return;
+    if (!window.confirm(`Remover o login "${p.usuario.login}" de ${p.nome}? A pessoa continua cadastrada.`)) return;
+    setRemovendo(p.id);
+    try {
+      const res = await fetch(`/api/pessoas?pessoaId=${p.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => ({}));
+        throw new Error(corpo?.erro ?? "Não foi possível remover o login.");
+      }
+      // Atualiza só esta linha: sem refazer a busca inteira por uma mudança local.
+      setItens((atual) =>
+        atual
+          ? atual.map((it) => (it.id === p.id && it.usuario ? { ...it, usuario: { ...it.usuario, ativo: false } } : it))
+          : atual,
+      );
+    } catch (e) {
+      window.alert((e as Error).message);
+    } finally {
+      setRemovendo(null);
+    }
+  }
 
   /*
    * Espera 300ms depois da ultima tecla antes de consultar.
@@ -214,6 +242,38 @@ function Conteudo() {
                 */}
                 {p.totalCargos > 1 && (
                   <Badge variant="alerta">{p.totalCargos} cargos</Badge>
+                )}
+
+                {p.usuario && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[0.68rem]",
+                      p.usuario.ativo
+                        ? "bg-brand-500/20 text-brand-200 ring-1 ring-brand-400/30"
+                        : "bg-white/6 text-brand-200/45 ring-1 ring-white/10",
+                    )}
+                    title={p.usuario.ativo ? "Tem login de acesso" : "Login desativado"}
+                  >
+                    <KeyRound className="h-3 w-3" />
+                    {p.usuario.login}
+                  </span>
+                )}
+
+                {editavel && p.usuario?.ativo && (
+                  <button
+                    type="button"
+                    onClick={() => void removerLogin(p)}
+                    disabled={removendo === p.id}
+                    title={`Remover o login "${p.usuario.login}" dos usuários`}
+                    className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[0.7rem] text-brand-200/60 transition-colors hover:border-flame-500/40 hover:text-flame-400"
+                  >
+                    {removendo === p.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <UserX className="h-3 w-3" />
+                    )}
+                    Remover dos usuários
+                  </button>
                 )}
               </div>
             </motion.li>
