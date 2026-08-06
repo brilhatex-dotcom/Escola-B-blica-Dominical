@@ -47,6 +47,7 @@ model Congregacao {
   avisos       Aviso[]
   pessoaCargos PessoaCargo[]
   auditoria    Auditoria[]
+  pagamentosRevistas PagamentoRevista[]
 
   @@map("Congregacoes")
 }
@@ -244,6 +245,37 @@ model Parametro {
   valor     Decimal @db.Decimal(10, 2)
 
   @@map("Parametros")
+}
+
+/// Uma baixa (pagamento parcial) do pedido de revistas de uma congregacao.
+///
+/// O pedido em si e CALCULADO (alunos ativos x preco); o que se registra e o
+/// quanto ja foi pago. Cada baixa e uma entrada — "faltam alunos de varias
+/// classes pagarem" vira uma sequencia de baixas com observacao, e o saldo e a
+/// diferenca para o total devido. `trimestre` escopa o pedido ("3T-2026").
+model PagamentoRevista {
+  id         Int      @id @default(autoincrement())
+  congId     Int
+  trimestre  String
+  valor      Decimal  @db.Decimal(10, 2)
+  observacao String?
+  autor      String?
+  criadoEm   DateTime @default(now())
+
+  congregacao Congregacao @relation(fields: [congId], references: [id])
+
+  @@index([congId, trimestre])
+  @@map("Pagamentos_Revistas")
+}
+
+/// A data-limite de pagamento de um trimestre — em geral a licao 02 do proximo
+/// trimestre, mas editavel. Uma linha por trimestre.
+model TrimestreRevista {
+  trimestre  String    @id
+  dataLimite DateTime? @db.Date
+  atualizado DateTime  @updatedAt
+
+  @@map("Trimestres_Revistas")
 }
 
 model Reuniao {

@@ -169,10 +169,10 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
       },
       {
         chave: "revistas",
-        rotulo: "Pedido de Revistas",
+        rotulo: "Pedido de Lição",
         href: "/dashboard/revistas",
         icone: ScrollText,
-        descricao: "Pedidos de revistas por classe, com os preços do campo",
+        descricao: "Pedido por congregação, com preços e baixa parcial de pagamento",
       },
     ],
   },
