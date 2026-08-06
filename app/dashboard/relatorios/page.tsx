@@ -12,7 +12,6 @@ import {
   ChartColumn,
   GraduationCap,
   Minus,
-  Radar,
   School,
   Sparkles,
   TrendingDown,
@@ -199,13 +198,6 @@ export default function PainelRelatoriosPage() {
           >
             <Trophy className="h-4 w-4" />
             Destaques
-          </Link>
-          <Link
-            href="/dashboard/relatorios/comparativo"
-            className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-[0.8rem] text-brand-200/70 transition-colors duration-300 hover:border-gold-400/30 hover:text-gold-200"
-          >
-            <Radar className="h-4 w-4" />
-            Comparar congregações
           </Link>
           <Link
             href="/dashboard/relatorios/frequencia"
