@@ -34,19 +34,20 @@ model Congregacao {
   id   Int    @id
   nome String @default("")
 
-  usuarios     Usuario[]
-  classes      Classe[]
-  alunos       Aluno[]
-  frequencias  Frequencia[]
-  freqLicoes   FreqLicao[]
-  ofertas      Oferta[]
-  visitantes   Visitante[]
-  licoes       Licao[]
-  escalaCultos EscalaCulto[]
-  eventos      Evento[]
-  avisos       Aviso[]
-  pessoaCargos PessoaCargo[]
-  pedidos      PedidoRevista[]
+  usuarios           Usuario[]
+  classes            Classe[]
+  alunos             Aluno[]
+  frequencias        Frequencia[]
+  freqLicoes         FreqLicao[]
+  ofertas            Oferta[]
+  visitantes         Visitante[]
+  licoes             Licao[]
+  escalaCultos       EscalaCulto[]
+  eventos            Evento[]
+  avisos             Aviso[]
+  pessoaCargos       PessoaCargo[]
+  auditoria          Auditoria[]
+  pagamentosRevistas PagamentoRevista[]
 
   @@map("Congregacoes")
 }
@@ -100,7 +101,6 @@ model Classe {
   ofertas      Oferta[]
   visitantes   Visitante[]
   pessoaCargos PessoaCargo[]
-  pedidos      PedidoRevista[]
 
   @@index([congId])
   @@map("Classes")
@@ -208,7 +208,7 @@ model Oferta {
 }
 
 model Visitante {
-  id       Int      @id
+  id       Int       @id
   legacyId Int?
   nome     String
   /// "" em 43 linhas -> null.
@@ -229,7 +229,7 @@ model Visitante {
   obs      String?
   classeId Int?
   congId   Int?
-  data     DateTime @db.Date
+  data     DateTime  @db.Date
 
   classe      Classe?      @relation(fields: [classeId], references: [id])
   congregacao Congregacao? @relation(fields: [congId], references: [id])
@@ -250,105 +250,43 @@ model PrecoRevista {
   @@map("Precos_Revistas")
 }
 
-/**
- * ==========================================================================
- * PEDIDOS DE REVISTAS
- * A aba `Pedidos_Revistas` existe no export e esta VAZIA — zero linhas. Nao ha
- * como inferir os campos de uma planilha sem dados, entao estas duas tabelas
- * sao novas, e nao uma importacao. Nada do sistema antigo e alterado por elas:
- * `Precos_Revistas` (35 linhas) e `Parametros` continuam intactos e sao a
- * fonte dos precos.
- * A ligacao que faz o modulo funcionar ja existia no cadastro: `Classes.tipoClasse`
- * usa exatamente os mesmos valores de `Precos_Revistas.categoria` — "adultos",
- * "juniores", "adolesc"... Por isso o pedido de uma classe pode nascer
- * preenchido: uma revista de aluno por aluno matriculado, uma de professor por
- * professor da classe.
- * ==========================================================================
- */
-
-/// Um pedido de revistas de uma classe, num trimestre.
-model PedidoRevista {
-  id Int @id @default(autoincrement())
-
-  congId   Int?
-  classeId Int?
-
-  ano       Int
-  /// 1 a 4. Guardado como numero, e nao "2T": trimestre e ordenavel e
-  /// comparavel; texto nao é — "10T" viria antes de "2T" em qualquer ordenacao.
-  trimestre Int
-
-  /// "rascunho" | "enviado" | "atendido"
-  ///
-  /// Rascunho e o estado util: a classe monta o pedido ao longo de dias, sem
-  /// que a secretaria do campo o veja como definitivo. Sem esse estado, ou o
-  /// pedido nasce publico pela metade, ou so pode ser criado de uma sentada.
-  situacao String @default("rascunho")
-
-  observacao String?
-
-  /// Quem montou. Texto, e nao FK: e o nome de quem estava logado no momento,
-  /// e ele nao pode mudar depois se a pessoa for renomeada no cadastro.
-  autor String?
-
-  criadoEm   DateTime  @default(now())
-  atualizado DateTime  @updatedAt
-  enviadoEm  DateTime?
-
-  congregacao Congregacao? @relation(fields: [congId], references: [id])
-  classe      Classe?      @relation(fields: [classeId], references: [id])
-
-  itens PedidoRevistaItem[]
-
-  /// Um pedido por classe por trimestre. Sem isto, dois professores da mesma
-  /// classe abrem dois pedidos no mesmo trimestre e a secretaria recebe o dobro
-  /// de revistas — sem ninguem perceber ate a entrega chegar.
-  @@unique([classeId, ano, trimestre])
-  @@index([congId])
-  @@index([ano, trimestre])
-  /// A aba de mesmo nome existe no export e esta vazia, entao nao ha tabela
-  /// com este nome no Postgres — o nome fica livre e e o nome certo.
-  @@map("Pedidos_Revistas")
-}
-
-/// Uma linha do pedido: qual revista, quantas, por quanto.
-model PedidoRevistaItem {
-  id Int @id @default(autoincrement())
-
-  pedidoId Int
-
-  /// Apontam para `Precos_Revistas` (key, categoria). NAO ha chave estrangeira
-  /// de proposito: aquela tabela e do sistema antigo, e uma FK daqui para la
-  /// impediria a secretaria de corrigir um preco sem antes mexer nos pedidos.
-  categoria String
-  chave     String
-  /// Copia do rotulo no momento do pedido — ver `precoUnitario`.
-  label     String
-
-  quantidade Int
-
-  /**
-   * O preco CONGELADO no momento do pedido.
-   * Ler o preco atual na hora de exibir faria o pedido de abril mudar de valor
-   * sozinho quando a tabela de precos fosse atualizada em julho — e a
-   * prestacao de contas de um trimestre fechado deixaria de bater com o que foi
-   * pago. Um pedido e um documento; ele guarda o que valia quando foi feito.
-   */
-  precoUnitario Decimal @db.Decimal(10, 2)
-
-  pedido PedidoRevista @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-
-  @@unique([pedidoId, categoria, chave])
-  @@index([pedidoId])
-  @@map("Pedidos_Revistas_Itens")
-}
-
 /// Sem coluna `id` no export; `parametro` e unico.
 model Parametro {
   parametro String  @id
   valor     Decimal @db.Decimal(10, 2)
 
   @@map("Parametros")
+}
+
+/// Uma baixa (pagamento parcial) do pedido de revistas de uma congregacao.
+///
+/// O pedido em si e CALCULADO (alunos ativos x preco); o que se registra e o
+/// quanto ja foi pago. Cada baixa e uma entrada — "faltam alunos de varias
+/// classes pagarem" vira uma sequencia de baixas com observacao, e o saldo e a
+/// diferenca para o total devido. `trimestre` escopa o pedido ("3T-2026").
+model PagamentoRevista {
+  id         Int      @id @default(autoincrement())
+  congId     Int
+  trimestre  String
+  valor      Decimal  @db.Decimal(10, 2)
+  observacao String?
+  autor      String?
+  criadoEm   DateTime @default(now())
+
+  congregacao Congregacao @relation(fields: [congId], references: [id])
+
+  @@index([congId, trimestre])
+  @@map("Pagamentos_Revistas")
+}
+
+/// A data-limite de pagamento de um trimestre — em geral a licao 02 do proximo
+/// trimestre, mas editavel. Uma linha por trimestre.
+model TrimestreRevista {
+  trimestre  String    @id
+  dataLimite DateTime? @db.Date
+  atualizado DateTime  @updatedAt
+
+  @@map("Trimestres_Revistas")
 }
 
 model Reuniao {
@@ -424,8 +362,12 @@ model Aviso {
   @@map("Avisos")
 }
 
+/// A partir da Fase 12 o portal TAMBEM grava aqui — ate entao so havia as
+/// 1.671 linhas herdadas. Por isso `id` ganhou sequencia (ver
+/// prisma/aplicar-fase-12.sql, que a cria comecando acima do maior id
+/// importado) e `congId`, que as linhas antigas nao tem.
 model Auditoria {
-  id       Int      @id
+  id       Int      @id @default(autoincrement())
   legacyId Int?
   /// Timestamp ISO completo no export.
   when     DateTime
@@ -434,9 +376,16 @@ model Auditoria {
   action   String
   entidade String
   desc     String
+  /// Nulo em TODAS as linhas do sistema antigo — ele nao registrava
+  /// congregacao. E por isso que a leitura continua restrita a quem enxerga o
+  /// campo inteiro: filtrar por congregacao esconderia o historico inteiro.
+  congId   Int?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
 
   @@index([when])
   @@index([whoLogin])
+  @@index([congId])
   @@map("Auditoria")
 }
 

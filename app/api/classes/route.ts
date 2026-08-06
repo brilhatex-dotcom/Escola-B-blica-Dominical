@@ -1,20 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import {
-  erro,
-  lerCorpo,
-  lerInt,
-  proximoId,
-  responder,
-  texto,
-  textoOpcional,
-} from "@/lib/api";
-import {
-  combinarCongregacao,
-  escopoDaRota,
-  escopoDeEscrita,
-  exigirCongregacaoPermitida,
-} from "@/lib/auth/escopo";
+import { erro, lerCorpo, lerInt, proximoId, responder, texto, textoOpcional } from "@/lib/api";
+import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
 import { CATEGORIAS } from "@/lib/ebd/categorias";
+import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 
 /**
  * Classes, com a contagem de alunos e os professores DE VERDADE.
@@ -26,20 +14,51 @@ import { CATEGORIAS } from "@/lib/ebd/categorias";
  * O texto original continua sendo devolvido em `profOriginal`, para conferencia
  * enquanto a migracao dos nomes nao for revisada pela secretaria.
  */
+/*
+ * ============================================================================
+ * A GUARDA CHEGOU DEPOIS — E ESSA É A LIÇÃO
+ *
+ * Esta rota nasceu na Fase 05, quando ainda não havia permissões. A Fase 08
+ * trouxe o RBAC e protegeu o que ela mesma criou; as rotas anteriores ficaram
+ * abertas, e ninguém percebeu porque a TELA já escondia o menu.
+ *
+ * Esconder o item do menu nunca protegeu nada: bastava digitar
+ * `/api/alunos` no navegador para receber os 323 alunos do campo inteiro,
+ * independentemente da congregação de quem pedia. O recorte que o painel
+ * aplicava com cuidado não existia aqui.
+ * ============================================================================
+ */
 export const dynamic = "force-dynamic";
 
+/**
+ * O alcance efetivo: o que a tela pediu, limitado ao que o acesso permite.
+ *
+ * Devolver `undefined` significa "não filtre", e só acontece para quem enxerga
+ * o campo inteiro sem ter pedido congregação nenhuma.
+ */
+function alvoDaConsulta(
+  recorte: { in: number[] } | undefined,
+  pedida: number | null,
+): { in: number[] } | undefined {
+  if (recorte) {
+    return { in: pedida !== null && recorte.in.includes(pedida) ? [pedida] : recorte.in };
+  }
+  return pedida !== null ? { in: [pedida] } : undefined;
+}
+
 export async function GET(req: Request) {
-  const { recusa, congId: doAcesso } = await escopoDaRota("classes");
+  const { sessao, recusa } = await exigirLeitura("classes");
   if (recusa) return recusa;
 
   return responder(async () => {
+    const recorte = recorteDaSessao(sessao);
     const url = new URL(req.url);
     const congId = lerInt(url, "cong");
     const busca = url.searchParams.get("busca")?.trim() ?? "";
 
     const classes = await prisma.classe.findMany({
       where: {
-        congId: combinarCongregacao(doAcesso, congId),
+        ...(alvoDaConsulta(recorte, congId) ? { congId: alvoDaConsulta(recorte, congId) } : {}),
         ...(busca ? { nome: { contains: busca, mode: "insensitive" as const } } : {}),
       },
       orderBy: [{ congId: "asc" }, { nome: "asc" }],
@@ -79,11 +98,12 @@ export async function GET(req: Request) {
 /**
  * Criar uma classe.
  *
- * `tipoClasse` não é enfeite nem rótulo bonito: é a chave que liga a classe à
- * tabela de preços das revistas (`Precos_Revistas.categoria` usa exatamente os
- * mesmos valores) e às lições do trimestre, que são publicadas por categoria.
- * Uma classe com categoria errada pede a revista errada e recebe a lição de
- * outra faixa etária — por isso ela é escolhida numa lista, e não digitada.
+ * `tipoClasse` não é rótulo bonito: é a chave que já ligava três tabelas do
+ * sistema antigo — `Classes.tipoClasse`, `Licoes.tipoClasse` e
+ * `Precos_Revistas.categoria` usam exatamente os mesmos valores. Uma classe
+ * com a categoria errada recebe a lição de outra faixa etária e pede a revista
+ * errada, e o sintoma só aparece quando a revista não chega. Por isso ela é
+ * escolhida numa lista, e nunca digitada.
  */
 export async function POST(req: Request) {
   const { recusa, congId: doAcesso, sessao } = await escopoDeEscrita("classes");
@@ -101,9 +121,9 @@ export async function POST(req: Request) {
   }
 
   /*
-   * Quem enxerga uma congregação só não precisa escolher: a classe nasce na
-   * dele. Aceitar a congregação do corpo da requisição nesse caso permitiria
-   * criar classe na congregação vizinha só mandando outro número.
+   * Quem enxerga uma congregação só não escolhe: a classe nasce na dele.
+   * Aceitar a congregação do corpo da requisição nesse caso permitiria criar
+   * classe na congregação vizinha só mandando outro número.
    */
   const pedida = Number.isInteger(corpo.congId) ? (corpo.congId as number) : null;
   const congId = doAcesso ? (sessao?.congIds[0] ?? null) : pedida;

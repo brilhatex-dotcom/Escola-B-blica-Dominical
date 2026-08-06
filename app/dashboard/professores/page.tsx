@@ -52,7 +52,8 @@ function Conteudo() {
   const params = useSearchParams();
   const soRevisar = params.get("revisar") === "1";
 
-  const [busca, setBusca] = useState("");
+  // Semeado pela busca global: clicar num professor cai aqui já filtrado.
+  const [busca, setBusca] = useState(() => params.get("busca") ?? "");
   const [itens, setItens] = useState<PessoaLista[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);

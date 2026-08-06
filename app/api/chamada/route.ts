@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { erro, lerInt, responder } from "@/lib/api";
-import { exigirEscrita } from "@/lib/auth/guarda";
+import { exigirEscrita, exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
+import { registrar } from "@/lib/auditoria";
 
 /**
  * A chamada de uma classe num domingo.
@@ -24,6 +25,20 @@ import { exigirEscrita } from "@/lib/auth/guarda";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  /*
+   * A CHAMADA É DA CONGREGAÇÃO DE QUEM ABRE.
+   *
+   * A secretária local marca a chamada das classes da SUA congregação, e o
+   * recorte garante isso: uma classe de outra congregação responde "não
+   * encontrada", do mesmo jeito que uma que não existe — sem dizer qual dos dois
+   * casos é, para não confirmar a existência de classes fora do alcance.
+   *
+   * Esta rota nasceu SEM guarda na Fase 05 (mesmo defeito de /api/alunos etc.).
+   * Aqui ela ganha a guarda e o recorte de uma vez.
+   */
+  const { sessao, recusa } = await exigirLeitura("chamada");
+  if (recusa) return recusa;
+
   return responder(async () => {
     const url = new URL(req.url);
     const classeId = lerInt(url, "classe");
@@ -31,10 +46,11 @@ export async function GET(req: Request) {
     if (!classeId || !data) throw new Error("Informe a classe e a data.");
 
     const dia = new Date(`${data}T00:00:00Z`);
+    const recorte = recorteDaSessao(sessao);
 
     const [classe, alunos, marcadas] = await Promise.all([
-      prisma.classe.findUnique({
-        where: { id: classeId },
+      prisma.classe.findFirst({
+        where: { id: classeId, ...(recorte ? { congId: { in: recorte.in } } : {}) },
         select: {
           id: true,
           nome: true,
@@ -58,7 +74,7 @@ export async function GET(req: Request) {
       }),
     ]);
 
-    if (!classe) throw new Error("Classe não encontrada.");
+    if (!classe) throw new Error("Classe não encontrada ou fora do seu alcance.");
 
     const presencaPor = new Map(marcadas.map((f) => [f.alunoId, f.presente]));
 
@@ -90,7 +106,7 @@ interface CorpoChamada {
 
 export async function POST(req: Request) {
   // Gravar chamada exige sessao com permissao no modulo. Ver lib/auth/guarda.ts.
-  const { recusa } = await exigirEscrita("chamada");
+  const { sessao, recusa } = await exigirEscrita("chamada");
   if (recusa) return recusa;
 
   let corpo: CorpoChamada;
@@ -105,13 +121,26 @@ export async function POST(req: Request) {
     return erro("Informe classeId, data (YYYY-MM-DD) e a lista de presenças.", 400);
   }
 
+  /*
+   * O RECORTE VALE PARA GRAVAR TAMBÉM — e é aqui que ele mais importa.
+   *
+   * Ter permissão de "chamada" não é ter permissão para marcar QUALQUER classe:
+   * a secretária local grava a chamada da SUA congregação. Sem esta conferência,
+   * bastaria mandar o classeId de outra congregação no corpo do POST para
+   * escrever presença onde não se deveria — a guarda de módulo, sozinha, não
+   * pega isso.
+   */
+  const recorte = recorteDaSessao(sessao);
+  const classe = await prisma.classe.findFirst({
+    where: { id: classeId, ...(recorte ? { congId: { in: recorte.in } } : {}) },
+    select: { congId: true },
+  });
+  if (!classe) {
+    return erro("Classe não encontrada ou fora do seu alcance.", 404);
+  }
+
   return responder(async () => {
     const dia = new Date(`${data}T00:00:00Z`);
-    const classe = await prisma.classe.findUnique({
-      where: { id: classeId },
-      select: { congId: true },
-    });
-    if (!classe) throw new Error("Classe não encontrada.");
 
     /*
      * Os ids de Frequencia NAO sao autoincrement — sao a chave original da
@@ -120,7 +149,7 @@ export async function POST(req: Request) {
      * marcando presenca ao mesmo tempo, em classes diferentes, pegariam o mesmo
      * numero e um dos dois perderia a chamada.
      */
-    return prisma.$transaction(async (tx) => {
+    const resultado = await prisma.$transaction(async (tx) => {
       const maior = await tx.frequencia.aggregate({ _max: { id: true } });
       let proximoId = (maior._max.id ?? 0) + 1;
 
@@ -157,5 +186,22 @@ export async function POST(req: Request) {
 
       return { ok: true, criadas, atualizadas, total: criadas + atualizadas };
     });
+
+    /*
+     * Fora da transacao, e de proposito: ver o cabecalho de lib/auditoria.ts.
+     * A chamada ja esta gravada quando esta linha roda — uma falha aqui custa
+     * uma linha de log, nunca o domingo da classe.
+     */
+    registrar({
+      sessao,
+      acao: resultado.criadas > 0 ? "CREATE" : "UPDATE",
+      entidade: "Frequencia",
+      descricao:
+        `Chamada da classe ${classeId} em ${data}: ` +
+        `${resultado.criadas} marcada(s) e ${resultado.atualizadas} corrigida(s).`,
+      congId: classe.congId,
+    });
+
+    return resultado;
   });
 }

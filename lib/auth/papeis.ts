@@ -299,7 +299,13 @@ export function papelDoCargo(nomeDoCargo: string): Papel | null {
  * Usuários mostra, conta por conta, qual acesso é presumido e qual é de fato.
  */
 export function papelHerdado(perfil: string): Papel {
-  return perfil === "master" ? "administrador" : "dirigente";
+  if (perfil === "master") return "administrador";
+  // Contas criadas pela administração para as secretárias das congregações
+  // (ver /api/usuarios). "secretario" dá o papel Secretário Local — chamada,
+  // alunos, visitantes, lições e revistas, só na congregação da conta. As 19
+  // contas herdadas nunca usam este valor, então nada delas muda.
+  if (perfil === "secretario") return "secretario-local";
+  return "dirigente";
 }
 
 /* ------------------------------------------------------------------ *

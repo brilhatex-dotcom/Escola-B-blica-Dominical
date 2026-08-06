@@ -1,0 +1,174 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { Medal, Trophy } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  CabecalhoModulo,
+  EsqueletoLista,
+  EstadoErro,
+  EstadoVazio,
+} from "@/components/dashboard/PaginaModulo";
+import { FiltroPeriodo } from "@/components/dashboard/FiltroPeriodo";
+
+/**
+ * Ranking por congregação e por classe.
+ *
+ * ORDENA POR TAXA, NÃO POR TOTAL. Ordenar pelo total faria o Templo Sede (92
+ * alunos) ganhar todos os meses por ser o maior — isso não é ranking, é a lista
+ * de tamanhos. Quem tem 7 alunos e frequência perfeita ficaria em último para
+ * sempre, e a igreja aprenderia a ignorar o quadro.
+ */
+
+interface Linha {
+  id: number | null;
+  nome: string;
+  congregacao: string | null;
+  chamadas: number;
+  presencas: number;
+  domingos: number;
+  alunos: number;
+  taxa: number;
+  classificado: boolean;
+}
+
+const MEDALHAS = ["text-gold-300", "text-brand-100", "text-[#b87333]"];
+
+function Tabela({ titulo, linhas, minimo }: { titulo: string; linhas: Linha[]; minimo: number }) {
+  const classificados = linhas.filter((l) => l.classificado);
+  const fora = linhas.filter((l) => !l.classificado);
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+      className="glass-panel overflow-hidden rounded-2xl"
+    >
+      <header className="border-b border-white/8 px-5 py-3.5">
+        <h2 className="font-display text-[0.9rem] font-semibold uppercase tracking-[0.14em] text-white">
+          {titulo}
+        </h2>
+        <p className="mt-0.5 text-[0.74rem] text-brand-200/55">
+          Percentual de presença sobre as chamadas feitas — corrige o tamanho
+        </p>
+      </header>
+
+      {classificados.length === 0 ? (
+        <EstadoVazio mensagem="Nenhum registro no período." />
+      ) : (
+        <ul className="divide-y divide-white/6">
+          {classificados.map((l, i) => (
+            <li key={`${l.id}-${l.nome}`} className="flex items-center gap-3 px-5 py-2.5">
+              <span
+                className={cn(
+                  "w-7 shrink-0 text-center font-display text-[0.9rem] font-semibold tabular-nums",
+                  i < 3 ? MEDALHAS[i] : "text-brand-200/40",
+                )}
+              >
+                {i < 3 ? <Medal className={cn("mx-auto h-4 w-4", MEDALHAS[i])} /> : i + 1}
+              </span>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[0.86rem] text-brand-50">{l.nome}</p>
+                <p className="truncate text-[0.72rem] text-brand-200/50">
+                  {l.congregacao ? `${l.congregacao} · ` : ""}
+                  {l.domingos} {l.domingos === 1 ? "domingo" : "domingos"} · {l.alunos} alunos
+                </p>
+              </div>
+
+              <div className="hidden w-40 shrink-0 sm:block">
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+                  <span
+                    className="block h-full rounded-full bg-gradient-to-r from-brand-400 to-gold-400"
+                    style={{ width: `${Math.min(100, l.taxa)}%` }}
+                  />
+                </div>
+              </div>
+
+              <span className="w-20 shrink-0 text-right text-[0.86rem] font-semibold tabular-nums text-gold-200">
+                {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/*
+        Quem não entrou aparece assim mesmo, com o motivo. Sumir da lista faria
+        alguém procurar a própria classe e concluir que o sistema perdeu os
+        dados dela.
+      */}
+      {fora.length > 0 && (
+        <div className="border-t border-white/8 px-5 py-3">
+          <p className="text-[0.72rem] text-brand-200/50">
+            <span className="text-brand-100/70">
+              {fora.length} fora da classificação
+            </span>{" "}
+            — menos de {minimo} domingos com chamada no período. Com poucas chamadas,
+            um único domingo bom vira 100% e passa na frente de quem compareceu o
+            trimestre inteiro.
+          </p>
+          <p className="mt-1 text-[0.72rem] text-brand-200/40">
+            {fora.map((f) => f.nome).join(" · ")}
+          </p>
+        </div>
+      )}
+    </motion.section>
+  );
+}
+
+export default function RankingPage() {
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
+  const [dados, setDados] = useState<{
+    congregacoes: Linha[];
+    classes: Linha[];
+    minimoDeDomingos: number;
+    periodo: { de: string; ate: string };
+  } | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controle = new AbortController();
+    (async () => {
+      try {
+        setErro(null);
+        const url = new URL("/api/relatorios/ranking", window.location.origin);
+        if (de) url.searchParams.set("de", de);
+        if (ate) url.searchParams.set("ate", ate);
+        const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
+        if (!res.ok) throw Object.assign(new Error(), { status: res.status });
+        const r = await res.json();
+        setDados(r);
+        if (!de) setDe(r.periodo.de);
+        if (!ate) setAte(r.periodo.ate);
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        const status = (e as { status?: number }).status;
+        setErro(status === 403 ? "O seu acesso não permite ver esta tela." : "Não foi possível carregar o ranking.");
+      }
+    })();
+    return () => controle.abort();
+  }, [de, ate]);
+
+  return (
+    <>
+      <CabecalhoModulo icone={Trophy} titulo="Ranking" descricao="Por congregação e por classe, no período">
+        <FiltroPeriodo de={de} ate={ate} aoMudar={(c, v) => (c === "de" ? setDe(v) : setAte(v))} />
+      </CabecalhoModulo>
+
+      {erro ? (
+        <EstadoErro mensagem={erro} />
+      ) : !dados ? (
+        <EsqueletoLista linhas={8} />
+      ) : (
+        <div className="space-y-4">
+          <Tabela titulo="Congregações" linhas={dados.congregacoes} minimo={dados.minimoDeDomingos} />
+          <Tabela titulo="Classes" linhas={dados.classes} minimo={dados.minimoDeDomingos} />
+        </div>
+      )}
+    </>
+  );
+}

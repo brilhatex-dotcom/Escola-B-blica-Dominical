@@ -27,6 +27,41 @@ Next.js 15 · React 19 · TypeScript · TailwindCSS 4 · Framer Motion · GSAP �
 | 06 | Autenticação real (login, sessão, proteção das rotas) | pronto |
 | 07 | Sincronização offline ligada na Chamada | pronto |
 | 08 | Menu em 6 categorias, permissões por papel (RBAC), Usuários | pronto |
+| 09 | Congregações, Aniversariantes, Lições, Pedido de Revistas | pronto |
+| 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria | pronto |
+| 11 | Agenda: Calendário, Eventos, Avisos, Reuniões | pronto |
+| 12 | Administração e Configurações + auditoria gravando de verdade | pronto |
+| 13 | Pesquisa Global (com busca offline) sobre os registros | pronto |
+| — | Refinamentos pós-roadmap (ver abaixo) | pronto |
+
+---
+
+## Refinamentos
+
+Ajustes pedidos depois do roadmap, cada um com a razão que o guiou.
+
+- **Dashboard mostra a PRÓXIMA lição de adultos**, não a que passou. A consulta
+  virou para a frente (`data >= hoje`, `tipoClasse = adultos`), com reserva para
+  a última lição quando o trimestre acaba. O card se chama "Próxima lição ·
+  Adultos".
+- **A conta `master` é super-usuário e nada a rebaixa.** Em `montarAcesso`,
+  `perfil = "master"` devolve `administrador` (campo, tudo) antes de olhar
+  qualquer cargo — senão ligar a conta a uma pessoa cadastrada como Professor
+  trancaria o administrador do lado de fora.
+- **Dirigentes atribuídos pela tela**, em Congregações e na Hierarquia, pelo
+  mesmo componente (`GerirResponsaveis`) e a mesma rota
+  (`/api/congregacoes/dirigente`). Grava o vínculo em `PessoaCargos` com o
+  `congId` — a peça que faltava. Como o papel de acesso vem do cargo, definir o
+  Dirigente já lhe dá a visão da congregação. O vínculo anterior é encerrado,
+  não apagado. (`/api/pessoas`, usada no seletor, ganhou a guarda que faltava.)
+- **Classes agrupadas por congregação**, recolhidas: são 53, e a grade solta era
+  uma parede. Cada congregação abre sob demanda; a busca abre sozinha as seções
+  com resultado.
+- **Relatórios por período e recorte.** Linha do tempo em **domingo / mês /
+  trimestre** e ranking por **congregação / classe**, ordenado pela **taxa de
+  presença** (presentes ÷ chamados — "faltou" continua não sendo "não marcado").
+- **A oferta saiu** dos relatórios e do menu. A tabela `Ofertas` continua no
+  banco e no backup; só deixou de aparecer nas telas.
 
 ---
 
@@ -95,6 +130,373 @@ páginas extras".
 Segui o bloco final, que é o mais específico. **Não há landing page.** Se ela era
 para existir mesmo, é um acréscimo direto: a arquitetura já suporta, porque o
 vídeo de fundo é um componente independente das telas.
+
+---
+
+## Escola Bíblica (Fase 09)
+
+### Dirigente e vice vêm de `PessoaCargos`, não de colunas em `Congregacoes`
+
+Guardar `dirigenteId` e `viceId` direto na congregação parece mais simples e cria
+duas fontes de verdade para o mesmo fato. No dia em que alguém trocasse o
+Dirigente pela tela de Hierarquia, a coluna aqui continuaria apontando para a
+pessoa anterior — e as duas telas mostrariam nomes diferentes, ambas "corretas".
+
+Como o vínculo já mora em `PessoaCargos` desde a Fase 05, **com a congregação
+dentro**, a congregação apenas o consulta. Trocar o Dirigente continua sendo
+alteração em um lugar só.
+
+**Cargo vago aparece como vago**, com o lugar reservado. Omitir a linha faria a
+tela parecer completa — e é justamente essa ausência que alguém precisa ver.
+
+### Aniversário não tem ano
+
+Filtrar por intervalo de datas não acha ninguém: quem nasceu em 12/08/1974 está
+fora de qualquer intervalo de 2026. A comparação é por **mês e dia**
+(`EXTRACT(MONTH)`), ignorando o ano.
+
+Um índice sobre `nasc` não ajuda nessa forma, e tudo bem — são 323 alunos e a
+varredura é instantânea. Criar um índice de expressão aqui resolveria um problema
+que não existe.
+
+A idade mostrada é a que a pessoa **completa** naquele mês, não a de hoje: numa
+lista de aniversariantes, "faz 15 anos" é a informação.
+
+### O filtro da tela nunca amplia o recorte do acesso
+
+Em Aniversariantes, `?cong=1` na barra de endereço é interceptado: o alvo é a
+**interseção** entre o que a tela pediu e o que o acesso permite. Sem isso, um
+Dirigente veria os aniversariantes de outra congregação digitando um número.
+
+### Lições: o que foi dado vem da chamada, não do calendário
+
+Marcar como ministrada toda lição cuja data já passou seria fácil e mentiria — o
+número viria do relógio, não da igreja, e um trimestre inteiro sem chamada
+apareceria como um trimestre em dia. `classesQueDeram` vem de `Freq_Licao`.
+
+`null` (nenhum registro) é distinto de `0`. Uma lição do próximo mês com "0
+classes" parece atraso; sem registro nenhum ela apenas ainda não chegou — e
+chamar de "pendente" o que não venceu treina a secretaria a ignorar o aviso.
+
+### Revistas: o pedido é calculado, não cadastrado
+
+A aba `Pedidos_Revistas` do sistema antigo veio **vazia** — nunca foi usada. Não
+há como importar o que não existe, e um cadastro em branco daria uma tela que só
+funciona depois de alguém digitar tudo de novo.
+
+O que existe são os alunos por classe e a tabela de preços (35 linhas, reais).
+Com as duas, o pedido nasce pronto: uma revista por aluno ativo. Resultado real:
+**290 revistas, R$ 3.062,00**.
+
+O `tipoClasse` é texto livre e a tabela de preços usa as próprias chaves; o
+casamento é por normalização. **O que não casa fica de fora do valor**, e a tela
+diz quantas classes são — tratar categoria ausente como zero produziria um total
+menor que o real, com aparência de conferido.
+
+O ajuste de quantidade é **rascunho e some ao sair**, e a tela avisa. Um número
+que a pessoa digita e o sistema esquece sem avisar é pior do que um rascunho
+assumido.
+
+---
+
+## Relatórios (Fase 10)
+
+### "Faltou" não é "não foi marcado"
+
+`Frequencias` só tem linha para aluno que foi **chamado**. Um domingo em que a
+classe não fez chamada não produz faltas — produz ausência de dados.
+
+Tratar os dois como a mesma coisa arruinaria todos os números: o aluno de uma
+classe que esqueceu a chamada apareceria com 100% de faltas, e o ranking puniria
+a classe organizada que registra tudo (inclusive as faltas) para premiar a que só
+registra presença.
+
+Por isso **o denominador de toda taxa é o número de chamadas existentes**, nunca
+os domingos do calendário. A regra vale nas cinco telas e mora em
+`lib/relatorios/comum.ts`.
+
+### O ranking ordena por taxa, com piso de amostra
+
+Ordenar pelo total faria o Templo Sede (92 alunos) ganhar todo mês por ser o
+maior — isso não é ranking, é a lista de tamanhos. Com taxa, a Cong. M.D.
+Boqueirão lidera com **78,8%**.
+
+A taxa cria outro problema: quem foi chamado uma vez e estava presente marca
+100%. Daí o piso de 3 domingos — e quem fica abaixo **aparece assim mesmo, com o
+motivo escrito**. Sumir da lista faria alguém procurar a própria classe e
+concluir que o sistema perdeu os dados dela.
+
+### Certificados: o sistema apura, a igreja decide
+
+A tela lista os **aptos**; não emite nem grava nada. Emitir automaticamente
+transformaria um reconhecimento da igreja em efeito colateral de uma consulta —
+e o primeiro erro de digitação numa chamada viraria um certificado indevido, com
+o nome de alguém impresso nele.
+
+### Alerta de faltas existe para gerar telefonemas
+
+Telefone e responsável ficam **na linha**, e o número é um link `tel:`. Mandar
+abrir a ficha de cada aluno para achar o telefone transformaria uma lista de
+trinta em trinta idas e voltas.
+
+A sequência de faltas é resolvida no banco (`ROW_NUMBER()` sobre as chamadas de
+cada aluno), não em JavaScript: a tabela cresce ~2.600 linhas por ano.
+
+`ultimaPresenca: null` — "nunca esteve presente" — é distinto de "faltou desde
+tal dia", e o professor precisa saber qual dos dois é.
+
+### A auditoria termina na migração, e a tela diz isso
+
+As 1.671 linhas são todas do sistema antigo; o portal ainda não grava auditoria.
+Uma lista que simplesmente para numa data sugere que nada aconteceu depois dela,
+o que é pior do que não ter registro nenhum.
+
+A tabela também não tem coluna de congregação, então **não há como recortá-la por
+acesso** — a leitura fica restrita a quem enxerga o campo inteiro.
+
+---
+
+## Pesquisa Global (Fase 13)
+
+A barra do topo (Ctrl+K) procura em três fontes ao mesmo tempo, e as três
+devolvem o mesmo formato, então o teclado e o desenho não sabem de onde veio
+cada resultado:
+
+1. **Módulos** — instantâneo, da lista do menu. Digitar "vis" mostra Visitantes
+   antes de a rede responder.
+2. **Registros, online** — `/api/busca`: alunos, professores, classes,
+   congregações e visitantes.
+3. **Registros, offline** — o espelho no aparelho, quando a rede cai.
+
+### A busca é uma porta, e usa a mesma fechadura do resto
+
+Cada categoria só é procurada se o acesso **enxerga** o módulo dela
+(`podeVer`), e o resultado é recortado pela congregação exatamente como as
+telas. Sem isso a busca seria a porta dos fundos do RBAC: um Professor acharia o
+campo inteiro só trocando a tela pelo campo de busca. O recorte vale na busca
+online (`/api/busca`) **e** na descida do espelho (`/api/sincronizar`) — o
+aparelho só guarda o que aquele acesso pode ver.
+
+### "betânia" com e sem acento
+
+`Pessoas.chave` já é o nome normalizado (sem acento), então professores são
+achados digitando "jose" → "Pb. José Raimundo". As congregações são poucas (14)
+e o nome do próprio campo tem acento — então a busca delas é filtrada em memória
+com a mesma normalização, para "betania" achar "Cong. Betânia". Alunos e
+visitantes usam a busca do banco (resolve caixa, não acento) — a mesma limitação
+já documentada em `/api/alunos`; a busca **offline**, essa, ignora acento em
+tudo.
+
+### A descida (`/api/sincronizar`) é o par da fila
+
+A fila de sincronização (Fase 07) é a **subida**: leva ao servidor a chamada
+gravada sem sinal. A Fase 13 acrescenta a **descida**: traz para o IndexedDB os
+cadastros — congregações, classes, alunos (com telefone e nascimento) e
+visitantes — que a busca precisa quando a rede cai. Roda ao abrir o painel e
+quando a internet volta, com `uid` determinístico (`srv-<tabela>-<id>`) para
+atualizar em vez de duplicar, e `receberDoServidor` preserva o que ainda não
+subiu — a descida nunca atropela a chamada de hoje que está na fila.
+
+É por isso que buscar "maria" sem internet devolve os **telefones** dos alunos:
+exatamente o que se precisa num domingo de manhã, que é quando mais se procura
+alguém e menos se tem sinal. Professores não descem (a tabela `Pessoas` não está
+no espelho local), então a busca offline cobre alunos, classes, congregações e
+visitantes.
+
+---
+
+## Administração e Configurações (Fase 12)
+
+Oito telas: **Congregações (cadastro)**, **Hierarquia**, **Escalas**,
+**Sistema**, **Backup**, **Sincronização**, **Offline** e **Logs**. Com elas, o
+menu deixa de ter qualquer "em breve".
+
+### A auditoria deixou de terminar na migração
+
+O portal agora **grava** em `Auditoria` — chamada, troca de liderança, correção
+de nome de congregação, alteração de preço, entrada no sistema e geração de
+backup. Mas só depois que `prisma/aplicar-fase-12.sql` for aplicado: a tabela
+veio do sistema antigo com o `id` preenchido pela importação e **sem sequência
+nenhuma**, então um INSERT falharia por não ter de onde tirar o próximo número.
+O SQL cria a sequência apontando para `MAX(id) + 1` — começar do 1 colidiria
+com as 1.671 linhas herdadas.
+
+Enquanto o SQL não for colado, a tela de Logs **diz isso, com o caminho da
+correção**, em vez de mostrar uma lista parada. E quem decide qual frase
+aparece é o banco (`há linha com id acima do último importado?`), não uma
+constante: o mesmo código roda contra os dois estados.
+
+### A auditoria nunca derruba a operação que ela registra
+
+`registrar()` não lança e não entra na transação. Se a gravação do log
+participasse da transação da chamada, um problema no log desfaria a chamada de
+uma classe inteira num domingo de manhã — e o motivo real seria o *registro* da
+gravação, não a gravação.
+
+A troca é consciente: numa falha rara, perde-se uma linha de auditoria em vez de
+perder a chamada. Auditoria com um buraco continua útil; chamada perdida não
+volta.
+
+**Tentativa de login recusada não é registrada.** A tabela viraria alvo, e uma
+senha digitada por engano no campo do usuário acabaria escrita em claro na
+descrição.
+
+### O cadastro de congregações corrige o nome — e só
+
+`Congregacoes.id` não é autoincrement: é a chave da planilha, e ela aparece em
+`Classes`, `Alunos`, `Frequencias`, `Ofertas`, `Visitantes`, `Licoes`,
+`PessoaCargos`, `Eventos` e `Avisos`. Apagar a linha não apagaria nada disso —
+deixaria órfão, e o campo perderia o histórico de uma congregação inteira por
+causa de um clique. A tela mostra na própria linha o que depende de cada uma
+(classes, alunos ativos, cargos, chamadas), que é a informação que explica a
+restrição antes dela ser encontrada.
+
+### O organograma não tem dados próprios
+
+Cada caixa é uma linha de `PessoaCargos`; o nível vem de `Cargos.escopo` somado
+a onde o vínculo é exercido. Uma tabela "organograma" à parte pareceria mais
+simples e divergiria da tela de Liderança no primeiro Dirigente trocado.
+
+Quem acumula cargo **aparece duas vezes**, de propósito — é o organograma
+dizendo que a pessoa acumula. O que não se repete é a *contagem*: 59 pessoas,
+68 cargos, 9 acumulam. São números diferentes e a tela separa os dois.
+
+O recorte por congregação **não corta os cargos de campo**: um Dirigente
+precisa continuar vendo quem é o Pastor Presidente, senão o desenho fica
+decapitado e a congregação parece solta no ar. E as congregações **sem ninguém
+na direção aparecem marcadas** — hoje são todas as 14, porque os 68 cargos
+cadastrados são 5 do campo e 63 de professor. É justamente a lacuna que alguém
+precisa fechar.
+
+### O que salva e o que não salva ficam visivelmente separados
+
+Em Sistema, os preços das revistas são **dado** e gravam. O estado do servidor
+(autenticação, senha própria, banco) é **regra** e é só leitura: um campo
+editável para "exigir senha própria" seria um interruptor que tranca a EBD
+inteira num domingo de manhã, sem desfazer. Misturar os dois faria a secretaria
+descobrir por tentativa quais campos são de mentira.
+
+O nome do banco aparece como **nome da variável**, nunca a string de conexão —
+prints deste portal já circularam por WhatsApp.
+
+### Baixar o backup é mais grave do que ver qualquer tela
+
+O arquivo traz nome, telefone e data de nascimento de 319 alunos, muitos deles
+crianças. Uma tela mostra trinta linhas por vez, num aparelho, para quem está
+logado; o arquivo sai do sistema e vai para onde quiserem levá-lo.
+
+Por isso o download exige permissão de **gravação** em `cfg-backup`, e não de
+leitura — na prática, Pastor Presidente, Gestor Local e a conta de
+administração. O Supervisor da EBD vê a tela e o resumo: supervisionar a Escola
+Bíblica não é a mesma coisa que levar embora o cadastro do campo.
+
+**As senhas ficam de fora do arquivo.** Um backup com os hashes dentro é um
+ataque offline pronto — e as 19 contas ainda dividem o mesmo SHA-256 sem sal.
+Toda geração é registrada na auditoria; é a única pista que sobra depois que o
+arquivo sai daqui.
+
+### As duas telas que se recusam a apagar
+
+- **Sincronização** mostra a fila e oferece *reenviar* e *destravar* — nunca
+  "limpar a fila". Seria o botão mais tentador da tela para quem viu um número
+  vermelho, e apagaria a chamada do domingo sem cópia nenhuma.
+- **Offline** bloqueia a limpeza enquanto houver item pendente, com a fila
+  apontada e o caminho escrito. Um "tem certeza?" não resolveria: quem chegou
+  ali já decidiu, e é nesse estado que se clica em "sim" sem ler. Com a fila
+  vazia, a limpeza roda — e preserva a fila e a configuração, ao contrário de
+  `limparBancoLocal()`, que é do logout.
+
+Ambas perguntam pelo IndexedDB **dentro de um efeito**, não na inicialização do
+estado: no servidor ele não existe, e inicializar com a resposta do servidor
+quebrava a hidratação (erro #418 do React) — a tela piscava "este navegador não
+guarda dados" antes de se corrigir.
+
+### Escalas continua sendo um arquivo
+
+`Escala_Cultos` tem `nomeArquivo`, `url` e `urlPreview`: a escala é um PDF
+montado fora do sistema e guardado no Drive. Modelar turnos aqui criaria uma
+segunda escala para divergir da que o campo distribui pelo WhatsApp. A tela
+abre o arquivo e **avisa quando o mês corrente não tem escala publicada** — sem
+esse aviso, uma lista ordenada por data mostra a escala de maio no topo e não
+diz nada sobre agosto estar faltando.
+
+---
+
+## Agenda (Fase 11)
+
+Quatro telas: **Calendário**, **Eventos**, **Avisos** e **Reuniões**.
+
+### O calendário não guarda os domingos — ele os deduz
+
+Não existe, e não vai existir, uma tabela "domingos de EBD". Domingo de Escola
+Bíblica é todo dia cujo `getDay() === 0`; o que o banco tem a dizer sobre ele é
+se **houve chamada** (`Frequencias` agrupadas por data) e **qual lição** foi
+dada.
+
+Uma tabela de domingos precisaria ser preenchida todo ano por alguém, e no
+primeiro janeiro esquecido o calendário ficaria vazio — com aparência de que a
+EBD não aconteceu.
+
+### "Domingo sem chamada" só conta o que já passou
+
+O resumo do mês separa domingos **com** e **sem** chamada, e o segundo número
+**ignora os domingos futuros**. Contar 3 de 4 como pendência no dia 5 do mês
+seria acusar a igreja de não ter feito uma chamada cuja data ainda não chegou —
+o alerta perderia sentido na primeira semana de todo mês.
+
+Pela mesma razão, o dia futuro aparece como *"EBD a realizar"* (cinza) e não
+como *"domingo sem chamada"* (âmbar).
+
+### Um evento de vários dias continua acontecendo
+
+Eventos têm `data` e `dataFim`. Um congresso de sexta a domingo, consultado no
+sábado, **é um evento em curso, não um evento passado**. Por isso:
+
+- no calendário, o mês casa por interseção (`data <= fim AND dataFim >= início`),
+  senão um evento que começa dia 28 de março some do calendário de abril;
+- na lista, "próximos" filtra por `dataFim`, e o cartão traz `emCurso`.
+
+### Um aviso vencido pode estar errado
+
+`dataExpiracao` existe no cadastro antigo e nunca foi usada — a planilha mostrava
+tudo junto. Mas "culto às 19h no dia 12" continua no mural em março do ano
+seguinte e manda a igreja para o lugar errado.
+
+Vigentes e vencidos ficam **separados**, a tela abre nos vigentes, e os vencidos
+seguem acessíveis atrás de um clique. Apagar histórico não é papel desta tela.
+
+### A lista de presença da reunião vem de JSON
+
+`Reunioes.participantes` é uma coluna JSON do sistema antigo, não uma tabela.
+Como qualquer JSON de origem externa, ela pode vir nula, vir como objeto ou vir
+como texto — a leitura confere `Array.isArray` antes de usar, e uma lista vazia
+vira `null` (sem lista) em vez de "0 participantes", que são coisas diferentes.
+
+São 13 reuniões registradas, todas do tipo *Estudo de Professores*.
+
+### `/api/agenda` estava sem guarda desde a Fase 05
+
+Mesmo defeito das quatro rotas descritas na seção seguinte, encontrado aqui:
+a rota da agenda nasceu antes do RBAC e ficava aberta. Agora exige
+`agenda-calendario` e aplica o recorte por congregação dentro da consulta.
+
+---
+
+## As rotas da Fase 05 estavam sem guarda
+
+Achado durante esta fase, e corrigido nela: `/api/alunos`, `/api/classes`,
+`/api/visitantes` e `/api/relatorios` **nasceram antes do RBAC** (Fase 08) e
+ficaram abertas. A Fase 08 protegeu o que ela mesma criou; ninguém percebeu
+porque a **tela** já escondia o menu.
+
+Esconder o item do menu nunca protegeu nada — bastava digitar `/api/alunos` no
+navegador para receber os 323 alunos do campo inteiro, qualquer que fosse a
+congregação de quem pedia. O recorte que o painel aplicava com cuidado não
+existia ali.
+
+As quatro passaram a exigir permissão **e** a aplicar o recorte dentro da
+consulta. O `?cong=` da tela **estreita, nunca amplia**: o alvo é a interseção
+entre o que a tela pediu e o que o acesso permite.
 
 ---
 

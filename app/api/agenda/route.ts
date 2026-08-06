@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { lerInt, responder } from "@/lib/api";
+import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 
 /**
  * Agenda: eventos, escalas de culto e reuniões.
@@ -21,9 +22,21 @@ import { lerInt, responder } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  // Guarda acrescentada na Fase 11: esta rota nasceu na Fase 05, antes do RBAC.
+  const { sessao, recusa } = await exigirLeitura("agenda-calendario");
+  if (recusa) return recusa;
+
   return responder(async () => {
     const url = new URL(req.url);
-    const congId = lerInt(url, "cong");
+    const recorte = recorteDaSessao(sessao);
+    const pedida = lerInt(url, "cong");
+    const congIds = recorte
+      ? pedida !== null && recorte.in.includes(pedida)
+        ? [pedida]
+        : recorte.in
+      : pedida !== null
+        ? [pedida]
+        : null;
     const incluirPassados = url.searchParams.get("passados") === "1";
 
     const hoje = new Date();
@@ -33,14 +46,14 @@ export async function GET(req: Request) {
 
     const [eventos, escalas, reunioes] = await Promise.all([
       prisma.evento.findMany({
-        where: { data: filtroData, ...(congId ? { congId } : {}) },
+        where: { data: filtroData, ...(congIds ? { congId: { in: congIds } } : {}) },
         orderBy: { data: incluirPassados ? "desc" : "asc" },
         take: 40,
         include: { congregacao: { select: { nome: true } } },
       }),
       // Escalas: documentos do mes, ordenados do mais recente para tras.
       prisma.escalaCulto.findMany({
-        where: congId ? { congId } : {},
+        where: congIds ? { congId: { in: congIds } } : {},
         orderBy: { mesAno: "desc" },
         take: 12,
         include: { congregacao: { select: { nome: true } } },

@@ -110,7 +110,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/congregacoes",
         icone: Building2,
         descricao: "Cada congregação com o seu dirigente e vice-dirigente",
-        emBreve: true,
       },
       {
         chave: "chamada",
@@ -160,7 +159,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/aniversariantes",
         icone: CakeSlice,
         descricao: "Aniversários do mês, por congregação e classe",
-        emBreve: true,
       },
       {
         chave: "licoes",
@@ -168,15 +166,13 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/licoes",
         icone: BookMarked,
         descricao: "Lições do trimestre e o que cada classe ministrou",
-        emBreve: true,
       },
       {
         chave: "revistas",
-        rotulo: "Pedido de Revistas",
+        rotulo: "Pedido de Lição",
         href: "/dashboard/revistas",
         icone: ScrollText,
-        descricao: "Pedidos de revistas por classe, com os preços do campo",
-        emBreve: true,
+        descricao: "Pedido por congregação, com preços e baixa parcial de pagamento",
       },
     ],
   },
@@ -192,7 +188,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/admin/congregacoes",
         icone: Building2,
         descricao: "Cadastro das congregações do campo",
-        emBreve: true,
       },
       /*
        * Liderança aponta para a tela que JÁ existe e já faz exatamente isto
@@ -213,7 +208,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/hierarquia",
         icone: Network,
         descricao: "O organograma do campo, do Pastor às classes",
-        emBreve: true,
       },
       {
         chave: "usuarios",
@@ -235,7 +229,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/escalas",
         icone: CalendarRange,
         descricao: "Escalas de culto do mês",
-        emBreve: true,
       },
     ],
   },
@@ -250,7 +243,7 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         rotulo: "Frequência",
         href: "/dashboard/relatorios",
         icone: FileText,
-        descricao: "Frequência por classe e ofertas do período",
+        descricao: "Índices de frequência por período, congregação e classe",
       },
       {
         chave: "rel-ranking",
@@ -258,7 +251,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/ranking",
         icone: Trophy,
         descricao: "Ranking por congregação, por classe e por frequência",
-        emBreve: true,
       },
       {
         chave: "rel-faltas",
@@ -266,7 +258,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/faltas",
         icone: TriangleAlert,
         descricao: "Alunos faltando há domingos seguidos",
-        emBreve: true,
       },
       {
         chave: "rel-ficha",
@@ -274,7 +265,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/ficha",
         icone: ClipboardList,
         descricao: "Histórico completo de um aluno",
-        emBreve: true,
       },
       {
         chave: "rel-certificados",
@@ -282,7 +272,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/certificados",
         icone: Award,
         descricao: "Certificados de frequência e conclusão",
-        emBreve: true,
       },
       {
         chave: "rel-auditoria",
@@ -290,7 +279,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/auditoria",
         icone: ScrollText,
         descricao: "O que foi criado, alterado e apagado no sistema",
-        emBreve: true,
       },
     ],
   },
@@ -313,7 +301,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/agenda/eventos",
         icone: PartyPopper,
         descricao: "Eventos do campo e das congregações",
-        emBreve: true,
       },
       {
         chave: "agenda-avisos",
@@ -321,7 +308,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/agenda/avisos",
         icone: Bell,
         descricao: "Avisos publicados, com prioridade e validade",
-        emBreve: true,
       },
       {
         chave: "agenda-reunioes",
@@ -329,7 +315,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/agenda/reunioes",
         icone: UsersRound,
         descricao: "Reuniões com lista de presença",
-        emBreve: true,
       },
     ],
   },
@@ -345,7 +330,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/sistema",
         icone: Sliders,
         descricao: "Parâmetros do portal e do campo",
-        emBreve: true,
       },
       {
         chave: "cfg-backup",
@@ -353,7 +337,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/backup",
         icone: Database,
         descricao: "Cópia de segurança dos dados",
-        emBreve: true,
       },
       {
         chave: "cfg-sincronizacao",
@@ -361,7 +344,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/sincronizacao",
         icone: Cloud,
         descricao: "Fila de envio e estado da sincronização",
-        emBreve: true,
       },
       {
         chave: "cfg-offline",
@@ -369,7 +351,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/offline",
         icone: CloudOff,
         descricao: "O que está guardado neste aparelho",
-        emBreve: true,
       },
       {
         chave: "cfg-logs",
@@ -377,7 +358,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/configuracoes/logs",
         icone: ScrollText,
         descricao: "Quem entrou e o que fez, com data e hora",
-        emBreve: true,
       },
     ],
   },
