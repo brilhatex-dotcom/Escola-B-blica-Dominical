@@ -18,6 +18,7 @@ import {
 } from "@/components/dashboard/PaginaModulo";
 import { iniciais } from "@/lib/dashboard/formato";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
+import { normalizarLogin } from "@/lib/auth/login";
 import type { Escopo, Papel } from "@/lib/auth/papeis";
 
 /**
@@ -310,7 +311,33 @@ function FormNovaConta({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo rotulo="Nome da pessoa" valor={nome} aoMudar={setNome} placeholder="Ex.: Maria da Silva" />
-        <Campo rotulo="Login (sem espaços)" valor={login} aoMudar={setLogin} placeholder="Ex.: mariabandeiras" />
+        {/*
+          O login gravado aparece EMBAIXO do campo, enquanto se digita.
+
+          O portal tira os espaços e baixa a caixa antes de gravar. Fazendo isso
+          em silêncio, quem cadastrou "Maria Bandeiras" recebe "mariabandeiras"
+          no banco, tenta entrar com o que digitou e ouve "usuário ou senha
+          inválidos" — procurando o problema na senha, que estava certa. Dizer o
+          resultado na hora custa uma linha e evita esse telefonema inteiro.
+        */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[0.7rem] uppercase tracking-[0.1em] text-brand-200/50">
+            Login (sem espaços)
+          </span>
+          <input
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            placeholder="Ex.: mariabandeiras"
+            className="h-10 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-[0.84rem] text-brand-50 placeholder:text-brand-200/35 focus:border-gold-400/35 focus:outline-none"
+          />
+          {login.trim() !== "" && (
+            <span className="text-[0.68rem] leading-relaxed text-brand-200/50">
+              Ela vai entrar digitando{" "}
+              <strong className="text-gold-200">{normalizarLogin(login)}</strong>
+              {normalizarLogin(login) !== login.trim() && " — sem espaços e em letras minúsculas"}
+            </span>
+          )}
+        </label>
         <Campo rotulo="Senha inicial" valor={senha} aoMudar={setSenha} placeholder="Mínimo 6 caracteres" tipo="text" />
 
         <label className="flex flex-col gap-1">

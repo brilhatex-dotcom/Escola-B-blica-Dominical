@@ -5,6 +5,7 @@ import { montarAcesso } from "@/lib/auth/acesso";
 import { papelPrincipal, rotuloDoPapel } from "@/lib/auth/papeis";
 import { gerarHash } from "@/lib/auth/senha";
 import { registrar } from "@/lib/auditoria";
+import { normalizarLogin } from "@/lib/auth/login";
 
 /**
  * As contas de acesso e o papel de cada uma.
@@ -127,9 +128,7 @@ function criticarSenha(s: string): string | null {
   return null;
 }
 
-function normalizarLogin(bruto: string): string {
-  return bruto.trim().toLowerCase().replace(/\s+/g, "");
-}
+
 
 /**
  * POST — cria uma conta de acesso para uma secretária de congregação.

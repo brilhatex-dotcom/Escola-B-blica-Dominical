@@ -8,11 +8,9 @@ import {
   CheckCheck,
   CloudOff,
   Loader2,
-  Pencil,
+  MapPin,
   Save,
-  Trash2,
-  UserPlus,
-  Users,
+  UserRoundPlus,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -27,11 +25,13 @@ import {
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
 import { iniciais } from "@/lib/dashboard/formato";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { temBancoLocal } from "@/lib/db/local";
 import { guardarChamada, lerChamadaLocal, situacaoDoEnvio } from "@/lib/db/chamadas";
 import type { ChamadaLocal } from "@/lib/db/schema";
 import { sincronizar } from "@/lib/sync/motor";
-import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Chamada — o coracao do sistema.
@@ -76,6 +76,36 @@ interface AlunoChamada {
   nasc: string | null;
   presente: boolean | null;
 }
+
+/**
+ * Um visitante recebido nesta aula.
+ *
+ * `anos` vem calculado do servidor porque a fonte muda conforme a época do
+ * registro: nos visitantes novos sai da data de nascimento; nos 89 herdados da
+ * planilha, do número solto que era tudo o que existia. Ver lib/ebd/idade.ts.
+ */
+interface VisitanteDoDia {
+  id: number;
+  nome: string;
+  nasc: string | null;
+  local: string | null;
+  tel: string | null;
+  obs: string | null;
+  anos: number | null;
+}
+
+const CAMPOS_VISITANTE: readonly CampoForm[] = [
+  { chave: "nome", rotulo: "Nome do visitante", obrigatorio: true, largo: true },
+  { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+  {
+    chave: "local",
+    rotulo: "Onde mora",
+    placeholder: "bairro, sítio ou povoado",
+    ajuda: "Texto livre — a zona rural do campo não cabe numa lista de bairros.",
+  },
+  { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+  { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
+];
 
 interface Chamada {
   classe: {
@@ -148,6 +178,13 @@ export default function ChamadaPage() {
   /** A tela esta mostrando o que ficou guardado, e nao o que o servidor tem. */
   const [semServidor, setSemServidor] = useState(false);
 
+  const { podeGravar } = useAcesso();
+  const podeGravarVisitante = podeGravar("visitantes");
+  const [incluindoVisitante, setIncluindoVisitante] = useState(false);
+  /** Visitantes recebidos nesta classe, neste dia. */
+  const [visitantes, setVisitantes] = useState<VisitanteDoDia[]>([]);
+  const [visitanteEmEdicao, setVisitanteEmEdicao] = useState<VisitanteDoDia | null>(null);
+
   // A data so e calculada no cliente: no servidor, em UTC, "hoje" pode ser
   // outro dia para quem esta em Pernambuco.
   useEffect(() => setData(domingoMaisRecente()), []);
@@ -212,6 +249,7 @@ export default function ChamadaPage() {
 
       setChamada(base);
       setSemServidor(!doServidor);
+      void carregarVisitantes(classeId, data, controle.signal);
 
       /*
        * Quem manda nas marcacoes: o aparelho, quando ha pendencia.
@@ -246,6 +284,62 @@ export default function ChamadaPage() {
 
     return () => controle.abort();
   }, [classeId, data]);
+
+  /**
+   * Os visitantes desta classe neste dia.
+   *
+   * Consulta separada da chamada de propósito: visitante não é aluno e não
+   * entra no pacote de presenças. Se entrasse, ele apareceria na contagem de
+   * "presentes" do relatório, inflando a frequência da classe com gente que
+   * não é matriculada — que é exatamente o número que a secretaria compara com
+   * o total de alunos.
+   */
+  const carregarVisitantes = useCallback(
+    async (classe: number, dia: string, signal?: AbortSignal) => {
+      try {
+        const url = new URL("/api/visitantes", window.location.origin);
+        url.searchParams.set("classe", String(classe));
+        url.searchParams.set("de", dia);
+        url.searchParams.set("ate", dia);
+        const res = await fetch(url, { signal, cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setVisitantes((await res.json()).itens ?? []);
+      } catch {
+        // Sem servidor a chamada continua funcionando; a lista de visitantes é
+        // que fica vazia. Um erro aqui não pode derrubar a tela da chamada.
+        setVisitantes([]);
+      }
+    },
+    [],
+  );
+
+  /** Grava e recarrega a lista de visitantes. Devolve o erro, se houver. */
+  const gravarVisitante = useCallback(
+    async (url: string, metodo: string, corpo: unknown): Promise<string | void> => {
+      try {
+        const res = await fetch(url, {
+          method: metodo,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) return dados.erro ?? "Não foi possível salvar o visitante.";
+        if (classeId && data) await carregarVisitantes(classeId, data);
+      } catch {
+        /*
+         * O visitante NÃO entra na fila offline, e a mensagem diz isso.
+         *
+         * A fila da Fase 07 leva o pacote da chamada, que é idempotente por
+         * (aluno, data). Um visitante não tem chave assim: reenviar o mesmo
+         * cadastro criaria a mesma pessoa duas vezes. Enfileirá-lo pediria uma
+         * chave própria — trabalho de outra fase, e prometer aqui o que não
+         * existe seria pior do que avisar.
+         */
+        return "Sem conexão. O visitante ainda não pode ser guardado no aparelho — anote e cadastre quando a internet voltar.";
+      }
+    },
+    [carregarVisitantes, classeId, data],
+  );
 
   const marcar = useCallback((alunoId: number, presente: boolean) => {
     setMarcas((atual) => {
@@ -430,9 +524,27 @@ export default function ChamadaPage() {
               <Badge variant="sucesso">{presentes} presentes</Badge>
               <Badge variant="erro">{ausentes} faltas</Badge>
               {naoMarcados > 0 && <Badge variant="neutro">{naoMarcados} sem marcar</Badge>}
+              {visitantes.length > 0 && (
+                <Badge variant="info">
+                  {visitantes.length} {visitantes.length === 1 ? "visitante" : "visitantes"}
+                </Badge>
+              )}
             </div>
 
-            <div className="flex w-full gap-2 sm:w-auto">
+            <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+              {/*
+                Incluir visitante fica AQUI, na chamada, e não só no módulo de
+                Visitantes. O visitante aparece durante a aula — a mesma pessoa,
+                no mesmo minuto, está marcando presença. Obrigá-la a sair da
+                chamada, abrir outra tela e voltar é o caminho mais curto para o
+                visitante nunca ser registrado.
+              */}
+              {podeGravarVisitante && (
+                <Button variant="ghost" size="sm" onClick={() => setIncluindoVisitante(true)}>
+                  <UserRoundPlus className="h-4 w-4" />
+                  Incluir visitante
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => marcarTodos(true)}>
                 <CheckCheck className="h-4 w-4" />
                 Todos presentes
@@ -514,235 +626,99 @@ export default function ChamadaPage() {
             })}
           </ul>
 
-          <PainelVisitantes classe={chamada.classe} data={chamada.data} />
+          {/* ---------------- Visitantes do dia ---------------- */}
+          {visitantes.length > 0 && (
+            <section className="mt-4">
+              <h2 className="mb-2 px-1 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-brand-200/50">
+                Visitantes recebidos neste domingo
+              </h2>
+              <ul className="glass-panel divide-y divide-white/6 overflow-hidden rounded-2xl">
+                {visitantes.map((v) => (
+                  <li key={v.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-500/20 ring-1 ring-brand-400/25">
+                      <UserRoundPlus className="h-4 w-4 text-brand-200" />
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[0.86rem] text-brand-50">{v.nome}</p>
+                      <p className="flex min-w-0 items-center gap-1.5 truncate text-[0.72rem] text-brand-200/50">
+                        {v.anos !== null ? `${v.anos} anos` : "idade não informada"}
+                        {v.local && (
+                          <>
+                            {" · "}
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{v.local}</span>
+                          </>
+                        )}
+                      </p>
+                    </div>
+
+                    {podeGravarVisitante && (
+                      <AcoesDoRegistro
+                        nome={v.nome}
+                        onEditar={() => setVisitanteEmEdicao(v)}
+                        aviso={`${v.nome} será excluído da lista de visitantes deste domingo. Visitante não tem histórico ligado, então a exclusão é definitiva.`}
+                        onExcluir={async () => {
+                          await gravarVisitante(`/api/visitantes/${v.id}`, "DELETE", {});
+                        }}
+                      />
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </>
       )}
+
+      {/* ---------------- Cadastro de visitante ---------------- */}
+      <FormularioModal
+        aberto={incluindoVisitante}
+        aoFechar={() => setIncluindoVisitante(false)}
+        titulo="Incluir visitante"
+        descricao={
+          chamada
+            ? `Ele entra como visitante da classe ${chamada.classe.nome} neste domingo. Visitante não conta como presença de aluno.`
+            : undefined
+        }
+        campos={CAMPOS_VISITANTE}
+        valores={{ nome: "", nasc: "", local: "", tel: "", obs: "" }}
+        rotuloGravar="Incluir"
+        aoGravar={(v) =>
+          gravarVisitante("/api/visitantes", "POST", {
+            nome: v.nome,
+            nasc: v.nasc || null,
+            local: v.local,
+            tel: v.tel,
+            obs: v.obs,
+            classeId: chamada?.classe.id,
+            data: chamada?.data,
+          })
+        }
+      />
+
+      <FormularioModal
+        aberto={visitanteEmEdicao !== null}
+        aoFechar={() => setVisitanteEmEdicao(null)}
+        titulo="Editar visitante"
+        campos={CAMPOS_VISITANTE}
+        valores={{
+          nome: visitanteEmEdicao?.nome ?? "",
+          nasc: visitanteEmEdicao?.nasc?.slice(0, 10) ?? "",
+          local: visitanteEmEdicao?.local ?? "",
+          tel: visitanteEmEdicao?.tel ?? "",
+          obs: visitanteEmEdicao?.obs ?? "",
+        }}
+        aoGravar={(v) =>
+          gravarVisitante(`/api/visitantes/${visitanteEmEdicao?.id}`, "PATCH", {
+            nome: v.nome,
+            nasc: v.nasc || null,
+            local: v.local,
+            tel: v.tel,
+            obs: v.obs,
+          })
+        }
+      />
     </>
-  );
-}
-
-/* ------------------------------------------------------------------ *
- * Visitantes — recebidos nesta classe, neste domingo
- * ------------------------------------------------------------------ */
-
-interface Visitante {
-  id: number;
-  nome: string;
-  nascimento: string | null;
-  endereco: string | null;
-}
-
-function formatarNascimento(iso: string | null): string {
-  if (!iso) return "";
-  return new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("pt-BR", { timeZone: "UTC" });
-}
-
-function PainelVisitantes({
-  classe,
-  data,
-}: {
-  classe: Chamada["classe"];
-  data: string;
-}) {
-  const { podeGravar } = useAcesso();
-  const editavel = podeGravar("visitantes");
-
-  const [visitantes, setVisitantes] = useState<Visitante[] | null>(null);
-  const [incluindo, setIncluindo] = useState(false);
-  const [editando, setEditando] = useState<number | null>(null);
-
-  async function carregar() {
-    const url = new URL("/api/visitantes", window.location.origin);
-    url.searchParams.set("classe", String(classe.id));
-    url.searchParams.set("de", data);
-    url.searchParams.set("ate", data);
-    url.searchParams.set("porPagina", "100");
-    try {
-      const r = await fetch(url, { cache: "no-store" });
-      const d = await r.json();
-      setVisitantes(d.itens ?? []);
-    } catch {
-      setVisitantes([]);
-    }
-  }
-
-  useEffect(() => {
-    setVisitantes(null);
-    setIncluindo(false);
-    setEditando(null);
-    void carregar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classe.id, data]);
-
-  async function remover(id: number) {
-    if (!window.confirm("Remover este visitante?")) return;
-    await fetch(`/api/visitantes?id=${id}`, { method: "DELETE" });
-    setVisitantes((atual) => (atual ? atual.filter((v) => v.id !== id) : atual));
-  }
-
-  return (
-    <div className="glass-panel mt-3 rounded-2xl p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="flex items-center gap-2 text-[0.82rem] font-medium text-brand-100">
-          <Users className="h-4 w-4 text-gold-300/80" />
-          Visitantes {visitantes !== null && `(${visitantes.length})`}
-        </p>
-        {editavel && !incluindo && (
-          <Button size="sm" variant="ghost" onClick={() => setIncluindo(true)}>
-            <UserPlus className="h-4 w-4" />
-            Incluir visitante
-          </Button>
-        )}
-      </div>
-
-      {visitantes === null ? (
-        <p className="text-[0.8rem] text-brand-200/45">Carregando…</p>
-      ) : visitantes.length === 0 && !incluindo ? (
-        <p className="text-[0.8rem] italic text-brand-200/45">Nenhum visitante recebido neste domingo.</p>
-      ) : (
-        <ul className="divide-y divide-white/6">
-          {visitantes.map((v) =>
-            editando === v.id ? (
-              <li key={v.id} className="py-2">
-                <FormVisitante
-                  inicial={v}
-                  aoSalvar={async (dados) => {
-                    await fetch("/api/visitantes", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ id: v.id, ...dados }),
-                    });
-                    setEditando(null);
-                    void carregar();
-                  }}
-                  aoCancelar={() => setEditando(null)}
-                />
-              </li>
-            ) : (
-              <li key={v.id} className="flex items-center gap-3 py-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-gold-500/70 to-gold-700/70 ring-1 ring-white/12">
-                  <span className="font-display text-[0.62rem] font-semibold tracking-wider text-brand-950">
-                    {iniciais(v.nome)}
-                  </span>
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[0.84rem] text-brand-50">{v.nome}</p>
-                  <p className="truncate text-[0.72rem] text-brand-200/50">
-                    {[v.nascimento && `nasc. ${formatarNascimento(v.nascimento)}`, v.endereco]
-                      .filter(Boolean)
-                      .join(" · ") || "Sem dados adicionais"}
-                  </p>
-                </div>
-                {editavel && (
-                  <div className="flex shrink-0 items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditando(v.id)}
-                      aria-label={`Editar ${v.nome}`}
-                      className="rounded-lg p-1.5 text-brand-200/50 hover:bg-white/8 hover:text-gold-200"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void remover(v.id)}
-                      aria-label={`Remover ${v.nome}`}
-                      className="rounded-lg p-1.5 text-brand-200/50 hover:bg-white/8 hover:text-flame-400"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
-              </li>
-            ),
-          )}
-        </ul>
-      )}
-
-      {incluindo && editavel && (
-        <div className="mt-2 border-t border-white/8 pt-2">
-          <FormVisitante
-            aoSalvar={async (dados) => {
-              if (!classe.congregacao) return;
-              await fetch("/api/visitantes", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  ...dados,
-                  congId: classe.congregacao.id,
-                  classeId: classe.id,
-                  data,
-                }),
-              });
-              setIncluindo(false);
-              void carregar();
-            }}
-            aoCancelar={() => setIncluindo(false)}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FormVisitante({
-  inicial,
-  aoSalvar,
-  aoCancelar,
-}: {
-  inicial?: Visitante;
-  aoSalvar: (dados: { nome: string; nascimento: string | null; endereco: string }) => Promise<void>;
-  aoCancelar: () => void;
-}) {
-  const [nome, setNome] = useState(inicial?.nome ?? "");
-  const [nascimento, setNascimento] = useState(inicial?.nascimento?.slice(0, 10) ?? "");
-  const [endereco, setEndereco] = useState(inicial?.endereco ?? "");
-  const [salvando, setSalvando] = useState(false);
-
-  async function salvar() {
-    if (!nome.trim()) return;
-    setSalvando(true);
-    try {
-      await aoSalvar({ nome: nome.trim(), nascimento: nascimento || null, endereco: endereco.trim() });
-    } finally {
-      setSalvando(false);
-    }
-  }
-
-  return (
-    <div className="grid gap-2 sm:grid-cols-3">
-      <input
-        autoFocus
-        value={nome}
-        onChange={(e) => setNome(e.target.value)}
-        placeholder="Nome do visitante"
-        className="h-10 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-[0.82rem] text-brand-50 placeholder:text-brand-200/35 focus:border-gold-400/35 focus:outline-none sm:col-span-1"
-      />
-      <label className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3">
-        <span className="shrink-0 text-[0.72rem] text-brand-200/50">Nascimento</span>
-        <input
-          type="date"
-          value={nascimento}
-          onChange={(e) => setNascimento(e.target.value)}
-          className="min-w-0 flex-1 bg-transparent text-[0.8rem] text-brand-50 focus:outline-none [color-scheme:dark]"
-        />
-      </label>
-      <input
-        value={endereco}
-        onChange={(e) => setEndereco(e.target.value)}
-        placeholder="Local que mora"
-        className="h-10 rounded-xl border border-white/10 bg-white/[0.05] px-3 text-[0.82rem] text-brand-50 placeholder:text-brand-200/35 focus:border-gold-400/35 focus:outline-none"
-      />
-
-      <div className="flex items-center gap-2 sm:col-span-3">
-        <Button size="sm" onClick={() => void salvar()} disabled={salvando || !nome.trim()}>
-          {salvando && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Salvar
-        </Button>
-        <Button size="sm" variant="ghost" onClick={aoCancelar}>
-          Cancelar
-        </Button>
-      </div>
-    </div>
   );
 }

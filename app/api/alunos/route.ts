@@ -1,7 +1,19 @@
 import { prisma } from "@/lib/prisma";
-import { erro, lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
-import { exigirEscrita, exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
-import { registrar } from "@/lib/auditoria";
+import {
+  dataCivil,
+  erro,
+  lerCorpo,
+  lerInt,
+  lerPaginacao,
+  pagina,
+  proximoId,
+  responder,
+  texto,
+  textoOpcional,
+} from "@/lib/api";
+import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
+import { CHAVES_POSICAO } from "@/lib/ebd/posicoes";
+import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 
 /**
  * Alunos matriculados.
@@ -82,6 +94,7 @@ export async function GET(req: Request) {
           nasc: true,
           tel: true,
           resp: true,
+          posicao: true,
           ativo: true,
           classe: { select: { id: true, nome: true, faixa: true } },
           congregacao: { select: { id: true, nome: true } },
@@ -93,227 +106,62 @@ export async function GET(req: Request) {
   });
 }
 
-function dentroDoRecorte(recorte: { in: number[] } | undefined, congId: number | null): boolean {
-  if (!recorte) return true;
-  return congId !== null && recorte.in.includes(congId);
-}
-
-function lerData(bruto: unknown): Date | null | undefined {
-  if (bruto === null) return null;
-  if (typeof bruto !== "string" || !bruto.trim()) return undefined;
-  const d = new Date(`${bruto}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? undefined : d;
-}
-
-/*
- * ============================================================================
- * CRUD — matricular, editar, transferir de classe e apagar
+/**
+ * Matricular um aluno.
  *
- * O `id` de Alunos é herdado (não é autoincrement): a criação usa MAX(id)+1
- * dentro de uma transação, o mesmo padrão de Usuarios, Pessoas e Classes.
- * ============================================================================
+ * A congregação NÃO vem do corpo da requisição: ela é deduzida da CLASSE
+ * escolhida. Aceitá-la do cliente permitiria a alguém do grupo B cadastrar um
+ * aluno noutra congregação simplesmente mandando outro `congId` — o recorte da
+ * leitura ficaria de pé e o da escrita, aberto.
  */
-
 export async function POST(req: Request) {
-  const { sessao, recusa } = await exigirEscrita("alunos");
+  const { recusa, congId: doAcesso } = await escopoDeEscrita("alunos");
   if (recusa) return recusa;
 
-  let corpo: { nome?: string; nasc?: string; tel?: string; resp?: string; congId?: number; classeId?: number | null };
-  try {
-    corpo = await req.json();
-  } catch {
-    return erro("Corpo da requisição inválido.", 400);
-  }
+  const corpo = await lerCorpo(req);
+  if (!corpo) return erro("Corpo da requisição inválido.", 400);
 
-  const nome = corpo.nome?.trim() ?? "";
-  const congId = corpo.congId;
+  const nome = texto(corpo.nome, 120);
   if (!nome) return erro("Informe o nome do aluno.", 400);
-  if (!Number.isInteger(congId)) return erro("Escolha a congregação do aluno.", 400);
 
-  const recorte = recorteDaSessao(sessao);
-  if (!dentroDoRecorte(recorte, congId!)) {
-    return erro("O seu acesso não permite matricular alunos nesta congregação.", 403);
+  const classeId = Number.isInteger(corpo.classeId) ? (corpo.classeId as number) : null;
+  if (!classeId) return erro("Escolha a classe do aluno.", 400);
+
+  if (corpo.posicao && !posicaoValida(corpo.posicao)) {
+    return erro("Posição no ministério inválida.", 400);
   }
-
-  let classe: { id: number; nome: string; congId: number | null } | null = null;
-  if (corpo.classeId !== undefined && corpo.classeId !== null) {
-    classe = await prisma.classe.findUnique({
-      where: { id: corpo.classeId },
-      select: { id: true, nome: true, congId: true },
-    });
-    if (!classe) return erro("Classe não encontrada.", 404);
-    if (classe.congId !== congId) return erro("A classe escolhida não é desta congregação.", 400);
-  }
-
-  const nasc = lerData(corpo.nasc);
-  if (nasc === undefined && corpo.nasc) return erro("Data de nascimento inválida.", 400);
 
   return responder(async () => {
-    const criado = await prisma.$transaction(async (tx) => {
-      const maior = await tx.aluno.aggregate({ _max: { id: true } });
-      const id = (maior._max.id ?? 0) + 1;
+    const classe = await prisma.classe.findUnique({
+      where: { id: classeId },
+      select: { id: true, congId: true },
+    });
+    if (!classe) throw new Error("Classe não encontrada.");
+    exigirCongregacaoPermitida(doAcesso, classe.congId);
+
+    return prisma.$transaction(async (tx) => {
+      const id = await proximoId(() => tx.aluno.aggregate({ _max: { id: true } }));
       return tx.aluno.create({
         data: {
           id,
           nome,
-          nasc: nasc ?? null,
-          tel: corpo.tel?.trim() || null,
-          resp: corpo.resp?.trim() || null,
-          congId: congId!,
-          classeId: classe?.id ?? null,
+          nasc: dataCivil(corpo.nasc),
+          tel: textoOpcional(corpo.tel, 30),
+          resp: textoOpcional(corpo.resp, 120),
+          // Posicao desconhecida vira null em vez de ser gravada: um valor fora
+          // da lista nao teria tratamento nem ordem, e apareceria cru na tela.
+          posicao: posicaoValida(corpo.posicao),
+          classeId: classe.id,
+          congId: classe.congId,
           ativo: true,
         },
         select: { id: true, nome: true },
       });
     });
-
-    registrar({
-      sessao,
-      acao: "CREATE",
-      entidade: "Alunos",
-      descricao: `Aluno "${criado.nome}" matriculado${classe ? ` em ${classe.nome}` : ""}.`,
-      congId: congId!,
-    });
-
-    return { ok: true, ...criado };
   });
 }
 
-/**
- * PUT — edita o aluno; `classeId` também serve para TRANSFERIR de classe
- * (ou tirar da classe, com `classeId: null`) sem apagar o cadastro.
- */
-export async function PUT(req: Request) {
-  const { sessao, recusa } = await exigirEscrita("alunos");
-  if (recusa) return recusa;
-
-  let corpo: {
-    id?: number;
-    nome?: string;
-    nasc?: string | null;
-    tel?: string;
-    resp?: string;
-    classeId?: number | null;
-    ativo?: boolean;
-  };
-  try {
-    corpo = await req.json();
-  } catch {
-    return erro("Corpo da requisição inválido.", 400);
-  }
-
-  const { id } = corpo;
-  if (!Number.isInteger(id)) return erro("Aluno inválido.", 400);
-
-  const aluno = await prisma.aluno.findUnique({ where: { id: id! } });
-  if (!aluno) return erro("Aluno não encontrado.", 404);
-
-  const recorte = recorteDaSessao(sessao);
-  if (!dentroDoRecorte(recorte, aluno.congId)) {
-    return erro("O seu acesso não permite alterar este aluno.", 403);
-  }
-
-  const dados: Record<string, unknown> = {};
-  const mudancas: string[] = [];
-
-  if (typeof corpo.nome === "string" && corpo.nome.trim() && corpo.nome.trim() !== aluno.nome) {
-    dados.nome = corpo.nome.trim();
-    mudancas.push("nome");
-  }
-  if (corpo.nasc !== undefined) {
-    const nasc = lerData(corpo.nasc);
-    if (nasc === undefined) return erro("Data de nascimento inválida.", 400);
-    dados.nasc = nasc;
-    mudancas.push("nascimento");
-  }
-  if (typeof corpo.tel === "string" && corpo.tel.trim() !== (aluno.tel ?? "")) {
-    dados.tel = corpo.tel.trim() || null;
-    mudancas.push("telefone");
-  }
-  if (typeof corpo.resp === "string" && corpo.resp.trim() !== (aluno.resp ?? "")) {
-    dados.resp = corpo.resp.trim() || null;
-    mudancas.push("responsável");
-  }
-  if (typeof corpo.ativo === "boolean" && corpo.ativo !== aluno.ativo) {
-    dados.ativo = corpo.ativo;
-    mudancas.push(corpo.ativo ? "reativado" : "desativado");
-  }
-  if (corpo.classeId !== undefined && corpo.classeId !== aluno.classeId) {
-    if (corpo.classeId !== null) {
-      const classe = await prisma.classe.findUnique({
-        where: { id: corpo.classeId },
-        select: { id: true, nome: true, congId: true },
-      });
-      if (!classe) return erro("Classe não encontrada.", 404);
-      if (classe.congId !== aluno.congId) return erro("A classe escolhida não é desta congregação.", 400);
-      mudancas.push(`transferido para ${classe.nome}`);
-    } else {
-      mudancas.push("removido da classe");
-    }
-    dados.classeId = corpo.classeId;
-  }
-
-  if (Object.keys(dados).length === 0) {
-    return responder(async () => ({ ok: true, mudou: false }));
-  }
-
-  return responder(async () => {
-    await prisma.aluno.update({ where: { id: id! }, data: dados });
-    registrar({
-      sessao,
-      acao: "UPDATE",
-      entidade: "Alunos",
-      descricao: `Aluno "${aluno.nome}": ${mudancas.join(", ")}.`,
-      congId: aluno.congId,
-    });
-    return { ok: true, mudou: true, mudancas };
-  });
-}
-
-/**
- * DELETE ?id= — só apaga aluno SEM frequência lançada.
- *
- * Um aluno com chamada registrada não pode sumir: apagaria a frequência da
- * classe inteira nos domingos em que ele foi contado. O caminho para quem já
- * tem histórico é `PUT {ativo:false}` — some da chamada de hoje sem apagar o
- * que já aconteceu.
- */
-export async function DELETE(req: Request) {
-  const { sessao, recusa } = await exigirEscrita("alunos");
-  if (recusa) return recusa;
-
-  const url = new URL(req.url);
-  const id = lerInt(url, "id");
-  if (id === null) return erro("Informe o aluno.", 400);
-
-  const aluno = await prisma.aluno.findUnique({
-    where: { id },
-    select: { id: true, nome: true, congId: true, _count: { select: { frequencias: true } } },
-  });
-  if (!aluno) return erro("Aluno não encontrado.", 404);
-
-  const recorte = recorteDaSessao(sessao);
-  if (!dentroDoRecorte(recorte, aluno.congId)) {
-    return erro("O seu acesso não permite apagar este aluno.", 403);
-  }
-
-  if (aluno._count.frequencias > 0) {
-    return erro(
-      `Este aluno tem ${aluno._count.frequencias} chamada(s) registrada(s). ` +
-        `Desative-o em vez de apagar — assim ele some da chamada de hoje sem perder o histórico.`,
-      409,
-    );
-  }
-
-  return responder(async () => {
-    await prisma.aluno.delete({ where: { id } });
-    registrar({
-      sessao,
-      acao: "DELETE",
-      entidade: "Alunos",
-      descricao: `Aluno "${aluno.nome}" apagado.`,
-      congId: aluno.congId,
-    });
-    return { ok: true };
-  });
+/** A posição, se for uma das reconhecidas. Ver lib/ebd/posicoes.ts. */
+function posicaoValida(valor: unknown): string | null {
+  return typeof valor === "string" && CHAVES_POSICAO.includes(valor) ? valor : null;
 }

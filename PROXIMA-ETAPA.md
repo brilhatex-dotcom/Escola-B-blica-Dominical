@@ -1,4 +1,4 @@
-# Continuação — roadmap concluído (pós Fase 13)
+# Continuação — Fase 14c: rankings expandidos e comparativos adicionais (BI)
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -44,12 +44,97 @@ Substitui um sistema antigo em Google Apps Script.
 | 10 | Relatórios: Ranking, Faltas, Ficha, Certificados, Auditoria |
 | 11 | Agenda: Calendário, Eventos, Avisos, Reuniões |
 | 12 | Administração e Configurações + auditoria gravando de verdade |
-| 13 | **Pesquisa Global (com busca offline) sobre os registros** |
+| 13 | Pesquisa Global (com busca offline) sobre os registros |
+| 14a | **Central de Relatórios (BI) — o cérebro: IGS, IGE, alertas, análise automática** |
+| 14b | **Central de Relatórios (BI) — gráficos avançados: evolução, radar e comparativo** |
 
-## O plano das próximas fases (aprovado)
+## A Fase 14 — Central de Relatórios (BI) — e o corte combinado com o usuário
 
-As 13 fases planejadas estão entregues. O que vier a partir daqui é manutenção
-e pedidos novos — não há mais fase pendente no roadmap aprovado.
+O pedido original ("FASE 08 — Central de Relatórios e BI") equivalia a 5-6
+fases somadas: índices, uma dúzia de tipos de gráfico, rankings cruzados,
+comparativos, exportação em PDF/Excel/CSV com timbre institucional, relatório
+executivo. Perguntei ao usuário por onde começar (ver `AskUserQuestion` no
+histórico da sessão) e a resposta foi **"o cérebro primeiro"**: os índices e
+os cálculos, porque tudo o resto (gráficos, rankings, exportação) vai consumir
+esse motor — construí-lo depois seria refazer.
+
+Também perguntei sobre dois dados que o pedido cita e não existem no cadastro
+— **sexo do aluno** e **desempenho individual do professor** (não há chamada
+de professor, só de aluno). Resposta: **não adicionar nenhum dos dois por
+enquanto**. Nenhum gráfico, filtro, ranking ou alerta desta fase (nem das
+seguintes, até nova decisão) deve fingir medir isso.
+
+### O corte de sub-fases (proposto e ainda não aprovado item a item)
+
+| Sub-fase | Entrega |
+|---|---|
+| **14a** | ✅ Entregue — Índice de Saúde (IGS) por congregação, Índice Geral da EBD (IGE), Painel com indicadores, alertas automáticos, análise em texto |
+| **14b** | ✅ Entregue — evolução de 12 meses no Painel, tela Comparativo (radar + linha, 2 a 4 congregações) |
+| 14c | Rankings expandidos (top crescimento, top recuperação) + comparativos adicionais (mês × mês, ano × ano) |
+| 14d | Exportação: impressão profissional, Excel (.xlsx), CSV, Relatório Executivo de 2 páginas, com timbre institucional |
+
+**Antes de começar 14c, confirme com o usuário se a ordem continua essa** — a
+aprovação foi dada explicitamente para 14a e depois para 14b; 14c/14d são a
+sequência que pareceu mais lógica, não uma decisão fechada.
+
+## O que a Fase 14b entregou (para não refazer)
+
+- **Evolução — últimos 12 meses**, nova seção do Painel (`/dashboard/relatorios`):
+  área com a frequência do campo mês a mês, vinda de uma série mensal
+  calculada em `/api/relatorios/painel` (`evolucaoMensal`, com `generate_series`
+  para não pular mês sem chamada). Mês sem chamada aparece como vão na área,
+  nunca como "0%".
+- **Tela nova `/dashboard/relatorios/comparativo`** (item de menu "Comparativo",
+  ícone radar): escolhe de 2 a 4 congregações (`COMPARATIVO_MINIMO`/
+  `COMPARATIVO_MAXIMO` em `lib/relatorios/indices.ts`) e mostra:
+  - **Radar** dos 5 componentes do IGS sobrepostos (uma cor por congregação).
+  - **Linha** com a evolução de 6 meses de cada uma, lado a lado.
+  - Tabela compacta com índice/faixa, frequência, tendência e visitantes.
+- **`/api/relatorios/comparativo`** (nova rota): intersecta os ids pedidos com
+  o recorte da sessão, valida a seleção, calcula os mesmos componentes do IGS
+  por congregação e a série mensal de 6 meses de cada uma.
+- **`lib/relatorios/indices.ts`** ganhou `paraRadar` (monta os 5 eixos, sempre
+  na mesma ordem, rótulo positivo) e `validarSelecaoComparativo`.
+- **Componentes de gráfico novos**, todos `next/dynamic({ssr:false})`:
+  `GraficoEvolucao` (área), `GraficoLinhaComparativa` (linha multi-série),
+  `GraficoRadar` (radar multi-série).
+- **Corrigido de brinde**: `tsconfig.json` não incluía `**/*.mts` no
+  `include` — os scripts `scripts/verificar-*.mts` nunca eram checados por
+  `npm run typecheck`. Corrigido; agora participam do typecheck normal.
+- `npm run verificar:bi` — **56 asserções** (47 da 14a + 9 novas de
+  `paraRadar`/`validarSelecaoComparativo`).
+- **Não entrou nesta sub-fase** (ficou para 14c, se aprovado): pizza, rosca,
+  heatmap, timeline — só os tipos de gráfico que o usuário pediu
+  explicitamente ("linha, área, radar, comparativos").
+
+## O que a Fase 14a entregou (para não refazer)
+
+- **`/dashboard/relatorios` virou o Painel** (IGE + Saúde da EBD + alertas +
+  análise). A tela antiga de frequência (linha do tempo, comparativo por
+  classe/congregação) **mudou para `/dashboard/relatorios/frequencia`** — nada
+  nela foi alterado, só o endereço. Chave de permissão nova: `rel-painel`
+  (grupo B enxerga, igual às demais telas de relatório).
+- **`lib/relatorios/indices.ts`** — `calcularIGS`, `classificarIGS`,
+  `scoreDeVariacao`, `tendenciaDe`, `variacaoPct`. Funções puras, sem banco.
+  Componente ausente **redistribui peso, não vira zero**; sem nenhum
+  componente calculável, a nota é `null` (não inventa 0).
+- **`lib/relatorios/analise.ts`** — `gerarAlertas` e `gerarAnalise`. Texto por
+  REGRA, não por IA de verdade — está dito também na tela, num rodapé
+  discreto. Arquitetura pronta para trocar por uma chamada de IA real (mesma
+  assinatura, sem acesso a banco), mas isso não foi feito.
+- **`/api/relatorios/painel`** — tudo numa chamada: IGS de cada congregação,
+  IGE do campo (mesma fórmula sobre a SOMA, não a média das médias — evita
+  paradoxo de Simpson), classes sem chamada há 21+ dias, contagem de
+  professores/dirigentes (só CONTAGEM, nenhum desempenho individual).
+- **Sem SQL para aplicar** — nenhuma tabela nova, nenhuma coluna nova. Tudo
+  calculado em cima de `Frequencias`, `Visitantes`, `Alunos`, `Classes`,
+  `PessoaCargo` que já existiam.
+- Gráfico (barra horizontal do IGS) em `components/relatorios/GraficoIGS.tsx`,
+  carregado com `next/dynamic({ssr:false})` — mesma regra do `ChartCard` do
+  Dashboard principal; sem isso o Recharts inflava o bundle da página de 7 kB
+  para 119 kB.
+- `npm run verificar:bi` — **47 asserções**, cobrindo os cálculos, as faixas
+  de classificação e a geração de alertas/análise, tudo sem banco.
 
 ## O que a Fase 13 entregou (para não refazer)
 

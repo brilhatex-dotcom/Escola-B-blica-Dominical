@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, Phone, Trash2, UserRoundPlus } from "lucide-react";
+import { Check, MapPin, Phone, Plus, UserRoundPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   CabecalhoModulo,
   EsqueletoLista,
@@ -11,8 +12,10 @@ import {
   EstadoVazio,
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
-import { diaEMes, iniciais } from "@/lib/dashboard/formato";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
+import { diaEMes, iniciais } from "@/lib/dashboard/formato";
 
 /**
  * Visitantes recebidos.
@@ -26,24 +29,51 @@ interface VisitanteLista {
   id: number;
   nome: string;
   idade: number | null;
+  nasc: string | null;
+  local: string | null;
+  /** Calculada no servidor: da data de nascimento, ou da idade herdada. */
+  anos: number | null;
   tel: string | null;
   obs: string | null;
-  nascimento: string | null;
-  endereco: string | null;
   data: string;
   classe: { id: number; nome: string } | null;
   congregacao: { id: number; nome: string } | null;
 }
 
 export default function VisitantesPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("visitantes");
+
+  const [aviso, setAviso] = useState<string | null>(null);
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<VisitanteLista | null>(null);
+  const [recarga, setRecarga] = useState(0);
+
+  /** Manda ao servidor e recarrega. Devolve a mensagem de erro, se houver. */
+  const gravar = useCallback(
+    async (url: string, metodo: string, corpo: unknown): Promise<string | void> => {
+      try {
+        const res = await fetch(url, {
+          method: metodo,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(corpo),
+        });
+        const dados = await res.json().catch(() => ({}));
+        if (!res.ok) return dados.erro ?? "Não foi possível salvar.";
+        if (dados.mensagem) setAviso(dados.mensagem);
+        setRecarga((n) => n + 1);
+      } catch {
+        return "Sem resposta do servidor. Verifique a conexão.";
+      }
+    },
+    [],
+  );
+
   const [classe, setClasse] = useState<number | null>(null);
   const [classes, setClasses] = useState<Array<{ id: number; nome: string }>>([]);
   const [itens, setItens] = useState<VisitanteLista[] | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [removendo, setRemovendo] = useState<number | null>(null);
-  const { podeGravar } = useAcesso();
-  const editavel = podeGravar("visitantes");
 
   useEffect(() => {
     void fetch("/api/classes")
@@ -54,53 +84,38 @@ export default function VisitantesPage() {
       .catch(() => setClasses([]));
   }, []);
 
-  async function carregar() {
-    try {
-      setErro(null);
-      const url = new URL("/api/visitantes", window.location.origin);
-      if (classe) url.searchParams.set("classe", String(classe));
-      url.searchParams.set("porPagina", "200");
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
-      const dados = await res.json();
-      setItens(dados.itens);
-      setTotal(dados.total);
-    } catch (e) {
-      /*
-       * "O servidor não respondeu" era mentira quando ele respondia 500 — e
-       * mandava procurar problema na internet, que estava perfeita. A
-       * mensagem agora separa os dois casos: sem rede o `fetch` lança e não
-       * há `status`; com resposta de erro, o problema está no banco.
-       */
-      const status = (e as { status?: number }).status;
-      setErro(
-        status
-          ? "O servidor respondeu com erro. Isso costuma ser banco de dados não configurado — abra /api/diagnostico para ver o motivo."
-          : "Sem resposta do servidor. Verifique a conexão e tente de novo.",
-      );
-      setItens([]);
-    }
-  }
-
   useEffect(() => {
-    void carregar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classe]);
-
-  async function remover(v: VisitanteLista) {
-    if (!window.confirm(`Remover o visitante "${v.nome}"?`)) return;
-    setRemovendo(v.id);
-    try {
-      const res = await fetch(`/api/visitantes?id=${v.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Não foi possível remover.");
-      setItens((atual) => (atual ? atual.filter((it) => it.id !== v.id) : atual));
-      setTotal((t) => (t !== null ? t - 1 : t));
-    } catch (e) {
-      window.alert((e as Error).message);
-    } finally {
-      setRemovendo(null);
-    }
-  }
+    const controle = new AbortController();
+    (async () => {
+      try {
+        setErro(null);
+        const url = new URL("/api/visitantes", window.location.origin);
+        if (classe) url.searchParams.set("classe", String(classe));
+        url.searchParams.set("porPagina", "200");
+        const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
+        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+        const dados = await res.json();
+        setItens(dados.itens);
+        setTotal(dados.total);
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        /*
+         * "O servidor não respondeu" era mentira quando ele respondia 500 — e
+         * mandava procurar problema na internet, que estava perfeita. A
+         * mensagem agora separa os dois casos: sem rede o `fetch` lança e não
+         * há `status`; com resposta de erro, o problema está no banco.
+         */
+        const status = (e as { status?: number }).status;
+        setErro(
+          status
+            ? "O servidor respondeu com erro. Isso costuma ser banco de dados não configurado — abra /api/diagnostico para ver o motivo."
+            : "Sem resposta do servidor. Verifique a conexão e tente de novo.",
+        );
+        setItens([]);
+      }
+    })();
+    return () => controle.abort();
+  }, [classe, recarga]);
 
   return (
     <>
@@ -110,8 +125,23 @@ export default function VisitantesPage() {
         descricao="Recebidos na Escola Bíblica, do mais recente ao mais antigo"
         total={total}
       >
-        <Filtro rotulo="Classe" opcoes={classes} valor={classe} aoMudar={setClasse} />
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <Filtro rotulo="Classe" opcoes={classes} valor={classe} aoMudar={setClasse} />
+          {podeMexer && (
+            <Button size="sm" onClick={() => setCriando(true)}>
+              <Plus className="h-4 w-4" />
+              Novo visitante
+            </Button>
+          )}
+        </div>
       </CabecalhoModulo>
+
+      {aviso && (
+        <div className="mb-3 flex items-start gap-2 rounded-xl border border-emerald-400/25 bg-emerald-500/10 px-4 py-2.5 text-[0.82rem] text-emerald-200">
+          <Check className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{aviso}</span>
+        </div>
+      )}
 
       {erro ? (
         <EstadoErro mensagem={erro} />
@@ -145,7 +175,6 @@ export default function VisitantesPage() {
                   {v.congregacao?.nome && (
                     <span className="text-brand-200/40"> · {v.congregacao.nome}</span>
                   )}
-                  {v.endereco && <span className="text-brand-200/40"> · {v.endereco}</span>}
                 </p>
                 {v.obs && <p className="truncate text-[0.7rem] italic text-brand-200/40">{v.obs}</p>}
               </div>
@@ -157,35 +186,127 @@ export default function VisitantesPage() {
                     {v.tel}
                   </span>
                 )}
-                {v.nascimento && (
-                  <span className="hidden text-[0.72rem] tabular-nums text-brand-200/50 sm:inline">
-                    nasc. {diaEMes(new Date(v.nascimento))}
+                {v.local && (
+                  <span className="hidden max-w-[10rem] items-center gap-1.5 truncate text-[0.74rem] text-brand-200/55 md:flex">
+                    <MapPin className="h-3 w-3 shrink-0" />
+                    <span className="truncate">{v.local}</span>
                   </span>
                 )}
-                {v.idade !== null && <Badge variant="neutro">{v.idade} anos</Badge>}
+                {/*
+                  `anos` vem calculado do servidor porque a fonte muda conforme a
+                  época do registro: nos visitantes novos sai da data de
+                  nascimento; nos 89 herdados, do número solto que a planilha
+                  trazia. A tela não precisa saber de qual dos dois veio.
+                */}
+                {v.anos !== null && <Badge variant="neutro">{v.anos} anos</Badge>}
                 <span className="w-16 shrink-0 text-right text-[0.74rem] tabular-nums text-brand-200/55">
                   {diaEMes(new Date(v.data))}
                 </span>
-                {editavel && (
-                  <button
-                    type="button"
-                    onClick={() => void remover(v)}
-                    disabled={removendo === v.id}
-                    aria-label={`Remover ${v.nome}`}
-                    className="rounded-lg p-1.5 text-brand-200/45 hover:bg-white/8 hover:text-flame-400"
-                  >
-                    {removendo === v.id ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+
+                {podeMexer && (
+                  <AcoesDoRegistro
+                    nome={v.nome}
+                    onEditar={() => setEmEdicao(v)}
+                    aviso={`${v.nome} será excluído definitivamente. Visitante não tem histórico ligado, então não há o que arquivar.`}
+                    onExcluir={async () => {
+                      await gravar(`/api/visitantes/${v.id}`, "DELETE", {});
+                    }}
+                  />
                 )}
               </div>
             </motion.li>
           ))}
         </ul>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Novo visitante"
+        descricao="A congregação vem da classe escolhida."
+        campos={camposDoVisitante(classes)}
+        valores={{
+          nome: "",
+          classeId: classe ? String(classe) : "",
+          data: hojeCivil(),
+          nasc: "",
+          local: "",
+          tel: "",
+          obs: "",
+        }}
+        rotuloGravar="Registrar"
+        aoGravar={(v) =>
+          gravar("/api/visitantes", "POST", {
+            nome: v.nome,
+            classeId: v.classeId ? Number(v.classeId) : null,
+            data: v.data,
+            nasc: v.nasc || null,
+            local: v.local,
+            tel: v.tel,
+            obs: v.obs,
+          })
+        }
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar visitante"
+        campos={camposDoVisitante(classes).filter((c) => c.chave !== "classeId" && c.chave !== "data")}
+        valores={{
+          nome: emEdicao?.nome ?? "",
+          nasc: emEdicao?.nasc?.slice(0, 10) ?? "",
+          local: emEdicao?.local ?? "",
+          tel: emEdicao?.tel ?? "",
+          obs: emEdicao?.obs ?? "",
+        }}
+        aoGravar={(v) =>
+          gravar(`/api/visitantes/${emEdicao?.id}`, "PATCH", {
+            nome: v.nome,
+            nasc: v.nasc || null,
+            local: v.local,
+            tel: v.tel,
+            obs: v.obs,
+          })
+        }
+      />
     </>
   );
+}
+
+/**
+ * Hoje, no fuso do aparelho.
+ *
+ * Calculado no cliente, e não no servidor: o servidor roda em UTC, num data
+ * center, e às 22h de um sábado em Recife ele já está no domingo — o visitante
+ * de sábado seria registrado no dia seguinte.
+ */
+function hojeCivil(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+function camposDoVisitante(classes: Array<{ id: number; nome: string }>): readonly CampoForm[] {
+  return [
+    { chave: "nome", rotulo: "Nome do visitante", obrigatorio: true, largo: true },
+    { chave: "data", rotulo: "Data da visita", tipo: "data", obrigatorio: true },
+    {
+      chave: "classeId",
+      rotulo: "Classe que visitou",
+      tipo: "lista",
+      opcoes: classes.map((c) => ({ valor: String(c.id), rotulo: c.nome })),
+      ajuda: "Deixe em branco se a pessoa não entrou em nenhuma sala.",
+    },
+    { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+    {
+      chave: "local",
+      rotulo: "Onde mora",
+      placeholder: "bairro, sítio ou povoado",
+      ajuda: "Texto livre — a zona rural do campo não cabe numa lista de bairros.",
+    },
+    { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+    { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
+  ];
 }

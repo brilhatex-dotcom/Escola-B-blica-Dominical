@@ -41,6 +41,18 @@ export const buttonVariants = cva(
         ghost:
           "text-brand-200/80 hover:text-gold-200 hover:bg-white/5 rounded-lg",
         link: "text-brand-200/75 hover:text-gold-200 underline-offset-4 hover:underline rounded-md",
+        /*
+         * Confirmação de exclusão, e nada mais.
+         *
+         * O vermelho da chama é reservado a erro de formulário em toda a
+         * paleta, e esta é a única outra situação que merece o mesmo peso: a
+         * ação que não tem desfazer. Usá-lo em botão comum gastaria o sinal —
+         * quando tudo é vermelho, vermelho não quer dizer nada.
+         */
+        perigo: [
+          "bg-flame-500/15 text-flame-400 ring-1 ring-flame-500/35 rounded-lg",
+          "hover:bg-flame-500/25 hover:text-flame-300 active:scale-[0.985]",
+        ],
       },
       size: {
         default: "h-11 px-5 text-sm",

@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
+import { Button } from "@/components/ui/button";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { AvisoDeGravacao } from "@/components/crud/AvisoDeGravacao";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useCrud } from "@/components/crud/useCrud";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Avisos da igreja.
@@ -40,7 +46,7 @@ function urgencia(p: number) {
   return { rotulo: "informativo", variante: "neutro" as const };
 }
 
-function Cartao({ a, vencido }: { a: Aviso; vencido: boolean }) {
+function Cartao({ a, vencido, acoes }: { a: Aviso; vencido: boolean; acoes?: React.ReactNode }) {
   const u = urgencia(a.prioridade);
   return (
     <article className={cn("glass-panel rounded-2xl p-4", vencido && "opacity-60")}>
@@ -62,11 +68,23 @@ function Cartao({ a, vencido }: { a: Aviso; vencido: boolean }) {
             ? ` · vence em ${a.diasRestantes} ${a.diasRestantes === 1 ? "dia" : "dias"}`
             : ` · vale até ${fmt.format(new Date(`${a.expira}T12:00:00`))}`}
       </p>
+      {/*
+        As ações chegam por props porque `Cartao` é um componente à parte, fora
+        do componente de página. Ler o estado do CRUD daqui exigiria um contexto
+        só para isto — passar duas funções é mais simples e mais fácil de seguir.
+      */}
+      {acoes}
     </article>
   );
 }
 
 export default function AvisosPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("agenda-avisos");
+  const { aviso, limparAviso, recarga, gravar } = useCrud();
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<Aviso | null>(null);
+
   const [dados, setDados] = useState<{ vigentes: Aviso[]; vencidos: Aviso[] } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [verVencidos, setVerVencidos] = useState(false);
@@ -85,11 +103,20 @@ export default function AvisosPage() {
       }
     })();
     return () => controle.abort();
-  }, []);
+  }, [recarga]);
 
   return (
     <>
-      <CabecalhoModulo icone={Megaphone} titulo="Avisos" descricao="Comunicados vigentes da igreja" total={dados?.vigentes.length ?? null} />
+      <CabecalhoModulo icone={Megaphone} titulo="Avisos" descricao="Comunicados vigentes da igreja" total={dados?.vigentes.length ?? null}>
+        {podeMexer && (
+          <Button size="sm" onClick={() => setCriando(true)}>
+            <Plus className="h-4 w-4" />
+            Novo aviso
+          </Button>
+        )}
+      </CabecalhoModulo>
+
+      <AvisoDeGravacao mensagem={aviso} aoFechar={limparAviso} />
 
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={4} />
@@ -112,7 +139,26 @@ export default function AvisosPage() {
               transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
               className="grid grid-cols-1 gap-3 lg:grid-cols-2"
             >
-              {dados.vigentes.map((a) => <Cartao key={a.id} a={a} vencido={false} />)}
+              {dados.vigentes.map((a) => (
+                <Cartao
+                  key={a.id}
+                  a={a}
+                  vencido={false}
+                  acoes={
+                    podeMexer && (
+                      <div className="mt-2 flex justify-end">
+                        <AcoesDoRegistro
+                          nome={a.titulo}
+                          onEditar={() => setEmEdicao(a)}
+                          onExcluir={async () => {
+                            await gravar(`/api/agenda/avisos/${a.id}`, "DELETE");
+                          }}
+                        />
+                      </div>
+                    )
+                  }
+                />
+              ))}
             </motion.div>
           )}
 
@@ -132,13 +178,100 @@ export default function AvisosPage() {
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                   className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2"
                 >
-                  {dados.vencidos.map((a) => <Cartao key={a.id} a={a} vencido />)}
+                  {dados.vencidos.map((a) => (
+                    <Cartao
+                      key={a.id}
+                      a={a}
+                      vencido
+                      acoes={
+                        podeMexer && (
+                          <div className="mt-2 flex justify-end">
+                            <AcoesDoRegistro
+                              nome={a.titulo}
+                              onEditar={() => setEmEdicao(a)}
+                              onExcluir={async () => {
+                                await gravar(`/api/agenda/avisos/${a.id}`, "DELETE");
+                              }}
+                            />
+                          </div>
+                        )
+                      }
+                    />
+                  ))}
                 </motion.div>
               )}
             </div>
           )}
         </>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Novo aviso"
+        descricao="A validade é obrigatória: um aviso vencido não some, mas sai dos vigentes."
+        campos={CAMPOS_AVISO}
+        valores={{ titulo: "", texto: "", prioridade: "2", dataPublicacao: hojeCivil(), dataExpiracao: "" }}
+        rotuloGravar="Publicar"
+        aoGravar={(v) =>
+          gravar("/api/agenda/avisos", "POST", { ...v, prioridade: Number(v.prioridade) })
+        }
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar aviso"
+        campos={CAMPOS_AVISO.filter((c) => c.chave !== "dataPublicacao")}
+        valores={{
+          titulo: emEdicao?.titulo ?? "",
+          texto: emEdicao?.texto ?? "",
+          prioridade: String(emEdicao?.prioridade ?? 2),
+          dataExpiracao: emEdicao?.expira?.slice(0, 10) ?? "",
+        }}
+        aoGravar={(v) =>
+          gravar(`/api/agenda/avisos/${emEdicao?.id}`, "PATCH", {
+            ...v,
+            prioridade: Number(v.prioridade),
+          })
+        }
+      />
     </>
   );
 }
+
+/**
+ * Hoje, no fuso do aparelho.
+ *
+ * O servidor roda em UTC: às 22h de um sábado em Recife ele já está no domingo,
+ * e o aviso publicado no sábado nasceria datado do dia seguinte.
+ */
+function hojeCivil(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+const CAMPOS_AVISO: readonly CampoForm[] = [
+  { chave: "titulo", rotulo: "Título", obrigatorio: true, largo: true },
+  { chave: "texto", rotulo: "Aviso", tipo: "area", obrigatorio: true },
+  { chave: "dataPublicacao", rotulo: "Publicar em", tipo: "data" },
+  {
+    chave: "dataExpiracao",
+    rotulo: "Vale até",
+    tipo: "data",
+    obrigatorio: true,
+    ajuda: "Depois desta data o aviso sai dos vigentes — não é apagado.",
+  },
+  {
+    chave: "prioridade",
+    rotulo: "Urgência",
+    tipo: "lista",
+    opcoes: [
+      { valor: "1", rotulo: "Urgente" },
+      { valor: "2", rotulo: "Importante" },
+      { valor: "3", rotulo: "Informativo" },
+    ],
+  },
+];

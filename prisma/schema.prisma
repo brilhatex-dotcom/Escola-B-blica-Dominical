@@ -34,19 +34,19 @@ model Congregacao {
   id   Int    @id
   nome String @default("")
 
-  usuarios     Usuario[]
-  classes      Classe[]
-  alunos       Aluno[]
-  frequencias  Frequencia[]
-  freqLicoes   FreqLicao[]
-  ofertas      Oferta[]
-  visitantes   Visitante[]
-  licoes       Licao[]
-  escalaCultos EscalaCulto[]
-  eventos      Evento[]
-  avisos       Aviso[]
-  pessoaCargos PessoaCargo[]
-  auditoria    Auditoria[]
+  usuarios           Usuario[]
+  classes            Classe[]
+  alunos             Aluno[]
+  frequencias        Frequencia[]
+  freqLicoes         FreqLicao[]
+  ofertas            Oferta[]
+  visitantes         Visitante[]
+  licoes             Licao[]
+  escalaCultos       EscalaCulto[]
+  eventos            Evento[]
+  avisos             Aviso[]
+  pessoaCargos       PessoaCargo[]
+  auditoria          Auditoria[]
   pagamentosRevistas PagamentoRevista[]
 
   @@map("Congregacoes")
@@ -116,6 +116,14 @@ model Aluno {
   /// estoura Int32 e telefone nao e aritmetica.
   tel      String?
   resp     String?
+  /// Posicao no ministerio: membro, auxiliar, diacono, presbitero, evangelista,
+  /// pastor. Ver lib/ebd/posicoes.ts.
+  ///
+  /// Coluna NOVA e opcional: nasce nula nas 323 linhas herdadas, sem alterar
+  /// nenhuma delas. NAO se confunde com `Cargos`/`PessoaCargos`, que guardam o
+  /// que a pessoa faz na EBD e decidem o acesso ao portal — um Presbitero pode
+  /// nao dar aula nenhuma, e um Professor pode ser Membro.
+  posicao  String?
   congId   Int?
   classeId Int?
   ativo    Boolean   @default(true)
@@ -208,24 +216,28 @@ model Oferta {
 }
 
 model Visitante {
-  id       Int      @id
+  id       Int       @id
   legacyId Int?
   nome     String
-  /// "" em 43 linhas -> null. Campo do sistema antigo; a tela de "incluir
-  /// visitante" nao usa mais idade, e sim `nascimento` — mas a coluna
-  /// continua para nao apagar o que ja foi importado.
+  /// "" em 43 linhas -> null.
+  ///
+  /// FICA COMO ESTA. As 89 linhas herdadas so tem a idade, e nao a data de
+  /// nascimento — calcular uma data a partir dela seria inventar dia e mes.
+  /// Nos visitantes novos, quem manda e `nasc`, e a idade e calculada na hora
+  /// de exibir; nos antigos, este numero continua sendo a unica verdade.
   idade    Int?
+  /// Data de nascimento — SO nos visitantes cadastrados a partir da Fase 09.
+  /// Coluna nova e opcional: nasce nula nas 89 linhas antigas, sem altera-las.
+  nasc     DateTime? @db.Date
+  /// Onde a pessoa mora. Bairro, sitio, povoado — texto livre de propósito:
+  /// a zona rural do campo nao cabe numa lista fechada de bairros.
+  local    String?
   /// Numero no export -> String (mesmo motivo de Aluno.tel).
   tel      String?
   obs      String?
-  /// Data de nascimento — o dado que a Chamada pede ao incluir um visitante,
-  /// no lugar da idade solta que o sistema antigo guardava.
-  nascimento DateTime? @db.Date
-  /// Onde mora ("local que mora"), em texto livre.
-  endereco   String?
   classeId Int?
   congId   Int?
-  data     DateTime @db.Date
+  data     DateTime  @db.Date
 
   classe      Classe?      @relation(fields: [classeId], references: [id])
   congregacao Congregacao? @relation(fields: [congId], references: [id])

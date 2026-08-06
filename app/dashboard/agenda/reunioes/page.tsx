@@ -2,12 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Check, MapPin, Users, X } from "lucide-react";
+import { Check, MapPin, Plus, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
+import { Button } from "@/components/ui/button";
+import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
+import { AvisoDeGravacao } from "@/components/crud/AvisoDeGravacao";
+import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
+import { useCrud } from "@/components/crud/useCrud";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Reuniões, com a lista de presença.
@@ -28,6 +34,12 @@ interface Reuniao {
 const fmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 export default function ReunioesPage() {
+  const { podeGravar } = useAcesso();
+  const podeMexer = podeGravar("agenda-reunioes");
+  const { aviso, limparAviso, recarga, gravar } = useCrud();
+  const [criando, setCriando] = useState(false);
+  const [emEdicao, setEmEdicao] = useState<Reuniao | null>(null);
+
   const [tipo, setTipo] = useState("");
   const [dados, setDados] = useState<{ itens: Reuniao[]; total: number; tipos: string[] } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -51,11 +63,17 @@ export default function ReunioesPage() {
       }
     })();
     return () => controle.abort();
-  }, [tipo]);
+  }, [tipo, recarga]);
 
   return (
     <>
       <CabecalhoModulo icone={Users} titulo="Reuniões" descricao="Com a lista de presença de cada uma" total={dados?.total ?? null}>
+        {podeMexer && (
+          <Button size="sm" onClick={() => setCriando(true)}>
+            <Plus className="h-4 w-4" />
+            Nova reunião
+          </Button>
+        )}
         <label className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem]">
           <span className="shrink-0 text-brand-200/55">Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}
@@ -65,6 +83,8 @@ export default function ReunioesPage() {
           </select>
         </label>
       </CabecalhoModulo>
+
+      <AvisoDeGravacao mensagem={aviso} aoFechar={limparAviso} />
 
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={6} />
@@ -116,6 +136,25 @@ export default function ReunioesPage() {
                     {r.presentes} de {r.totalConvocados}
                   </Badge>
                 </button>
+
+                {/*
+                  Os botões ficam FORA do <button> da sanfona.
+                  Um botão dentro de outro botão é HTML inválido: o navegador
+                  desmonta a árvore por conta própria, e o clique no lápis passa
+                  a abrir e fechar a reunião em vez de editar.
+                */}
+                {podeMexer && (
+                  <div className="flex justify-end gap-2 border-t border-white/6 px-4 py-2">
+                    <AcoesDoRegistro
+                      nome={r.titulo}
+                      onEditar={() => setEmEdicao(r)}
+                      aviso={`A reunião "${r.titulo}" será excluída com a lista de presença dela. Não há como recuperar depois.`}
+                      onExcluir={async () => {
+                        await gravar(`/api/agenda/reunioes/${r.id}`, "DELETE");
+                      }}
+                    />
+                  </div>
+                )}
 
                 {abertaAgora && (
                   <motion.div
@@ -171,6 +210,58 @@ export default function ReunioesPage() {
           })}
         </ul>
       )}
+
+      <FormularioModal
+        aberto={criando}
+        aoFechar={() => setCriando(false)}
+        titulo="Nova reunião"
+        descricao="Presentes e ausentes em caixas separadas — quem não estiver em nenhuma não foi convocado."
+        campos={CAMPOS_REUNIAO}
+        valores={{ titulo: "", tipo: "", data: "", local: "", presentes: "", ausentes: "", obs: "" }}
+        rotuloGravar="Registrar"
+        aoGravar={(v) => gravar("/api/agenda/reunioes", "POST", v)}
+      />
+
+      <FormularioModal
+        aberto={emEdicao !== null}
+        aoFechar={() => setEmEdicao(null)}
+        titulo="Editar reunião"
+        campos={CAMPOS_REUNIAO}
+        valores={{
+          titulo: emEdicao?.titulo ?? "",
+          tipo: emEdicao?.tipo ?? "",
+          data: emEdicao?.data?.slice(0, 10) ?? "",
+          local: emEdicao?.local ?? "",
+          // As duas caixas são reconstruídas a partir do JSON guardado. Editar
+          // uma reunião e gravar sem mexer nelas devolve exatamente a mesma
+          // lista — o instantâneo volta igual ao que estava.
+          presentes: (emEdicao?.participantes ?? [])
+            .filter((p) => p.presente)
+            .map((p) => p.nome)
+            .join("\n"),
+          ausentes: (emEdicao?.participantes ?? [])
+            .filter((p) => !p.presente)
+            .map((p) => p.nome)
+            .join("\n"),
+          obs: emEdicao?.obs ?? "",
+        }}
+        aoGravar={(v) => gravar(`/api/agenda/reunioes/${emEdicao?.id}`, "PATCH", v)}
+      />
     </>
   );
 }
+
+const CAMPOS_REUNIAO: readonly CampoForm[] = [
+  { chave: "titulo", rotulo: "Título", obrigatorio: true, largo: true },
+  { chave: "data", rotulo: "Data", tipo: "data", obrigatorio: true },
+  { chave: "tipo", rotulo: "Tipo", placeholder: "ex.: Reunião de obreiros" },
+  { chave: "local", rotulo: "Local", largo: true },
+  {
+    chave: "presentes",
+    rotulo: "Presentes (um nome por linha)",
+    tipo: "area",
+    ajuda: "Nomes repetidos são descartados — colar do WhatsApp costuma duplicar.",
+  },
+  { chave: "ausentes", rotulo: "Ausentes (um nome por linha)", tipo: "area" },
+  { chave: "obs", rotulo: "Observação", tipo: "area" },
+];

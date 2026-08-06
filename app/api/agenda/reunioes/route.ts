@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { lerPaginacao, pagina, responder } from "@/lib/api";
 import { exigirLeitura } from "@/lib/auth/guarda";
+import { dataCivil, erro, lerCorpo, texto, textoOpcional } from "@/lib/api";
+import { escopoDeEscrita } from "@/lib/auth/escopo";
+import { autorDa, criarComIdHerdado, nomesDaLista } from "@/lib/api/legado";
 
 /**
  * Reuniões, com a lista de presença de cada uma.
@@ -73,4 +76,62 @@ export async function GET(req: Request) {
       tipos: tipos.map((t) => t.tipo).filter(Boolean),
     };
   });
+}
+
+/**
+ * Registrar uma reunião.
+ *
+ * ============================================================================
+ * PRESENTES E AUSENTES SÃO DUAS LISTAS, E NÃO UMA COM MARCAÇÃO
+ *
+ * `Reunioes.participantes` é um JSON `[{nome, presente}]` do sistema antigo.
+ * A tela poderia pedir uma lista só e marcar quem veio — e aí quem esquecesse
+ * de marcar alguém o transformaria em ausente sem perceber, exatamente o
+ * problema que a Chamada resolve com três estados.
+ *
+ * Duas caixas de texto resolvem isso sem inventar estado nenhum: quem está na
+ * primeira veio, quem está na segunda faltou, e quem não está em nenhuma
+ * simplesmente não foi convocado. `presentes` e `total` são CALCULADOS daí — se
+ * viessem do cliente, um erro de digitação faria a ata dizer "12 de 9".
+ * ============================================================================
+ */
+export async function POST(req: Request) {
+  const { recusa, sessao } = await escopoDeEscrita("agenda-reunioes");
+  if (recusa) return recusa;
+
+  const corpo = await lerCorpo(req);
+  if (!corpo) return erro("Corpo da requisição inválido.", 400);
+
+  const titulo = texto(corpo.titulo, 160);
+  if (!titulo) return erro("Informe o título da reunião.", 400);
+
+  const data = dataCivil(corpo.data);
+  if (!data) return erro("Informe a data da reunião (YYYY-MM-DD).", 400);
+
+  const presentes = nomesDaLista(corpo.presentes).map((nome) => ({ nome, presente: true }));
+  const ausentes = nomesDaLista(corpo.ausentes).map((nome) => ({ nome, presente: false }));
+  const participantes = [...presentes, ...ausentes];
+
+  return responder(async () =>
+    criarComIdHerdado(
+      (tx) => tx.reuniao,
+      (tx, id) =>
+        tx.reuniao.create({
+          data: {
+            id,
+            titulo,
+            tipo: texto(corpo.tipo, 60) ?? "Reunião",
+            data,
+            local: textoOpcional(corpo.local, 160),
+            obs: textoOpcional(corpo.obs, 1000),
+            autor: autorDa(sessao),
+            participantes,
+            presentes: presentes.length,
+            total: participantes.length,
+            registradoEm: new Date(),
+          },
+          select: { id: true, titulo: true },
+        }),
+    ),
+  );
 }
