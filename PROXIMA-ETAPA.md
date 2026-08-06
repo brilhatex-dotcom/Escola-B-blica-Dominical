@@ -1,10 +1,10 @@
 # Continuação — o próximo pedido do usuário (confirme antes de escolher)
 
-> Fase 20 (Destaque com período escolhido na tela) foi entregue depois da 19,
-> também fora de qualquer ordem proposta anteriormente — o usuário segue
-> mandando ajustes concretos ao vivo, testando o portal publicado. Isso é
-> esperado neste projeto: trate cada pedido novo como a prioridade do
-> momento, não como quebra do plano.
+> Fase 21 (Índice de Destaque Inteligente + painel "Destaques") foi entregue
+> depois da 20, também fora de qualquer ordem proposta anteriormente — o
+> usuário segue mandando ajustes concretos ao vivo, testando o portal
+> publicado. Isso é esperado neste projeto: trate cada pedido novo como a
+> prioridade do momento, não como quebra do plano.
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -60,6 +60,53 @@ Substitui um sistema antigo em Google Apps Script.
 | 18 | **Novo Login cria contas de campo (Gestor Local/Supervisor/Secretário Geral), aniversariantes liberados pra todo o campo, cartão Congregação/Classe Destaque no Dashboard** |
 | 19 | **Prontuário da congregação — drill-down completo a partir do cartão do Painel: cabeçalho, resumo, gráficos, classes, professores, visitantes, indicadores, análise, comparativos, ranking, alertas, histórico** |
 | 20 | **Destaque do Dashboard com período escolhido na tela (De/Até), além de Mês e Trimestre** |
+| 21 | **Índice de Destaque Inteligente (IDI) — painel "Destaques" com dez categorias, detalhe por categoria e Hall da Fama** |
+
+## O que a Fase 21 entregou (para não refazer)
+
+Pedido para reconstruir o cartão "Destaques": um algoritmo maior (dezessete
+fatores citados), dez categorias de cartão, página de detalhe por categoria,
+e um Hall da Fama permanente.
+
+1. **`lib/relatorios/idi.ts`** (novo) — o Índice de Destaque Inteligente,
+   nota 0-100 por congregação, com **dez** componentes reais (não os
+   dezessete pedidos — pesos somando 100, documentados um a um no arquivo):
+   frequência, regularidade, crescimento trimestral, crescimento anual,
+   visitantes, visitantes não crentes, visitantes que retornaram, retenção
+   de alunos (aproximação), participação dos professores (aproximação), e o
+   IGS já existente (cobre o que o pedido chamava de "IDC"). Ficaram de fora,
+   documentado: "crescimento de matriculados"/"novos alunos" (`Aluno` não
+   tem data de matrícula) e "visitantes convertidos em alunos" (sem vínculo
+   no banco — mesma lacuna da Fase 19). Componente sem dado redistribui o
+   peso, nunca zera (mesma matemática do `calcularIGS`, escrita à parte de
+   propósito — os dois índices são independentes).
+2. **`/api/relatorios/destaques`** (nova rota) + **`/dashboard/relatorios/destaques`**
+   (novo hub) — dez categorias: 🏆 Congregação Destaque, 📈 Maior Crescimento
+   (volume de presentes, não taxa — "crescimento de matrícula" não existe
+   como dado), 👥 Melhor Frequência, 🌱 Evangelismo, ❤️ Consolidação (SEMPRE
+   "sem dado", motivo explicado na tela), 👨‍🏫 Professor Destaque, 📚 Classe
+   Destaque, ⭐ Congregação Revelação (maior crescimento entre quem AINDA NÃO
+   é a Congregação Destaque), 🏅 Evolução Trimestral, 🏅 Evolução Anual.
+   Categorias de congregação são campo inteiro para todos (mesma exceção de
+   sempre); Professor/Classe Destaque continuam recortados.
+3. **Armadilha corrigida durante a implementação**: os componentes de
+   crescimento são ancorados no FIM do período sendo examinado (`ate`), não
+   na data real de hoje — sem isso, o Hall da Fama de um mês fechado há
+   meses ficaria contaminado pela tendência de hoje.
+4. **`/dashboard/relatorios/destaques/[categoria]`** (novo, rota única para
+   as dez) — nota, motivo automático (`gerarJustificativaIDI`, molde de
+   frase pedido), os dez indicadores, e para vencedores-congregação os
+   gráficos de evolução **reaproveitados por inteiro** de
+   `/api/relatorios/congregacao/[id]` (Fase 19) — mesma rota serve o painel
+   e o detalhe, nunca duas apurações que podem divergir.
+5. **Hall da Fama** — Congregação do Mês/Trimestre/Ano passados, calculados
+   AO VIVO com a mesma função do IDI sobre a janela histórica — não é uma
+   tabela nova guardando retrato nenhum.
+6. Cartão pequeno do Dashboard (Fase 18/20) continua igual, com um link novo
+   "Ver todos os destaques" para o hub.
+7. `npm run verificar:idi` (novo script): **24 asserções**.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ## O que a Fase 20 entregou (para não refazer)
 

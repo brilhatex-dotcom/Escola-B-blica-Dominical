@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
-import { Building2, CalendarRange, Loader2, School, Trophy } from "lucide-react";
+import { ArrowRight, Building2, CalendarRange, Loader2, School, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Destaque, Destaques } from "@/lib/dashboard/tipos";
 
@@ -173,6 +174,20 @@ export function DestaqueCard({ destaques, className }: { destaques: Destaques; c
           <LinhaDestaque icone={School} rotulo="Classe Destaque" destaque={classe} carregando={carregando} />
         </div>
       )}
+
+      {/*
+        Este cartão continua sendo o resumo rápido (assiduidade + visitante) —
+        a versão completa, com dez categorias, o Índice de Destaque
+        Inteligente e o Hall da Fama, é grande demais para um cartão do
+        Dashboard e ganhou uma tela própria (Fase 21).
+      */}
+      <Link
+        href="/dashboard/relatorios/destaques"
+        className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-white/8 bg-white/[0.02] py-2 text-[0.72rem] text-brand-200/60 transition-colors duration-300 hover:border-gold-400/25 hover:text-gold-200"
+      >
+        Ver todos os destaques
+        <ArrowRight className="h-3.5 w-3.5" />
+      </Link>
     </motion.section>
   );
 }

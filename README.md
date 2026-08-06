@@ -697,6 +697,111 @@ Nenhuma tabela nova, nenhum SQL para aplicar.
 
 ---
 
+## Fase 21 — o Índice de Destaque Inteligente (IDI) e o painel "Destaques"
+
+Pedido para reconstruir o cartão "Destaques" com um algoritmo maior — dezessete
+fatores citados, dez categorias de cartão, tela de detalhe para cada uma e um
+Hall da Fama permanente.
+
+### Dez componentes reais, não dezessete — e os que ficaram de fora, documentados
+
+`lib/relatorios/idi.ts` define o **Índice de Destaque Inteligente (IDI)**,
+nota de 0 a 100 por congregação, com dez componentes ponderados (somam 100):
+frequência (18), regularidade das chamadas (12), crescimento trimestral (10),
+crescimento anual (8), visitantes (10), visitantes não crentes (10),
+visitantes que retornaram (8), retenção de alunos (8), participação dos
+professores (8) e o IGS já existente (8, cobrindo o que o pedido chamava de
+"IDC" — um segundo índice de 0 a 100 sobre os mesmos dados só confundiria).
+
+Quatro fatores do pedido original **não entraram**, e o motivo está no
+comentário grande do arquivo: "crescimento de matriculados" e "novos alunos"
+exigem uma DATA DE MATRÍCULA que `Aluno` nunca teve (mesma lacuna que já
+tirou "crescimento de matrícula" do IGS, desde a Fase 14a); "visitantes
+convertidos em alunos" precisa de um vínculo entre `Visitante` e `Aluno` que
+não existe no banco (mesma lacuna do prontuário de congregação, Fase 19).
+Inventar os quatro faria a nota parecer mais completa sem ser mais confiável.
+
+"Retenção de alunos" e "participação dos professores" também não têm dado
+direto — entram como **aproximações explícitas**: retenção é "dos alunos
+chamados na 1ª metade do período, quantos continuam sendo chamados na 2ª";
+participação de professor é "das classes com professor designado, quantas de
+fato registraram chamada" — não é presença de professor (que não existe em
+lugar nenhum), é a classe funcionando.
+
+Como o IGS, componente sem dado **redistribui o peso** entre os que sobraram
+— nunca zera por ausência de dado (`calcularIDI`, mesma matemática do
+`calcularIGS`, escrita à parte de propósito: os dois índices são
+independentes, e importar a mecânica de um para o outro criaria um
+acoplamento que não existe de verdade).
+
+### Dez categorias, `/dashboard/relatorios/destaques`
+
+🏆 Congregação Destaque (maior IDI) · 📈 Maior Crescimento (mais gente
+presente no trimestre vs o anterior — volume, não taxa) · 👥 Melhor
+Frequência · 🌱 Destaque em Evangelismo (maior proporção de visitantes não
+crentes) · ❤️ Melhor Consolidação (**sempre "sem dado"**, com o motivo
+explicado na tela — não há o vínculo visitante→aluno) · 👨‍🏫 Professor
+Destaque · 📚 Classe Destaque · ⭐ Congregação Revelação (maior crescimento
+trimestral entre quem AINDA NÃO é a Congregação Destaque — celebra quem está
+subindo, não quem já chegou) · 🏅 Melhor Evolução Trimestral · 🏅 Melhor
+Evolução Anual.
+
+Congregação Destaque, Maior Crescimento, Melhor Frequência, Evangelismo,
+Revelação e as duas Evoluções são sempre do **campo inteiro**, para todo
+mundo — a mesma exceção de recorte já usada em Liderança, Aniversariantes e
+no Destaque original (Fase 18). Professor Destaque e Classe Destaque
+continuam **recortados** pelo acesso de quem pede.
+
+Seletor de período: Mês, Trimestre, Ano ou um intervalo escolhido na tela
+(mesmo padrão de campos De/Até com espera de 350ms da Fase 20).
+
+**Uma armadilha evitada durante a implementação:** os componentes de
+crescimento trimestral/anual são calculados sobre uma janela FIXA no
+calendário, ancorada no fim (`ate`) do período sendo examinado — não na data
+real de hoje. Sem isso, apurar "quem foi a Congregação Destaque em março"
+para o Hall da Fama misturaria a tendência de HOJE no componente de um mês
+fechado há meses — dois relógios diferentes somados na mesma nota.
+
+### Explicação automática
+
+`gerarJustificativaIDI()` monta a frase no molde pedido — "A Congregação X
+foi eleita destaque por atingir Y% de frequência, crescer Z% no trimestre,
+receber N visitantes, dos quais M não crentes, e registrar P% das chamadas."
+— por regra, a partir de números já apurados, nunca por um modelo de
+linguagem consultando o banco (mesma ressalva de `gerarAnalise()`).
+
+### Hall da Fama — calculado ao vivo, nunca uma foto salva à parte
+
+Congregação do Mês, do Trimestre e do Ano (passados) aparecem no rodapé da
+tela, recalculados **na hora** com a mesma função do IDI aplicada à janela
+histórica — não existe uma tabela nova guardando "quem ganhou em março":
+guardar um retrato correria o risco de um dia divergir da conta ao vivo (por
+exemplo, se uma chamada for corrigida depois). Só aparece para quem enxerga
+o campo inteiro.
+
+### Cada categoria abre uma página de detalhe
+
+`/dashboard/relatorios/destaques/[categoria]` — nota, motivo, os dez
+indicadores do IDI, e (para vencedores que são congregação) os gráficos de
+evolução mensal/anual e a comparação com o campo, **reaproveitados por
+inteiro do prontuário de congregação** (`/api/relatorios/congregacao/[id]`,
+Fase 19) — a tela de detalhe não reimplementa gráfico nenhum, só pede de
+novo o que a Fase 19 já calcula. A MESMA rota `/api/relatorios/destaques`
+serve o painel e o detalhe — pedir a categoria escolhida do mesmo JSON, não
+uma segunda apuração, para as duas nunca poderem divergir.
+
+O cartão pequeno do Dashboard (Fase 18/20) continua existindo — ele é o
+resumo rápido de sempre — e ganhou um link "Ver todos os destaques" para
+esta tela nova, grande demais para caber num cartão.
+
+`npm run verificar:idi` (novo script): **24 asserções**, incluindo a soma
+dos dez pesos (exatamente 100), a redistribuição de peso quando um
+componente falta, e o molde da frase automática.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"

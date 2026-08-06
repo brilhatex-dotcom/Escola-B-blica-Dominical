@@ -17,6 +17,7 @@ import {
   Sparkles,
   TrendingDown,
   TrendingUp,
+  Trophy,
   UserRound,
   UserRoundPlus,
   Users,
@@ -192,6 +193,13 @@ export default function PainelRelatoriosPage() {
         descricao="Índice de Saúde por congregação, alertas e análise automática"
       >
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/relatorios/destaques"
+            className="flex h-10 items-center gap-2 rounded-xl border border-gold-400/25 bg-gold-400/[0.06] px-3.5 text-[0.8rem] text-gold-200 transition-colors duration-300 hover:border-gold-400/40 hover:bg-gold-400/[0.1]"
+          >
+            <Trophy className="h-4 w-4" />
+            Destaques
+          </Link>
           <Link
             href="/dashboard/relatorios/comparativo"
             className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-[0.8rem] text-brand-200/70 transition-colors duration-300 hover:border-gold-400/30 hover:text-gold-200"
