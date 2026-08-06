@@ -162,8 +162,8 @@ export async function GET(req: Request) {
              count(*) AS chamadas, count(*) FILTER (WHERE presente) AS presentes
       FROM "Frequencias"
       WHERE data >= ${seisMesesAtras} AND data <= ${ate} AND "congId" IN (${Prisma.join(ids)})
-      GROUP BY "congId", 1
-      ORDER BY 1
+      GROUP BY "congId", mes
+      ORDER BY mes
     `;
     const meses: string[] = [];
     for (let d = new Date(seisMesesAtras); d <= ate; d.setUTCMonth(d.getUTCMonth() + 1)) {
