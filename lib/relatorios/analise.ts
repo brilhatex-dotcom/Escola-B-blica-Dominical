@@ -1,5 +1,10 @@
 import { MINIMO_DE_CHAMADAS } from "./comum";
-import { variacaoPct, type Classificacao, type ResultadoIGS } from "./indices";
+import {
+  variacaoPct,
+  type Classificacao,
+  type ComponentesIGS,
+  type ResultadoIGS,
+} from "./indices";
 
 /**
  * Os alertas e a análise em texto — geradas a partir de NÚMEROS JÁ CALCULADOS,
@@ -36,6 +41,7 @@ export interface CongregacaoBI {
   visitantesRec: number;
   igs: ResultadoIGS | null;
   classificacao: Classificacao | null;
+  componentes: ComponentesIGS;
 }
 
 /** `true` quando a congregação tem chamadas suficientes para a nota valer algo. */
@@ -58,6 +64,7 @@ export interface CampoBI {
   visitantesRec: number;
   igs: ResultadoIGS | null;
   classificacao: Classificacao | null;
+  componentes: ComponentesIGS;
 }
 
 export interface DadosBI {

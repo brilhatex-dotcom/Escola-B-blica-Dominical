@@ -1,4 +1,4 @@
-# Continuação — Fase 14b: gráficos avançados da Central de Relatórios (BI)
+# Continuação — Fase 14c: rankings expandidos e comparativos adicionais (BI)
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -46,6 +46,7 @@ Substitui um sistema antigo em Google Apps Script.
 | 12 | Administração e Configurações + auditoria gravando de verdade |
 | 13 | Pesquisa Global (com busca offline) sobre os registros |
 | 14a | **Central de Relatórios (BI) — o cérebro: IGS, IGE, alertas, análise automática** |
+| 14b | **Central de Relatórios (BI) — gráficos avançados: evolução, radar e comparativo** |
 
 ## A Fase 14 — Central de Relatórios (BI) — e o corte combinado com o usuário
 
@@ -67,14 +68,44 @@ seguintes, até nova decisão) deve fingir medir isso.
 
 | Sub-fase | Entrega |
 |---|---|
-| **14a** | ✅ Entregue nesta sessão — Índice de Saúde (IGS) por congregação, Índice Geral da EBD (IGE), Painel com indicadores, alertas automáticos, análise em texto |
-| 14b | Gráficos avançados (linha, área, radar, comparativo) enriquecendo Frequência e Ranking |
-| 14c | Rankings expandidos (top crescimento, top recuperação) + comparativos (congregação × congregação, mês × mês) |
+| **14a** | ✅ Entregue — Índice de Saúde (IGS) por congregação, Índice Geral da EBD (IGE), Painel com indicadores, alertas automáticos, análise em texto |
+| **14b** | ✅ Entregue — evolução de 12 meses no Painel, tela Comparativo (radar + linha, 2 a 4 congregações) |
+| 14c | Rankings expandidos (top crescimento, top recuperação) + comparativos adicionais (mês × mês, ano × ano) |
 | 14d | Exportação: impressão profissional, Excel (.xlsx), CSV, Relatório Executivo de 2 páginas, com timbre institucional |
 
-**Antes de começar 14b, confirme com o usuário se a ordem continua essa** — a
-aprovação foi dada só para 14a; o resto é a sequência que pareceu mais lógica,
-não uma decisão fechada.
+**Antes de começar 14c, confirme com o usuário se a ordem continua essa** — a
+aprovação foi dada explicitamente para 14a e depois para 14b; 14c/14d são a
+sequência que pareceu mais lógica, não uma decisão fechada.
+
+## O que a Fase 14b entregou (para não refazer)
+
+- **Evolução — últimos 12 meses**, nova seção do Painel (`/dashboard/relatorios`):
+  área com a frequência do campo mês a mês, vinda de uma série mensal
+  calculada em `/api/relatorios/painel` (`evolucaoMensal`, com `generate_series`
+  para não pular mês sem chamada). Mês sem chamada aparece como vão na área,
+  nunca como "0%".
+- **Tela nova `/dashboard/relatorios/comparativo`** (item de menu "Comparativo",
+  ícone radar): escolhe de 2 a 4 congregações (`COMPARATIVO_MINIMO`/
+  `COMPARATIVO_MAXIMO` em `lib/relatorios/indices.ts`) e mostra:
+  - **Radar** dos 5 componentes do IGS sobrepostos (uma cor por congregação).
+  - **Linha** com a evolução de 6 meses de cada uma, lado a lado.
+  - Tabela compacta com índice/faixa, frequência, tendência e visitantes.
+- **`/api/relatorios/comparativo`** (nova rota): intersecta os ids pedidos com
+  o recorte da sessão, valida a seleção, calcula os mesmos componentes do IGS
+  por congregação e a série mensal de 6 meses de cada uma.
+- **`lib/relatorios/indices.ts`** ganhou `paraRadar` (monta os 5 eixos, sempre
+  na mesma ordem, rótulo positivo) e `validarSelecaoComparativo`.
+- **Componentes de gráfico novos**, todos `next/dynamic({ssr:false})`:
+  `GraficoEvolucao` (área), `GraficoLinhaComparativa` (linha multi-série),
+  `GraficoRadar` (radar multi-série).
+- **Corrigido de brinde**: `tsconfig.json` não incluía `**/*.mts` no
+  `include` — os scripts `scripts/verificar-*.mts` nunca eram checados por
+  `npm run typecheck`. Corrigido; agora participam do typecheck normal.
+- `npm run verificar:bi` — **56 asserções** (47 da 14a + 9 novas de
+  `paraRadar`/`validarSelecaoComparativo`).
+- **Não entrou nesta sub-fase** (ficou para 14c, se aprovado): pizza, rosca,
+  heatmap, timeline — só os tipos de gráfico que o usuário pediu
+  explicitamente ("linha, área, radar, comparativos").
 
 ## O que a Fase 14a entregou (para não refazer)
 

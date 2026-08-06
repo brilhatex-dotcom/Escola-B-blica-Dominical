@@ -251,6 +251,14 @@ export async function GET(req: Request) {
         visitantesRec,
         igs,
         classificacao,
+        /*
+         * Os cinco números CRUS que compõem a nota — não só o resultado final.
+         * Sem eles o Radar (Fase 14b) teria de recalcular tudo de novo no
+         * navegador, com o risco real de a conta do cliente um dia divergir da
+         * conta do servidor. A rota que decide a nota é a mesma que expõe as
+         * peças dela.
+         */
+        componentes,
       };
     });
 
@@ -329,7 +337,57 @@ export async function GET(req: Request) {
       visitantesRec: somaCampo.visitantesRec,
       igs: igsCampo,
       classificacao: igsCampo ? classificarIGS(igsCampo.nota) : null,
+      componentes: componentesCampo,
     };
+
+    /*
+     * A evolução de 12 meses — o gráfico de ÁREA.
+     *
+     * O resto desta rota compara duas metades de um período de 90 dias, o que
+     * responde "subiu ou caiu nas últimas semanas". Isto responde uma pergunta
+     * diferente — "como estivemos no ano" — e é só com os 12 meses lado a lado
+     * que um recesso de julho (comum, com férias escolares) deixa de parecer
+     * uma queda preocupante e passa a parecer o que é: um padrão que se repete
+     * todo ano.
+     */
+    const doze_meses_atras = new Date(ate);
+    doze_meses_atras.setUTCMonth(doze_meses_atras.getUTCMonth() - 11);
+    doze_meses_atras.setUTCDate(1);
+
+    const serieMensalCampo = await prisma.$queryRaw<
+      Array<{ mes: Date; chamadas: bigint; presentes: bigint }>
+    >`
+      WITH meses AS (
+        SELECT generate_series(
+          date_trunc('month', ${doze_meses_atras}::date),
+          date_trunc('month', ${ate}::date),
+          '1 month'
+        ) AS mes
+      )
+      SELECT
+        m.mes,
+        COALESCE(f.chamadas, 0)  AS chamadas,
+        COALESCE(f.presentes, 0) AS presentes
+      FROM meses m
+      LEFT JOIN (
+        SELECT
+          date_trunc('month', data) AS mes,
+          count(*)                             AS chamadas,
+          count(*) FILTER (WHERE presente)     AS presentes
+        FROM "Frequencias"
+        WHERE data >= ${doze_meses_atras} AND data <= ${ate} ${soCongFreq}
+        GROUP BY 1
+      ) f ON f.mes = m.mes
+      ORDER BY m.mes
+    `;
+    const evolucaoMensal = serieMensalCampo.map((m) => {
+      const chamadas = Number(m.chamadas);
+      return {
+        mes: m.mes.toISOString().slice(0, 7),
+        taxa: chamadas > 0 ? Math.round((Number(m.presentes) / chamadas) * 1000) / 10 : null,
+        chamadas,
+      };
+    });
 
     /* ------------------------------------------------------------ *
      * Classes sem chamada — só as de fato atrasadas entram na lista, mas o
@@ -366,6 +424,7 @@ export async function GET(req: Request) {
       },
       alertas: gerarAlertas(dadosBI),
       analise: gerarAnalise(dadosBI),
+      evolucaoMensal,
     };
   });
 }

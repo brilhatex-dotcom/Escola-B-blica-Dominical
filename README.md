@@ -1263,7 +1263,8 @@ só na hora de exibir.
 | `/api/visitantes` | recebidos, do mais recente ao mais antigo |
 | `/api/chamada` | GET a chamada do dia, POST grava a classe inteira |
 | `/api/relatorios` | frequência por classe e ofertas do período |
-| `/api/relatorios/painel` | Índice de Saúde por congregação, IGE do campo, alertas e análise |
+| `/api/relatorios/painel` | Índice de Saúde por congregação, IGE do campo, alertas, análise e evolução mensal |
+| `/api/relatorios/comparativo` | 2 a 4 congregações lado a lado: componentes do IGS e evolução de 6 meses |
 | `/api/agenda` | eventos e reuniões numa lista só, mais as escalas |
 | `/api/lideranca` | GET a hierarquia, POST troca quem ocupa um cargo |
 | `/api/diagnostico` | com qual banco o app está falando |
@@ -1304,9 +1305,11 @@ era o conteúdo antigo desta rota, mudou para
 
 O pedido original — uma Central de BI completa, com dezenas de gráficos,
 comparativos, exportação em PDF/Excel e um segundo índice por professor —
-equivalia a cinco ou seis fases somadas. Esta entrega é a primeira: o motor de
-cálculo, o Índice de Saúde e os alertas. Gráficos adicionais, comparativos
-cruzados e exportação ficam para as próximas.
+equivalia a cinco ou seis fases somadas. A primeira entrega (Fase 14a) foi o
+motor de cálculo, o Índice de Saúde e os alertas. Esta (Fase 14b) acrescenta
+os gráficos que olham para o **tempo** e para **mais de uma congregação ao
+mesmo tempo**: evolução, comparativo em linha e o radar de perfil. Rankings
+expandidos e exportação ficam para as próximas.
 
 #### O Índice de Saúde (IGS) usa só o que é medido de verdade
 
@@ -1364,9 +1367,42 @@ Pela mesma razão do Índice, os alertas **não** incluem "professor ausente" ne
 "classe sem crescimento há seis meses" — os dois exigiriam dado que não existe,
 e um alerta fabricado pareceria tão confiável quanto os cinco reais.
 
-Verificado com `npm run verificar:bi`: **47 asserções**, sobre os cálculos, a
-classificação em faixas e a geração de alertas e texto — tudo sem banco, porque
-são funções puras.
+Verificado com `npm run verificar:bi`: **56 asserções**, sobre os cálculos, a
+classificação em faixas, a geração de alertas e texto, e (Fase 14b) a
+montagem do radar e a validação do comparativo — tudo sem banco, porque são
+funções puras.
+
+#### Fase 14b — os gráficos que olham para o tempo e para mais de uma congregação
+
+A Fase 14a respondia "como está o campo agora". Três peças novas respondem
+"como chegou até aqui" e "como está em relação às outras":
+
+- **Evolução — últimos 12 meses** (no Painel): uma área mostrando a
+  frequência do campo mês a mês. É a única vista que distingue uma queda real
+  de um recesso de julho que se repete todo ano — o instantâneo de 90 dias
+  (usado no componente "Tendência" do IGS) não enxerga esse padrão sazonal
+  porque só compara duas metades de um único período curto. Mês sem nenhuma
+  chamada registrada aparece como um vão na área, nunca como "0%" — 0% diria
+  que a igreja não apareceu, quando na verdade ninguém fez a chamada.
+- **Comparativo** (`/dashboard/relatorios/comparativo`, novo item de menu):
+  escolha de 2 a 4 congregações — o teto é legibilidade de gráfico, não
+  limite técnico (`COMPARATIVO_MAXIMO` em `lib/relatorios/indices.ts`) — com
+  duas visualizações sobrepostas:
+  - **Radar** dos 5 componentes do IGS: mostra que duas congregações com a
+    mesma nota podem chegar lá por caminhos opostos (uma forte em frequência
+    e fraca em regularidade, a outra o contrário). Os eixos usam os mesmos
+    rótulos positivos do Painel — "faltosos" é lido pelo aluno como "Presença
+    contínua", já que o número exibido é o invertido (100 = ninguém falta).
+  - **Linha** com a evolução de 6 meses de cada congregação selecionada, lado
+    a lado — a mesma regra de "mês sem chamada é um vão, não um zero".
+  - Uma tabela compacta abaixo repete índice, frequência, tendência e
+    visitantes de cada congregação selecionada, para quem prefere o número
+    exato ao gráfico.
+
+O recorte de acesso (`recorteDaSessao`) filtra as opções de congregação antes
+de chegarem à tela — quem só vê a própria congregação não tem com o que
+comparar, e a tela avisa isso em vez de mostrar uma lista vazia sem
+explicação.
 
 ### A escala de culto não é um compromisso
 

@@ -12,6 +12,7 @@ import {
   ChartColumn,
   GraduationCap,
   Minus,
+  Radar,
   School,
   Sparkles,
   TrendingDown,
@@ -29,6 +30,7 @@ import {
   EstadoErro,
 } from "@/components/dashboard/PaginaModulo";
 import type { PontoIGS } from "@/components/relatorios/GraficoIGS";
+import type { PontoEvolucao } from "@/components/relatorios/GraficoEvolucao";
 import { numero } from "@/lib/dashboard/formato";
 
 /*
@@ -41,6 +43,10 @@ import { numero } from "@/lib/dashboard/formato";
 const GraficoIGS = dynamic(
   () => import("@/components/relatorios/GraficoIGS").then((m) => m.GraficoIGS),
   { ssr: false, loading: () => <div className="h-44 animate-pulse rounded-xl bg-white/[0.03]" /> },
+);
+const GraficoEvolucao = dynamic(
+  () => import("@/components/relatorios/GraficoEvolucao").then((m) => m.GraficoEvolucao),
+  { ssr: false, loading: () => <div className="h-56 animate-pulse rounded-xl bg-white/[0.03]" /> },
 );
 
 /**
@@ -112,6 +118,7 @@ interface Painel {
   };
   alertas: Alerta[];
   analise: string[];
+  evolucaoMensal: PontoEvolucao[];
 }
 
 const CORES_FAIXA: Record<Faixa, string> = {
@@ -184,13 +191,22 @@ export default function PainelRelatoriosPage() {
         titulo="Painel"
         descricao="Índice de Saúde por congregação, alertas e análise automática"
       >
-        <Link
-          href="/dashboard/relatorios/frequencia"
-          className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-[0.8rem] text-brand-200/70 transition-colors duration-300 hover:border-gold-400/30 hover:text-gold-200"
-        >
-          <ChartColumn className="h-4 w-4" />
-          Ver frequência detalhada
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/dashboard/relatorios/comparativo"
+            className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-[0.8rem] text-brand-200/70 transition-colors duration-300 hover:border-gold-400/30 hover:text-gold-200"
+          >
+            <Radar className="h-4 w-4" />
+            Comparar congregações
+          </Link>
+          <Link
+            href="/dashboard/relatorios/frequencia"
+            className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-[0.8rem] text-brand-200/70 transition-colors duration-300 hover:border-gold-400/30 hover:text-gold-200"
+          >
+            <ChartColumn className="h-4 w-4" />
+            Ver frequência detalhada
+          </Link>
+        </div>
       </CabecalhoModulo>
 
       {erro ? (
@@ -205,6 +221,20 @@ export default function PainelRelatoriosPage() {
 
           {/* ---------------- IGE — o número que abre a tela ---------------- */}
           <CartaoIGE campo={dados.campo} />
+
+          {/* ---------------- Evolução — a profundidade que o instantâneo não dá ---------------- */}
+          {dados.evolucaoMensal.some((p) => p.taxa !== null) && (
+            <section className="glass-panel rounded-2xl p-5">
+              <h2 className="mb-1 text-[0.78rem] font-semibold uppercase tracking-[0.14em] text-brand-200/50">
+                Evolução — últimos 12 meses
+              </h2>
+              <p className="mb-3 text-[0.72rem] text-brand-200/45">
+                Frequência média do campo, mês a mês. Um recesso de julho aparece aqui como o padrão
+                que se repete todo ano — não como uma queda isolada.
+              </p>
+              <GraficoEvolucao dados={dados.evolucaoMensal} />
+            </section>
+          )}
 
           {/* ---------------- Indicadores gerais ---------------- */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
