@@ -91,6 +91,7 @@ export async function GET(req: Request) {
           local: true,
           tel: true,
           obs: true,
+          crente: true,
           data: true,
           classe: { select: { id: true, nome: true } },
           congregacao: { select: { id: true, nome: true } },
@@ -100,6 +101,13 @@ export async function GET(req: Request) {
 
     return pagina(visitantes.map(comIdade), total, p, porPagina);
   });
+}
+
+/** `corpo.crente`: "sim" | "nao" | "" (não perguntado) — nunca lançado em nenhum dos três casos. */
+function lerCrente(valor: unknown): boolean | null {
+  if (valor === "sim") return true;
+  if (valor === "nao") return false;
+  return null;
 }
 
 /**
@@ -149,6 +157,7 @@ export async function POST(req: Request) {
           local: textoOpcional(corpo.local, 160),
           tel: textoOpcional(corpo.tel, 30),
           obs: textoOpcional(corpo.obs, 500),
+          crente: lerCrente(corpo.crente),
           classeId,
           congId,
           data,
@@ -161,6 +170,7 @@ export async function POST(req: Request) {
           local: true,
           tel: true,
           obs: true,
+          crente: true,
           data: true,
         },
       });

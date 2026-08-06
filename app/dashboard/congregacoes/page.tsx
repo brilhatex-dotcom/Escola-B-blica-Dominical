@@ -15,6 +15,7 @@ import {
   UserRoundPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio } from "@/components/dashboard/PaginaModulo";
 import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
@@ -26,6 +27,7 @@ import { GerirProfessoresDaClasse } from "@/components/dashboard/GerirProfessore
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { CATEGORIAS_DE_CLASSE, rotuloDaCategoria } from "@/lib/ebd/categorias";
 import { POSICOES } from "@/lib/ebd/posicoes";
+import { crenteParaTexto, rotuloCrente } from "@/lib/ebd/visitante";
 
 /**
  * Congregações do campo, cada uma com quem responde por ela.
@@ -309,6 +311,7 @@ interface VisitanteResumo {
   nasc: string | null;
   local: string | null;
   anos: number | null;
+  crente: boolean | null;
   data: string;
   classe: { id: number; nome: string } | null;
 }
@@ -534,6 +537,9 @@ function PainelDaCongregacao({
                       {v.anos !== null && ` · ${v.anos} anos`}
                     </p>
                   </div>
+                  {rotuloCrente(v.crente) && (
+                    <Badge variant={v.crente ? "info" : "alerta"}>{rotuloCrente(v.crente)}</Badge>
+                  )}
                   {podeVisitantes && (
                     <AcoesDoRegistro
                       nome={v.nome}
@@ -640,7 +646,16 @@ function PainelDaCongregacao({
         titulo="Novo visitante"
         descricao={`Recebido em ${congNome}.`}
         campos={camposVisitante(opcoesClasse)}
-        valores={{ nome: "", data: hojeCivil(), classeId: "", nasc: "", local: "", tel: "", obs: "" }}
+        valores={{
+          nome: "",
+          data: hojeCivil(),
+          classeId: "",
+          nasc: "",
+          local: "",
+          tel: "",
+          crente: "",
+          obs: "",
+        }}
         rotuloGravar="Registrar"
         aoGravar={(v) =>
           crudVisitantes.gravar("/api/visitantes", "POST", {
@@ -650,6 +665,7 @@ function PainelDaCongregacao({
             nasc: v.nasc || null,
             local: v.local,
             tel: v.tel,
+            crente: v.crente,
             obs: v.obs,
           })
         }
@@ -665,6 +681,7 @@ function PainelDaCongregacao({
           nasc: visitanteEmEdicao?.nasc?.slice(0, 10) ?? "",
           local: visitanteEmEdicao?.local ?? "",
           tel: "",
+          crente: crenteParaTexto(visitanteEmEdicao?.crente),
           obs: "",
         }}
         aoGravar={(v) =>
@@ -673,6 +690,7 @@ function PainelDaCongregacao({
             nasc: v.nasc || null,
             local: v.local,
             tel: v.tel,
+            crente: v.crente,
             obs: v.obs,
           })
         }
@@ -1022,6 +1040,16 @@ function camposVisitante(opcoesClasse: Array<{ valor: string; rotulo: string }>)
       ajuda: "Texto livre — a zona rural do campo não cabe numa lista de bairros.",
     },
     { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+    {
+      chave: "crente",
+      rotulo: "Já é crente?",
+      tipo: "lista",
+      opcoes: [
+        { valor: "sim", rotulo: "Crente — frequenta outra igreja" },
+        { valor: "nao", rotulo: "Não é evangélico" },
+      ],
+      ajuda: "Decide o retorno: convidar de volta, ou apresentar o evangelho.",
+    },
     { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
   ];
 }

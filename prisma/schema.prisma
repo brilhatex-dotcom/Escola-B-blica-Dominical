@@ -236,6 +236,11 @@ model Visitante {
   /// Numero no export -> String (mesmo motivo de Aluno.tel).
   tel      String?
   obs      String?
+  /// Já é crente (frequenta outra igreja evangélica) ou não é evangélico —
+  /// a marca que decide se o retorno é "convidar para a igreja dele" ou
+  /// "apresentar o evangelho". `null` = não perguntado, nas 89 linhas
+  /// herdadas e em qualquer cadastro feito às pressas.
+  crente   Boolean?
   classeId Int?
   congId   Int?
   data     DateTime  @db.Date

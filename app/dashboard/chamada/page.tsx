@@ -25,6 +25,7 @@ import {
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
 import { domingoMaisRecente, iniciais } from "@/lib/dashboard/formato";
+import { crenteParaTexto, rotuloCrente } from "@/lib/ebd/visitante";
 import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
@@ -91,6 +92,7 @@ interface VisitanteDoDia {
   local: string | null;
   tel: string | null;
   obs: string | null;
+  crente: boolean | null;
   anos: number | null;
 }
 
@@ -104,6 +106,16 @@ const CAMPOS_VISITANTE: readonly CampoForm[] = [
     ajuda: "Texto livre — a zona rural do campo não cabe numa lista de bairros.",
   },
   { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+  {
+    chave: "crente",
+    rotulo: "Já é crente?",
+    tipo: "lista",
+    opcoes: [
+      { valor: "sim", rotulo: "Crente — frequenta outra igreja" },
+      { valor: "nao", rotulo: "Não é evangélico" },
+    ],
+    ajuda: "Decide o retorno: convidar de volta, ou apresentar o evangelho.",
+  },
   { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
 ];
 
@@ -715,6 +727,10 @@ export default function ChamadaPage() {
                       </p>
                     </div>
 
+                    {rotuloCrente(v.crente) && (
+                      <Badge variant={v.crente ? "info" : "alerta"}>{rotuloCrente(v.crente)}</Badge>
+                    )}
+
                     {podeGravarVisitante && (
                       <AcoesDoRegistro
                         nome={v.nome}
@@ -744,7 +760,7 @@ export default function ChamadaPage() {
             : undefined
         }
         campos={CAMPOS_VISITANTE}
-        valores={{ nome: "", nasc: "", local: "", tel: "", obs: "" }}
+        valores={{ nome: "", nasc: "", local: "", tel: "", crente: "", obs: "" }}
         rotuloGravar="Incluir"
         aoGravar={(v) =>
           gravarVisitante("/api/visitantes", "POST", {
@@ -752,6 +768,7 @@ export default function ChamadaPage() {
             nasc: v.nasc || null,
             local: v.local,
             tel: v.tel,
+            crente: v.crente,
             obs: v.obs,
             classeId: chamada?.classe.id,
             data: chamada?.data,
@@ -769,6 +786,7 @@ export default function ChamadaPage() {
           nasc: visitanteEmEdicao?.nasc?.slice(0, 10) ?? "",
           local: visitanteEmEdicao?.local ?? "",
           tel: visitanteEmEdicao?.tel ?? "",
+          crente: crenteParaTexto(visitanteEmEdicao?.crente),
           obs: visitanteEmEdicao?.obs ?? "",
         }}
         aoGravar={(v) =>
@@ -777,6 +795,7 @@ export default function ChamadaPage() {
             nasc: v.nasc || null,
             local: v.local,
             tel: v.tel,
+            crente: v.crente,
             obs: v.obs,
           })
         }

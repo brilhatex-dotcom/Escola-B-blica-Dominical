@@ -14,6 +14,13 @@ export const dynamic = "force-dynamic";
 
 type Contexto = { params: Promise<{ id: string }> };
 
+/** `corpo.crente`: "sim" | "nao" | "" (não perguntado) — nunca lançado em nenhum dos três casos. */
+function lerCrente(valor: unknown): boolean | null {
+  if (valor === "sim") return true;
+  if (valor === "nao") return false;
+  return null;
+}
+
 export async function PATCH(req: Request, { params }: Contexto) {
   const { recusa, congId: doAcesso } = await escopoDeEscrita("visitantes");
   if (recusa) return recusa;
@@ -43,6 +50,7 @@ export async function PATCH(req: Request, { params }: Contexto) {
         ...(corpo.local !== undefined ? { local: textoOpcional(corpo.local, 160) } : {}),
         ...(corpo.tel !== undefined ? { tel: textoOpcional(corpo.tel, 30) } : {}),
         ...(corpo.obs !== undefined ? { obs: textoOpcional(corpo.obs, 500) } : {}),
+        ...(corpo.crente !== undefined ? { crente: lerCrente(corpo.crente) } : {}),
       },
       select: { id: true, nome: true },
     });

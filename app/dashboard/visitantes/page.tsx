@@ -16,6 +16,7 @@ import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { diaEMes, iniciais } from "@/lib/dashboard/formato";
+import { crenteParaTexto, rotuloCrente } from "@/lib/ebd/visitante";
 
 /**
  * Visitantes recebidos.
@@ -35,6 +36,7 @@ interface VisitanteLista {
   anos: number | null;
   tel: string | null;
   obs: string | null;
+  crente: boolean | null;
   data: string;
   classe: { id: number; nome: string } | null;
   congregacao: { id: number; nome: string } | null;
@@ -199,6 +201,9 @@ export default function VisitantesPage() {
                   trazia. A tela não precisa saber de qual dos dois veio.
                 */}
                 {v.anos !== null && <Badge variant="neutro">{v.anos} anos</Badge>}
+                {rotuloCrente(v.crente) && (
+                  <Badge variant={v.crente ? "info" : "alerta"}>{rotuloCrente(v.crente)}</Badge>
+                )}
                 <span className="w-16 shrink-0 text-right text-[0.74rem] tabular-nums text-brand-200/55">
                   {diaEMes(new Date(v.data))}
                 </span>
@@ -232,6 +237,7 @@ export default function VisitantesPage() {
           nasc: "",
           local: "",
           tel: "",
+          crente: "",
           obs: "",
         }}
         rotuloGravar="Registrar"
@@ -243,6 +249,7 @@ export default function VisitantesPage() {
             nasc: v.nasc || null,
             local: v.local,
             tel: v.tel,
+            crente: v.crente,
             obs: v.obs,
           })
         }
@@ -258,6 +265,7 @@ export default function VisitantesPage() {
           nasc: emEdicao?.nasc?.slice(0, 10) ?? "",
           local: emEdicao?.local ?? "",
           tel: emEdicao?.tel ?? "",
+          crente: crenteParaTexto(emEdicao?.crente),
           obs: emEdicao?.obs ?? "",
         }}
         aoGravar={(v) =>
@@ -266,6 +274,7 @@ export default function VisitantesPage() {
             nasc: v.nasc || null,
             local: v.local,
             tel: v.tel,
+            crente: v.crente,
             obs: v.obs,
           })
         }
@@ -307,6 +316,16 @@ function camposDoVisitante(classes: Array<{ id: number; nome: string }>): readon
       ajuda: "Texto livre — a zona rural do campo não cabe numa lista de bairros.",
     },
     { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+    {
+      chave: "crente",
+      rotulo: "Já é crente?",
+      tipo: "lista",
+      opcoes: [
+        { valor: "sim", rotulo: "Crente — frequenta outra igreja" },
+        { valor: "nao", rotulo: "Não é evangélico" },
+      ],
+      ajuda: "Decide o retorno: convidar de volta, ou apresentar o evangelho.",
+    },
     { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
   ];
 }
