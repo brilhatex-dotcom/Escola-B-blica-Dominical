@@ -19,11 +19,11 @@ import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio } from "@/components/dashboard/PaginaModulo";
 import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
-import { useCrud } from "@/components/crud/useCrud";
+import { useCrud, type Crud } from "@/components/crud/useCrud";
 import { iniciais } from "@/lib/dashboard/formato";
 import { GerirResponsaveis } from "@/components/dashboard/GerirResponsaveis";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
-import { CATEGORIAS_DE_CLASSE, faixaSugerida, rotuloDaCategoria } from "@/lib/ebd/categorias";
+import { CATEGORIAS_DE_CLASSE, rotuloDaCategoria } from "@/lib/ebd/categorias";
 import { POSICOES } from "@/lib/ebd/posicoes";
 
 /**
@@ -310,6 +310,28 @@ interface VisitanteResumo {
   classe: { id: number; nome: string } | null;
 }
 
+interface ProfessorResumo {
+  vinculoId: number;
+  id: number;
+  nome: string;
+  tratamento: string | null;
+}
+
+interface AlunoDaClasseResumo {
+  id: number;
+  nome: string;
+  nasc: string | null;
+  posicao: string | null;
+  tel: string | null;
+  resp: string | null;
+  ativo: boolean;
+}
+
+interface DetalheDaClasse {
+  professores: ProfessorResumo[];
+  alunos: AlunoDaClasseResumo[];
+}
+
 function PainelDaCongregacao({
   congId,
   congNome,
@@ -348,7 +370,10 @@ function PainelDaCongregacao({
       .then((d) => setClasses(d.itens ?? []))
       .catch(() => setClasses([]));
     return () => controle.abort();
-  }, [congId, crudClasses.recarga]);
+    // `crudAlunos.recarga` também entra aqui: matricular ou tirar um aluno de
+    // dentro de uma classe muda a contagem "X alunos" que a linha da classe
+    // mostra recolhida, mesmo sem nenhum campo da classe em si ter mudado.
+  }, [congId, crudClasses.recarga, crudAlunos.recarga]);
 
   useEffect(() => {
     aoMudarNumeros();
@@ -403,35 +428,17 @@ function PainelDaCongregacao({
           ) : classes.length === 0 ? (
             <ListaVazia texto="Nenhuma classe nesta congregação ainda." />
           ) : (
-            <ul className="max-h-72 divide-y divide-white/6 overflow-y-auto rounded-xl border border-white/8">
+            <ul className="max-h-[28rem] divide-y divide-white/6 overflow-y-auto rounded-xl border border-white/8">
               {classes.map((c) => (
-                <li key={c.id} className={cn("flex items-center gap-3 px-3 py-2.5", !c.ativa && "opacity-50")}>
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
-                    <School className="h-3.5 w-3.5 text-brand-50" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[0.84rem] text-brand-50">{c.nome}</p>
-                    <p className="truncate text-[0.7rem] text-brand-200/50">
-                      {rotuloDaCategoria(c.tipoClasse)}
-                      {c.faixa && ` · ${c.faixa}`} · {c.alunos} {c.alunos === 1 ? "aluno" : "alunos"}
-                      {!c.ativa && " · inativa"}
-                    </p>
-                  </div>
-                  {podeClasses && (
-                    <AcoesDoRegistro
-                      nome={c.nome}
-                      onEditar={() => setClasseEmEdicao(c)}
-                      aviso={
-                        c.alunos > 0
-                          ? `A classe ${c.nome} tem ${c.alunos} ${c.alunos === 1 ? "aluno matriculado" : "alunos matriculados"}. Por isso ela será desativada, e não apagada.`
-                          : undefined
-                      }
-                      onExcluir={async () => {
-                        await crudClasses.gravar(`/api/classes/${c.id}`, "DELETE");
-                      }}
-                    />
-                  )}
-                </li>
+                <LinhaDeClasse
+                  key={c.id}
+                  c={c}
+                  podeClasses={podeClasses}
+                  podeAlunos={podeAlunos}
+                  crudClasses={crudClasses}
+                  crudAlunos={crudAlunos}
+                  onEditar={() => setClasseEmEdicao(c)}
+                />
               ))}
             </ul>
           )}
@@ -670,6 +677,233 @@ function PainelDaCongregacao({
     </div>
   );
 }
+
+/**
+ * Uma classe, dentro da congregação — clicar abre o que tem lá dentro.
+ *
+ * ============================================================================
+ * "QUERO VER O QUE TEM DENTRO DE CADA CLASSE"
+ *
+ * A linha resumida (nome, categoria, "8 alunos") não respondia a essa
+ * pergunta — só dizia QUANTOS, não QUEM. Clicando na linha, ela expande e
+ * busca `/api/classes/:id` (a mesma rota da página de detalhe da classe),
+ * que devolve o professor e a lista de alunos com nome. Dali dá para
+ * matricular, editar e tirar um aluno sem sair da congregação.
+ * ============================================================================
+ */
+function LinhaDeClasse({
+  c,
+  podeClasses,
+  podeAlunos,
+  crudClasses,
+  crudAlunos,
+  onEditar,
+}: {
+  c: ClasseResumo;
+  podeClasses: boolean;
+  podeAlunos: boolean;
+  crudClasses: Crud;
+  crudAlunos: Crud;
+  onEditar: () => void;
+}) {
+  const [aberta, setAberta] = useState(false);
+  const [detalhe, setDetalhe] = useState<DetalheDaClasse | null>(null);
+  const [criandoAluno, setCriandoAluno] = useState(false);
+  const [alunoEmEdicao, setAlunoEmEdicao] = useState<AlunoDaClasseResumo | null>(null);
+
+  useEffect(() => {
+    if (!aberta) return;
+    const controle = new AbortController();
+    setDetalhe(null);
+    void fetch(`/api/classes/${c.id}`, { signal: controle.signal, cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setDetalhe({ professores: d.professores ?? [], alunos: d.alunos ?? [] }))
+      .catch(() => setDetalhe({ professores: [], alunos: [] }));
+    return () => controle.abort();
+    // `crudAlunos.recarga`: matricular, editar ou tirar um aluno daqui dentro
+    // precisa atualizar esta mesma lista, sem esperar a pessoa fechar e abrir
+    // a classe de novo.
+  }, [aberta, c.id, crudAlunos.recarga]);
+
+  return (
+    <li className={cn(!c.ativa && "opacity-50")}>
+      <div className="flex items-center gap-1 px-1">
+        <button
+          type="button"
+          onClick={() => setAberta((v) => !v)}
+          aria-expanded={aberta}
+          aria-label={`${aberta ? "Fechar" : "Abrir"} a classe ${c.nome}`}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-white/[0.03]"
+        >
+          <ChevronRight
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-brand-300/50 transition-transform duration-300",
+              aberta && "rotate-90",
+            )}
+          />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
+            <School className="h-3.5 w-3.5 text-brand-50" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <p className="truncate text-[0.84rem] text-brand-50">{c.nome}</p>
+            <p className="truncate text-[0.7rem] text-brand-200/50">
+              {rotuloDaCategoria(c.tipoClasse)}
+              {c.faixa && ` · ${c.faixa}`} · {c.alunos} {c.alunos === 1 ? "aluno" : "alunos"}
+              {!c.ativa && " · inativa"}
+            </p>
+          </span>
+        </button>
+
+        {podeClasses && (
+          <AcoesDoRegistro
+            nome={c.nome}
+            onEditar={onEditar}
+            aviso={
+              c.alunos > 0
+                ? `A classe ${c.nome} tem ${c.alunos} ${c.alunos === 1 ? "aluno matriculado" : "alunos matriculados"}. Por isso ela será desativada, e não apagada.`
+                : undefined
+            }
+            onExcluir={async () => {
+              await crudClasses.gravar(`/api/classes/${c.id}`, "DELETE");
+            }}
+          />
+        )}
+      </div>
+
+      {aberta && (
+        <div className="border-t border-white/6 bg-white/[0.015] px-3 py-3 pl-11">
+          <p className="mb-1.5 text-[0.66rem] uppercase tracking-[0.14em] text-brand-200/45">
+            {detalhe?.professores.length === 1 ? "Professor" : "Professores"}
+          </p>
+          {detalhe === null ? (
+            <p className="mb-3 text-[0.78rem] text-brand-200/45">Carregando…</p>
+          ) : detalhe.professores.length === 0 ? (
+            <p className="mb-3 text-[0.78rem] italic text-brand-200/45">Nenhum professor registrado.</p>
+          ) : (
+            <ul className="mb-3 flex flex-wrap gap-1.5">
+              {detalhe.professores.map((p) => (
+                <li
+                  key={p.vinculoId}
+                  className="rounded-full bg-white/6 px-2.5 py-1 text-[0.76rem] text-brand-50"
+                >
+                  {p.tratamento && <span className="text-gold-200/80">{p.tratamento} </span>}
+                  {p.nome}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="mb-1.5 flex items-center justify-between">
+            <p className="text-[0.66rem] uppercase tracking-[0.14em] text-brand-200/45">
+              Alunos {detalhe && `(${detalhe.alunos.length})`}
+            </p>
+            {podeAlunos && (
+              <button
+                type="button"
+                onClick={() => setCriandoAluno(true)}
+                className="flex items-center gap-1 text-[0.74rem] text-brand-200/60 transition-colors hover:text-gold-200"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Matricular
+              </button>
+            )}
+          </div>
+
+          {detalhe === null ? (
+            <p className="text-[0.78rem] text-brand-200/45">Carregando…</p>
+          ) : detalhe.alunos.length === 0 ? (
+            <p className="text-[0.78rem] italic text-brand-200/45">Nenhum aluno matriculado ainda.</p>
+          ) : (
+            <ul className="max-h-56 divide-y divide-white/6 overflow-y-auto rounded-lg border border-white/8">
+              {detalhe.alunos.map((a) => (
+                <li
+                  key={a.id}
+                  className={cn("flex items-center gap-2 px-2.5 py-1.5", !a.ativo && "opacity-50")}
+                >
+                  <span className="min-w-0 flex-1 truncate text-[0.78rem] text-brand-50">
+                    {a.nome}
+                    {!a.ativo && <span className="text-brand-200/40"> · arquivado</span>}
+                  </span>
+                  {podeAlunos && (
+                    <AcoesDoRegistro
+                      nome={a.nome}
+                      onEditar={() => setAlunoEmEdicao(a)}
+                      onExcluir={async () => {
+                        await crudAlunos.gravar(`/api/alunos/${a.id}`, "DELETE");
+                      }}
+                    />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      <FormularioModal
+        aberto={criandoAluno}
+        aoFechar={() => setCriandoAluno(false)}
+        titulo="Matricular aluno"
+        descricao={`Entra direto na classe ${c.nome}.`}
+        campos={CAMPOS_ALUNO_DA_CLASSE}
+        valores={{ nome: "", nasc: "", posicao: "", tel: "", resp: "" }}
+        rotuloGravar="Matricular"
+        aoGravar={(v) =>
+          crudAlunos.gravar("/api/alunos", "POST", {
+            nome: v.nome,
+            classeId: c.id,
+            nasc: v.nasc || null,
+            posicao: v.posicao || null,
+            tel: v.tel,
+            resp: v.resp,
+          })
+        }
+      />
+
+      <FormularioModal
+        aberto={alunoEmEdicao !== null}
+        aoFechar={() => setAlunoEmEdicao(null)}
+        titulo="Editar aluno"
+        campos={CAMPOS_ALUNO_DA_CLASSE}
+        valores={{
+          nome: alunoEmEdicao?.nome ?? "",
+          nasc: alunoEmEdicao?.nasc?.slice(0, 10) ?? "",
+          posicao: alunoEmEdicao?.posicao ?? "",
+          tel: alunoEmEdicao?.tel ?? "",
+          resp: alunoEmEdicao?.resp ?? "",
+        }}
+        aoGravar={(v) =>
+          crudAlunos.gravar(`/api/alunos/${alunoEmEdicao?.id}`, "PATCH", {
+            nome: v.nome,
+            nasc: v.nasc || null,
+            posicao: v.posicao || null,
+            tel: v.tel,
+            resp: v.resp,
+          })
+        }
+      />
+    </li>
+  );
+}
+
+const CAMPOS_ALUNO_DA_CLASSE: readonly CampoForm[] = [
+  { chave: "nome", rotulo: "Nome completo", obrigatorio: true, largo: true },
+  { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+  {
+    chave: "posicao",
+    rotulo: "Posição no ministério",
+    tipo: "lista",
+    opcoes: POSICOES.map((p) => ({ valor: p.chave, rotulo: p.rotulo })),
+    ajuda: "Define o tratamento (Pr., Ev., Pb., Dc., Aux.). Não é cargo da EBD.",
+  },
+  { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+  {
+    chave: "resp",
+    rotulo: "Responsável",
+    largo: true,
+    ajuda: "Para crianças e adolescentes — quem procurar em caso de necessidade.",
+  },
+];
 
 function AbaSecao({ rotulo, ativa, onClick }: { rotulo: string; ativa: boolean; onClick: () => void }) {
   return (
