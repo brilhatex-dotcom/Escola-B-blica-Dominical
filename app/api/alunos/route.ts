@@ -1,5 +1,22 @@
 import { prisma } from "@/lib/prisma";
-import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
+import {
+  dataCivil,
+  erro,
+  lerCorpo,
+  lerInt,
+  lerPaginacao,
+  pagina,
+  proximoId,
+  responder,
+  texto,
+  textoOpcional,
+} from "@/lib/api";
+import {
+  combinarCongregacao,
+  escopoDaRota,
+  escopoDeEscrita,
+  exigirCongregacaoPermitida,
+} from "@/lib/auth/escopo";
 
 /**
  * Alunos matriculados.
@@ -12,6 +29,11 @@ import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  // Permissao e recorte no mesmo passo: quem enxerga so a propria congregacao
+  // recebe so os alunos dela, e o filtro sai pronto para o `where`.
+  const { recusa, congId: doAcesso } = await escopoDaRota("alunos");
+  if (recusa) return recusa;
+
   return responder(async () => {
     const url = new URL(req.url);
     const { pagina: p, porPagina, pular } = lerPaginacao(url);
@@ -32,7 +54,7 @@ export async function GET(req: Request) {
       ...(incluirInativos ? {} : { ativo: true }),
       ...(busca ? { nome: { contains: busca, mode: "insensitive" as const } } : {}),
       ...(classeId ? { classeId } : {}),
-      ...(congId ? { congId } : {}),
+      congId: combinarCongregacao(doAcesso, congId),
     };
 
     const [total, alunos] = await Promise.all([
@@ -56,5 +78,53 @@ export async function GET(req: Request) {
     ]);
 
     return pagina(alunos, total, p, porPagina);
+  });
+}
+
+/**
+ * Matricular um aluno.
+ *
+ * A congregação NÃO vem do corpo da requisição: ela é deduzida da classe
+ * escolhida. Aceitá-la do cliente permitiria a alguém do grupo B cadastrar um
+ * aluno noutra congregação simplesmente mandando outro `congId` — o recorte da
+ * leitura estaria de pé e o da escrita, aberto.
+ */
+export async function POST(req: Request) {
+  const { recusa, congId: doAcesso } = await escopoDeEscrita("alunos");
+  if (recusa) return recusa;
+
+  const corpo = await lerCorpo(req);
+  if (!corpo) return erro("Corpo da requisição inválido.", 400);
+
+  const nome = texto(corpo.nome, 120);
+  if (!nome) return erro("Informe o nome do aluno.", 400);
+
+  const classeId = Number.isInteger(corpo.classeId) ? (corpo.classeId as number) : null;
+  if (!classeId) return erro("Escolha a classe do aluno.", 400);
+
+  return responder(async () => {
+    const classe = await prisma.classe.findUnique({
+      where: { id: classeId },
+      select: { id: true, congId: true },
+    });
+    if (!classe) throw new Error("Classe não encontrada.");
+    exigirCongregacaoPermitida(doAcesso, classe.congId);
+
+    return prisma.$transaction(async (tx) => {
+      const id = await proximoId(() => tx.aluno.aggregate({ _max: { id: true } }));
+      return tx.aluno.create({
+        data: {
+          id,
+          nome,
+          nasc: dataCivil(corpo.nasc),
+          tel: textoOpcional(corpo.tel, 30),
+          resp: textoOpcional(corpo.resp, 120),
+          classeId: classe.id,
+          congId: classe.congId,
+          ativo: true,
+        },
+        select: { id: true, nome: true },
+      });
+    });
   });
 }

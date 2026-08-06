@@ -85,29 +85,43 @@ for (const p of CONGREGACAO) {
   ok(!podeVer([p], "rel-auditoria"), `${rotuloDoPapel(p)} não vê Auditoria`);
 }
 
-console.log("\n7. o professor faz a chamada, e só isso");
-ok(podeGravar(["professor"], "chamada"), "grava chamada");
-ok(podeGravar(["professor"], "visitantes"), "grava visitante");
-ok(podeVer(["professor"], "alunos"), "consulta os alunos");
-ok(!podeGravar(["professor"], "alunos"), "NÃO altera matrícula");
-ok(!podeGravar(["professor"], "classes"), "NÃO altera classe");
-ok(!podeGravar(["professor"], "lideranca"), "NÃO altera liderança");
+console.log("\n7. os botões de CRUD existem em TODOS os níveis (decisão da liderança)");
+// O recorte por congregação continua valendo: quem grava, grava na sua.
+for (const p of CONGREGACAO) {
+  for (const modulo of ["chamada", "alunos", "classes", "visitantes"]) {
+    ok(podeGravar([p], modulo), `${rotuloDoPapel(p)} grava em ${modulo}`);
+  }
+}
 
-console.log("\n8. o supervisor cuida da EBD, não das contas de acesso");
-ok(podeVer(["supervisor"], "usuarios"), "vê Usuários");
-ok(!podeGravar(["supervisor"], "usuarios"), "NÃO cria nem altera contas");
-ok(!podeGravar(["supervisor"], "permissoes"), "NÃO altera permissões");
-ok(podeGravar(["supervisor"], "chamada"), "grava chamada em qualquer congregação");
-ok(podeGravar(["supervisor"], "lideranca"), "troca quem ocupa um cargo");
+console.log("\n8. e o que continua fora do alcance do grupo B");
+for (const p of CONGREGACAO) {
+  ok(!podeGravar([p], "lideranca"), `${rotuloDoPapel(p)} NÃO altera a liderança`);
+  ok(!podeVer([p], "professores"), `${rotuloDoPapel(p)} NÃO vê a aba Professores`);
+}
 
-console.log("\n9. quem acumula papéis soma acessos, e o mais alto vence");
+console.log("\n9. supervisão, gestão e secretaria geral têm a autonomia da administração");
+for (const p of ["supervisor", "gestor-local", "secretario-geral"] as Papel[]) {
+  ok(podeGravar([p], "usuarios"), `${rotuloDoPapel(p)} administra contas`);
+  ok(podeGravar([p], "permissoes"), `${rotuloDoPapel(p)} alcança as permissões`);
+  ok(podeGravar([p], "cfg-backup"), `${rotuloDoPapel(p)} alcança o backup`);
+  ok(podeVer([p], "professores"), `${rotuloDoPapel(p)} vê a aba Professores`);
+  ok(escopoDe([p]) === "campo", `${rotuloDoPapel(p)} enxerga o campo inteiro`);
+}
+// A autonomia é do CARGO, e o cargo é dado: nenhum nome de pessoa no código.
+ok(
+  !JSON.stringify(PAPEIS).toLowerCase().includes("luiz") &&
+    !JSON.stringify(PAPEIS).toLowerCase().includes("danilo"),
+  "nenhum nome de pessoa aparece na matriz de permissões",
+);
+
+console.log("\n10. quem acumula papéis soma acessos, e o mais alto vence");
 const acumula: Papel[] = ["professor", "supervisor"];
 ok(escopoDe(acumula) === "campo", "Professor + Supervisor enxerga o campo");
 ok(podeGravar(acumula, "chamada"), "continua gravando chamada");
 ok(podeVer(acumula, "rel-auditoria"), "ganha o que o Supervisor tem");
 ok(papelPrincipal(acumula) === "supervisor", "o papel exibido é o mais alto");
 
-console.log("\n10. do cargo ao papel");
+console.log("\n11. do cargo ao papel");
 ok(papelDoCargo("Supervisor da EBD") === "supervisor", "Supervisor da EBD");
 ok(papelDoCargo("Dirigente") === "dirigente", "Dirigente");
 ok(papelDoCargo("Vice-Dirigente") === "vice-dirigente", "Vice-Dirigente");
@@ -116,7 +130,7 @@ ok(papelDoCargo("Professor") === "professor", "Professor");
 // Cargo desconhecido NAO pode abrir porta nenhuma: e o padrao seguro.
 ok(papelDoCargo("Auxiliar de Secretaria") === null, "cargo novo não ganha acesso sozinho");
 
-console.log("\n11. as contas herdadas da planilha");
+console.log("\n12. as contas herdadas da planilha");
 ok(papelHerdado("master") === "administrador", '"master" → administrador do sistema');
 ok(papelHerdado("coord") === "dirigente", '"coord" → dirigente da própria congregação');
 ok(
@@ -124,7 +138,7 @@ ok(
   "a conta técnica NÃO se apresenta como um cargo da igreja",
 );
 
-console.log("\n12. o acesso apurado a partir de uma conta");
+console.log("\n13. o acesso apurado a partir de uma conta");
 const semPessoa = montarAcesso({ id: 6, perfil: "coord", congId: 4, pessoaId: null }, []);
 ok(semPessoa.escopo === "congregacao", "conta de congregação → escopo de congregação");
 ok(semPessoa.congIds.length === 1 && semPessoa.congIds[0] === 4, "só a congregação 4");
@@ -159,7 +173,7 @@ ok(
   "pessoa sem cargo reconhecido não fica trancada do lado de fora",
 );
 
-console.log("\n13. o menu some junto com a permissão");
+console.log("\n14. o menu some junto com a permissão");
 const menuProfessor = menuVisivel(["professor"]);
 ok(
   !menuProfessor.some((g) => g.rotulo === "Administração"),
@@ -179,7 +193,7 @@ ok(
   "sem papéis, idem — nunca um menu vazio por acidente",
 );
 
-console.log("\n14. o item ativo é o endereço mais específico");
+console.log("\n15. o item ativo é o endereço mais específico");
 ok(itemAtivo("/dashboard") === "dashboard", "/dashboard");
 ok(itemAtivo("/dashboard/chamada") === "chamada", "/dashboard/chamada");
 ok(

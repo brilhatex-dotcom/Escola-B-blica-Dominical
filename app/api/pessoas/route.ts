@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
+import { escopoDaRota } from "@/lib/auth/escopo";
 
 /**
  * Pessoas e os cargos que exercem.
@@ -17,6 +18,17 @@ import { lerInt, lerPaginacao, pagina, responder } from "@/lib/api";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
+  /*
+   * A aba Professores e do grupo do campo — decisao da lideranca.
+   *
+   * Esconder o item do menu nao protege nada: bastaria digitar o endereco. A
+   * recusa acontece AQUI, onde os dados de fato saem. Quem dirige uma
+   * congregacao continua vendo os professores DELA dentro de cada Classe, que
+   * e onde a informacao serve.
+   */
+  const { recusa } = await escopoDaRota("professores");
+  if (recusa) return recusa;
+
   return responder(async () => {
     const url = new URL(req.url);
     const { pagina: p, porPagina, pular } = lerPaginacao(url);

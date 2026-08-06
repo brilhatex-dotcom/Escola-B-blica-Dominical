@@ -46,6 +46,7 @@ model Congregacao {
   eventos      Evento[]
   avisos       Aviso[]
   pessoaCargos PessoaCargo[]
+  pedidos      PedidoRevista[]
 
   @@map("Congregacoes")
 }
@@ -99,6 +100,7 @@ model Classe {
   ofertas      Oferta[]
   visitantes   Visitante[]
   pessoaCargos PessoaCargo[]
+  pedidos      PedidoRevista[]
 
   @@index([congId])
   @@map("Classes")
@@ -210,7 +212,18 @@ model Visitante {
   legacyId Int?
   nome     String
   /// "" em 43 linhas -> null.
+  ///
+  /// FICA COMO ESTA. As 89 linhas herdadas so tem a idade, e nao a data de
+  /// nascimento — calcular uma data a partir dela seria inventar dia e mes.
+  /// Nos visitantes novos, quem manda e `nasc`, e a idade e calculada na hora
+  /// de exibir; nos antigos, este numero continua sendo a unica verdade.
   idade    Int?
+  /// Data de nascimento — SO nos visitantes cadastrados a partir da Fase 09.
+  /// Coluna nova e opcional: nasce nula nas 89 linhas antigas, sem altera-las.
+  nasc     DateTime? @db.Date
+  /// Onde a pessoa mora. Bairro, sitio, povoado — texto livre de propósito:
+  /// a zona rural do campo nao cabe numa lista fechada de bairros.
+  local    String?
   /// Numero no export -> String (mesmo motivo de Aluno.tel).
   tel      String?
   obs      String?
@@ -235,6 +248,99 @@ model PrecoRevista {
 
   @@id([key, categoria])
   @@map("Precos_Revistas")
+}
+
+/**
+ * ==========================================================================
+ * PEDIDOS DE REVISTAS
+ * A aba `Pedidos_Revistas` existe no export e esta VAZIA — zero linhas. Nao ha
+ * como inferir os campos de uma planilha sem dados, entao estas duas tabelas
+ * sao novas, e nao uma importacao. Nada do sistema antigo e alterado por elas:
+ * `Precos_Revistas` (35 linhas) e `Parametros` continuam intactos e sao a
+ * fonte dos precos.
+ * A ligacao que faz o modulo funcionar ja existia no cadastro: `Classes.tipoClasse`
+ * usa exatamente os mesmos valores de `Precos_Revistas.categoria` — "adultos",
+ * "juniores", "adolesc"... Por isso o pedido de uma classe pode nascer
+ * preenchido: uma revista de aluno por aluno matriculado, uma de professor por
+ * professor da classe.
+ * ==========================================================================
+ */
+
+/// Um pedido de revistas de uma classe, num trimestre.
+model PedidoRevista {
+  id Int @id @default(autoincrement())
+
+  congId   Int?
+  classeId Int?
+
+  ano       Int
+  /// 1 a 4. Guardado como numero, e nao "2T": trimestre e ordenavel e
+  /// comparavel; texto nao é — "10T" viria antes de "2T" em qualquer ordenacao.
+  trimestre Int
+
+  /// "rascunho" | "enviado" | "atendido"
+  ///
+  /// Rascunho e o estado util: a classe monta o pedido ao longo de dias, sem
+  /// que a secretaria do campo o veja como definitivo. Sem esse estado, ou o
+  /// pedido nasce publico pela metade, ou so pode ser criado de uma sentada.
+  situacao String @default("rascunho")
+
+  observacao String?
+
+  /// Quem montou. Texto, e nao FK: e o nome de quem estava logado no momento,
+  /// e ele nao pode mudar depois se a pessoa for renomeada no cadastro.
+  autor String?
+
+  criadoEm   DateTime  @default(now())
+  atualizado DateTime  @updatedAt
+  enviadoEm  DateTime?
+
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+  classe      Classe?      @relation(fields: [classeId], references: [id])
+
+  itens PedidoRevistaItem[]
+
+  /// Um pedido por classe por trimestre. Sem isto, dois professores da mesma
+  /// classe abrem dois pedidos no mesmo trimestre e a secretaria recebe o dobro
+  /// de revistas — sem ninguem perceber ate a entrega chegar.
+  @@unique([classeId, ano, trimestre])
+  @@index([congId])
+  @@index([ano, trimestre])
+  /// A aba de mesmo nome existe no export e esta vazia, entao nao ha tabela
+  /// com este nome no Postgres — o nome fica livre e e o nome certo.
+  @@map("Pedidos_Revistas")
+}
+
+/// Uma linha do pedido: qual revista, quantas, por quanto.
+model PedidoRevistaItem {
+  id Int @id @default(autoincrement())
+
+  pedidoId Int
+
+  /// Apontam para `Precos_Revistas` (key, categoria). NAO ha chave estrangeira
+  /// de proposito: aquela tabela e do sistema antigo, e uma FK daqui para la
+  /// impediria a secretaria de corrigir um preco sem antes mexer nos pedidos.
+  categoria String
+  chave     String
+  /// Copia do rotulo no momento do pedido — ver `precoUnitario`.
+  label     String
+
+  quantidade Int
+
+  /**
+   * O preco CONGELADO no momento do pedido.
+   * Ler o preco atual na hora de exibir faria o pedido de abril mudar de valor
+   * sozinho quando a tabela de precos fosse atualizada em julho — e a
+   * prestacao de contas de um trimestre fechado deixaria de bater com o que foi
+   * pago. Um pedido e um documento; ele guarda o que valia quando foi feito.
+   */
+  precoUnitario Decimal @db.Decimal(10, 2)
+
+  pedido PedidoRevista @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@unique([pedidoId, categoria, chave])
+  @@index([pedidoId])
+  @@map("Pedidos_Revistas_Itens")
 }
 
 /// Sem coluna `id` no export; `parametro` e unico.

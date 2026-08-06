@@ -62,3 +62,78 @@ export async function responder<T>(fn: () => Promise<T>) {
     return erro("Não foi possível concluir a operação.", 500, e);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Escrita nas tabelas herdadas
+ * ------------------------------------------------------------------ */
+
+/**
+ * O próximo `id` de uma tabela do sistema antigo.
+ *
+ * ============================================================================
+ * POR QUE ISTO PRECISA EXISTIR, E POR QUE PRECISA RODAR DENTRO DA TRANSAÇÃO
+ *
+ * `Alunos`, `Classes`, `Visitantes` e `Frequencias` NÃO têm id autoincrement —
+ * a chave é a da planilha original, preservada para não quebrar os
+ * relacionamentos herdados (ver prisma/schema.prisma). Então cadastrar um
+ * aluno novo exige calcular o próximo número.
+ *
+ * E o cálculo tem de acontecer DENTRO da mesma transação da inserção. Fora
+ * dela, dois professores cadastrando ao mesmo tempo — dois celulares, um
+ * domingo de manhã — leem o mesmo "maior id", pedem o mesmo número, e o
+ * segundo perde o cadastro com erro de chave duplicada. Já foi o caso na
+ * gravação da chamada; a razão aqui é idêntica.
+ * ============================================================================
+ */
+export async function proximoId(
+  agregar: () => Promise<{ _max: { id: number | null } }>,
+): Promise<number> {
+  const { _max } = await agregar();
+  return (_max.id ?? 0) + 1;
+}
+
+/**
+ * Lê o corpo JSON sem derrubar a rota.
+ *
+ * `req.json()` lança quando o corpo vem vazio ou malformado — e uma exceção
+ * ali vira 500, que é a resposta errada: o erro é de quem enviou, não do
+ * servidor, e 500 manda a tela dizer "tente de novo" para algo que nunca vai
+ * dar certo do jeito que está.
+ */
+export async function lerCorpo(req: Request): Promise<Record<string, unknown> | null> {
+  try {
+    const corpo = await req.json();
+    return corpo && typeof corpo === "object" ? (corpo as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Texto obrigatório, sem espaços nas pontas. `null` quando não serve. */
+export function texto(valor: unknown, max = 200): string | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  if (!limpo || limpo.length > max) return null;
+  return limpo;
+}
+
+/** Texto opcional: `""` vira `null`, e não string vazia gravada no banco. */
+export function textoOpcional(valor: unknown, max = 500): string | null {
+  if (typeof valor !== "string") return null;
+  const limpo = valor.trim();
+  return limpo && limpo.length <= max ? limpo : null;
+}
+
+/**
+ * Data civil "YYYY-MM-DD" → `Date` em UTC.
+ *
+ * `new Date("2010-05-03")` já é UTC, mas `new Date("2010-05-03T00:00:00")` é
+ * hora local — e em Pernambuco (UTC−3) isso grava 2010-05-02T21:00Z, que numa
+ * coluna `@db.Date` vira **o dia anterior**. Uma data de nascimento que anda um
+ * dia para trás a cada gravação é o tipo de defeito que ninguém liga ao fuso.
+ */
+export function dataCivil(valor: unknown): Date | null {
+  if (typeof valor !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return null;
+  const d = new Date(`${valor}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}

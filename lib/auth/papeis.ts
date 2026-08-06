@@ -62,10 +62,18 @@ const TUDO = ["*"] as const;
 /**
  * O que o grupo B enxerga — sempre restrito à própria congregação pelo escopo.
  *
- * A lista é a mesma para os quatro papéis do grupo; o que muda entre eles é o
- * que podem GRAVAR. Um Professor consulta a ficha do aluno e a frequência da
- * classe dele tanto quanto o Dirigente — esconder isso não protege ninguém e
- * só o obriga a pedir por WhatsApp o que já é trabalho dele saber.
+ * ============================================================================
+ * "PROFESSORES" NÃO ESTÁ AQUI, E A AUSÊNCIA É A DECISÃO
+ *
+ * A tela de Professores é o cadastro de PESSOAS do campo — quem existe, com que
+ * tratamento, telefone e quais cargos acumula, em todas as congregações. É
+ * administração de gente, e não trabalho de sala de aula.
+ *
+ * Por decisão da liderança, ela fica com o grupo do campo (administração,
+ * supervisão, gestão e secretaria geral). Quem dirige uma congregação continua
+ * vendo os professores DELA dentro de cada Classe, que é onde a informação
+ * serve: "quem dá aula nesta classe".
+ * ============================================================================
  */
 const VE_A_CONGREGACAO = [
   "dashboard",
@@ -73,7 +81,6 @@ const VE_A_CONGREGACAO = [
   "chamada",
   "alunos",
   "classes",
-  "professores",
   "visitantes",
   "aniversariantes",
   "licoes",
@@ -89,6 +96,39 @@ const VE_A_CONGREGACAO = [
   "agenda-reunioes",
   "cfg-sincronizacao",
   "cfg-offline",
+] as const;
+
+/**
+ * O que o grupo B pode GRAVAR na própria congregação.
+ *
+ * ============================================================================
+ * OS BOTÕES DE CRIAR, EDITAR E EXCLUIR APARECEM EM TODOS OS NÍVEIS
+ *
+ * É uma decisão da liderança, e vale a pena registrar o que ela significa: um
+ * Professor pode matricular, corrigir e excluir aluno da congregação dele, e
+ * não apenas marcar presença.
+ *
+ * O que NÃO muda: o recorte por congregação. Um Professor da Cong. Bandeiras
+ * continua sem enxergar — e portanto sem poder alterar — coisa alguma das
+ * outras treze congregações. E continua fora do alcance dele tudo o que é do
+ * campo: contas de acesso, permissões, liderança, hierarquia, backup e
+ * auditoria.
+ *
+ * Quem quiser voltar a restringir por função depois é aqui que mexe, tirando
+ * itens desta lista — o resto do sistema segue a lista sem precisar de ajuste.
+ * ============================================================================
+ */
+const GRAVA_NA_CONGREGACAO = [
+  "chamada",
+  "alunos",
+  "classes",
+  "visitantes",
+  "aniversariantes",
+  "licoes",
+  "revistas",
+  "agenda-eventos",
+  "agenda-avisos",
+  "agenda-reunioes",
 ] as const;
 
 export const PAPEIS: readonly DefinicaoPapel[] = [
@@ -110,36 +150,32 @@ export const PAPEIS: readonly DefinicaoPapel[] = [
     modulos: TUDO,
     gravar: TUDO,
   },
+  /*
+   * ==========================================================================
+   * SUPERVISÃO, GESTÃO E SECRETARIA GERAL TÊM A MESMA AUTONOMIA DA
+   * ADMINISTRAÇÃO — por decisão da liderança do campo.
+   *
+   * Antes, o Supervisor e o Secretário Geral viam tudo e gravavam só a parte
+   * da EBD; contas de acesso e permissões ficavam fora. A liderança decidiu
+   * que os quatro cargos de campo respondem igualmente pelo sistema.
+   *
+   * E é por CARGO, nunca por nome. Os secretários que exercem a função hoje
+   * têm autonomia porque ocupam o cargo — no dia em que outra pessoa assumir,
+   * ela recebe o mesmo acesso sem que uma linha de código mude, e quem saiu
+   * perde o acesso no mesmo ato. Escrever os nomes aqui produziria o contrário:
+   * um sistema que precisa ser recompilado a cada troca de secretaria, e que
+   * continua aberto a quem já saiu.
+   * ==========================================================================
+   */
   {
     papel: "supervisor",
     rotulo: "Supervisor da EBD",
     ordem: 30,
     escopo: "campo",
     descricao:
-      "Responde pela Escola Bíblica em todas as congregações. Não mexe em contas nem em permissões.",
+      "Responde pela Escola Bíblica em todas as congregações, com a mesma autonomia da administração.",
     modulos: TUDO,
-    // Fica de fora o que é da administração do sistema, e não da EBD: contas de
-    // acesso, permissões e backup. Supervisionar a Escola Bíblica não é a mesma
-    // coisa que poder criar um usuário com acesso ao campo inteiro.
-    gravar: [
-      "congregacoes",
-      "chamada",
-      "alunos",
-      "classes",
-      "professores",
-      "visitantes",
-      "aniversariantes",
-      "licoes",
-      "revistas",
-      "lideranca",
-      "hierarquia",
-      "escalas",
-      "rel-certificados",
-      "agenda-calendario",
-      "agenda-eventos",
-      "agenda-avisos",
-      "agenda-reunioes",
-    ],
+    gravar: TUDO,
   },
   {
     papel: "secretario-geral",
@@ -147,23 +183,9 @@ export const PAPEIS: readonly DefinicaoPapel[] = [
     ordem: 40,
     escopo: "campo",
     descricao:
-      "Consolida números e documentos de todas as congregações. Vê tudo; grava o que é da secretaria.",
+      "Consolida números e documentos de todas as congregações, com a mesma autonomia da administração.",
     modulos: TUDO,
-    gravar: [
-      "chamada",
-      "alunos",
-      "classes",
-      "visitantes",
-      "aniversariantes",
-      "licoes",
-      "revistas",
-      "escalas",
-      "rel-certificados",
-      "agenda-calendario",
-      "agenda-eventos",
-      "agenda-avisos",
-      "agenda-reunioes",
-    ],
+    gravar: TUDO,
   },
 
   /* ---------------- Grupo B — só a própria congregação ---------------- */
@@ -175,18 +197,7 @@ export const PAPEIS: readonly DefinicaoPapel[] = [
     escopo: "congregacao",
     descricao: "Responde pela EBD da sua congregação.",
     modulos: VE_A_CONGREGACAO,
-    gravar: [
-      "chamada",
-      "alunos",
-      "classes",
-      "professores",
-      "visitantes",
-      "licoes",
-      "revistas",
-      "agenda-eventos",
-      "agenda-avisos",
-      "agenda-reunioes",
-    ],
+    gravar: GRAVA_NA_CONGREGACAO,
   },
   {
     papel: "vice-dirigente",
@@ -195,18 +206,7 @@ export const PAPEIS: readonly DefinicaoPapel[] = [
     escopo: "congregacao",
     descricao: "Substitui o Dirigente na sua congregação.",
     modulos: VE_A_CONGREGACAO,
-    gravar: [
-      "chamada",
-      "alunos",
-      "classes",
-      "professores",
-      "visitantes",
-      "licoes",
-      "revistas",
-      "agenda-eventos",
-      "agenda-avisos",
-      "agenda-reunioes",
-    ],
+    gravar: GRAVA_NA_CONGREGACAO,
   },
   {
     papel: "secretario-local",
@@ -215,18 +215,17 @@ export const PAPEIS: readonly DefinicaoPapel[] = [
     escopo: "congregacao",
     descricao: "Cuida dos registros da sua congregação: chamada, cadastro e pedidos.",
     modulos: VE_A_CONGREGACAO,
-    gravar: ["chamada", "alunos", "visitantes", "licoes", "revistas"],
+    gravar: GRAVA_NA_CONGREGACAO,
   },
   {
     papel: "professor",
     rotulo: "Professor",
     ordem: 90,
     escopo: "congregacao",
-    descricao: "Faz a chamada da sua classe e acompanha os alunos dela.",
+    descricao:
+      "Faz a chamada e cuida do cadastro da sua congregação — alunos, classes e visitantes.",
     modulos: VE_A_CONGREGACAO,
-    // Um professor marca presença e recebe visitante — não mexe em matrícula
-    // nem em cadastro de classe, que é decisão da secretaria.
-    gravar: ["chamada", "visitantes"],
+    gravar: GRAVA_NA_CONGREGACAO,
   },
 
   /* ---------------- A conta herdada da planilha ---------------- */
