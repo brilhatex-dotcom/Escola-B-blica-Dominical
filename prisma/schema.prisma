@@ -48,6 +48,7 @@ model Congregacao {
   pessoaCargos       PessoaCargo[]
   auditoria          Auditoria[]
   pagamentosRevistas PagamentoRevista[]
+  pedidosRevistas    PedidoRevista[]
 
   @@map("Congregacoes")
 }
@@ -268,10 +269,10 @@ model Parametro {
 
 /// Uma baixa (pagamento parcial) do pedido de revistas de uma congregacao.
 ///
-/// O pedido em si e CALCULADO (alunos ativos x preco); o que se registra e o
-/// quanto ja foi pago. Cada baixa e uma entrada — "faltam alunos de varias
-/// classes pagarem" vira uma sequencia de baixas com observacao, e o saldo e a
-/// diferenca para o total devido. `trimestre` escopa o pedido ("3T-2026").
+/// O que se registra aqui e o quanto ja foi pago. Cada baixa e uma entrada —
+/// "faltam alunos de varias classes pagarem" vira uma sequencia de baixas com
+/// observacao, e o saldo e a diferenca para o total do `PedidoRevista`
+/// confirmado. `trimestre` escopa o pedido ("3T-2026").
 model PagamentoRevista {
   id         Int      @id @default(autoincrement())
   congId     Int
@@ -287,14 +288,77 @@ model PagamentoRevista {
   @@map("Pagamentos_Revistas")
 }
 
+/// O pedido de revistas de UMA congregacao em UM trimestre — a Fase 15b.
+///
+/// ============================================================================
+/// O PEDIDO E DIGITADO, NAO SO CALCULADO — A FASE 15a TENTOU O CAMINHO
+/// AUTOMATICO E NAO ERA O QUE A SECRETARIA PRECISAVA
+///
+/// A Fase 15a calculava a quantidade sozinha (alunos ativos x preco) e so
+/// deixava REGISTRAR PAGAMENTO — nao existia o momento de "a congregacao
+/// decidiu e mandou o pedido de verdade". O usuario pediu exatamente isso: uma
+/// tela para PREENCHER o pedido, com os numeros comecando ZERADOS (o alerta
+/// veio explicito: "zere todos, pois elas vao colocar o novo pedido do IV
+/// trimestre").
+///
+/// Por isso o pedido agora e um registro de verdade, com um passo de
+/// CONFIRMAR que TRAVA a quantidade e o preco daquele momento — sem essa
+/// trava, um aluno saindo da classe em novembro reduziria silenciosamente o
+/// pedido de agosto, que ja foi impresso e enviado pela CPAD. `confirmado`
+/// e o que torna "Fechado" (`lib/revistas/situacao.ts`) um estado real: antes
+/// de confirmar, a congregacao esta em "sem-pedido" de verdade, nao so
+/// aguardando pagamento.
+/// ============================================================================
+model PedidoRevista {
+  id     Int    @id @default(autoincrement())
+  congId Int
+  /// "3T-2026" — a mesma chave usada em `PagamentoRevista.trimestre`.
+  trimestre String
+
+  confirmado    Boolean   @default(false)
+  confirmadoEm  DateTime?
+  /// Nome de quem confirmou, como veio da sessao — igual a
+  /// `PagamentoRevista.autor`. Nao e uma FK: a pessoa pode nao ter mais conta.
+  confirmadoPor String?
+
+  criadoEm   DateTime @default(now())
+  atualizado DateTime @updatedAt
+
+  congregacao Congregacao         @relation(fields: [congId], references: [id])
+  itens       PedidoRevistaItem[]
+
+  @@unique([congId, trimestre])
+  @@map("Pedidos_Revistas")
+}
+
+/// Uma linha do pedido: uma categoria (ex. "adultos"), um tipo (aluno ou
+/// professor), uma quantidade digitada e o preco unitario NO MOMENTO em que a
+/// linha foi salva — nao uma referencia a `PrecoRevista`, porque o preco pode
+/// mudar de trimestre a trimestre e o pedido confirmado precisa continuar
+/// mostrando o valor que foi cobrado, mesmo que a tabela de precos mude
+/// depois.
+model PedidoRevistaItem {
+  id        Int    @id @default(autoincrement())
+  pedidoId  Int
+  categoria String
+  /// "aluno" | "professor"
+  tipo          String
+  quantidade    Int
+  precoUnitario Decimal @db.Decimal(10, 2)
+
+  pedido PedidoRevista @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  @@unique([pedidoId, categoria, tipo])
+  @@map("Pedidos_Revistas_Itens")
+}
+
 /// A data-limite de pagamento de um trimestre — em geral a licao 02 do proximo
 /// trimestre, mas editavel. Uma linha por trimestre.
 ///
 /// `dataLimitePedido` (Fase 15a) e um prazo SEPARADO, opcional e sem padrao:
-/// o pedido em si nao tem passo de "enviar" (nasce calculado dos alunos
-/// ativos), entao nao ha uma regra natural de quando ele "fecha" como ha para
-/// o pagamento. Fica de fora da tela ate a administracao do campo definir um
-/// valor — nunca aparece um prazo que ninguem escolheu.
+/// fica de fora da tela ate a administracao do campo definir um valor — nunca
+/// aparece um prazo que ninguem escolheu. Desde a Fase 15b ele tem um sentido
+/// operacional real: e o prazo para CONFIRMAR o `PedidoRevista`.
 ///
 /// `tema` e so exibicao (ex.: "A Grandeza da Graca de Deus") — nao alimenta
 /// calculo nenhum.

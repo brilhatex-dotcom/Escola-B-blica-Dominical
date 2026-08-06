@@ -125,27 +125,34 @@ const moeda = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 /**
  * Um alerta por congregação, no máximo — nunca dois competindo pela mesma
  * linha. A prioridade é: já venceu > prazo acabando > nunca pagou nada > sem
- * pedido nenhum no trimestre. Uma congregação "pendente" mas com o prazo
- * ainda longe não gera alerta — isso é o estado normal do início do
- * trimestre, não um aviso.
+ * pedido confirmado. Uma congregação "pendente" mas com o prazo ainda longe
+ * não gera alerta — isso é o estado normal do início do trimestre, não um
+ * aviso.
+ *
+ * "Sem pedido" (Fase 15b) sobe para crítico quando `dataLimitePedido` já
+ * passou — a congregação não confirmou a tempo, e isso é mais grave do que
+ * "ainda não confirmou, mas ainda há tempo".
  */
 export function gerarAlertasRevistas(
   congregacoes: CongParaAlerta[],
-  params: { hoje: Date; dataLimitePagamento: Date },
+  params: { hoje: Date; dataLimitePagamento: Date; dataLimitePedido?: Date | null },
 ): AlertaRevista[] {
-  const { hoje, dataLimitePagamento } = params;
+  const { hoje, dataLimitePagamento, dataLimitePedido } = params;
   const dias = diasRestantes(hoje, dataLimitePagamento);
+  const prazoPedidoVencido = dataLimitePedido != null && hoje > dataLimitePedido;
   const alertas: AlertaRevista[] = [];
 
   for (const c of congregacoes) {
     if (c.totalDevido <= 0) {
       alertas.push({
-        nivel: "atencao",
+        nivel: prazoPedidoVencido ? "critico" : "atencao",
         tipo: "sem-pedido",
         congId: c.congId,
         congNome: c.nome,
-        titulo: `${c.nome} — sem pedido neste trimestre`,
-        descricao: "Nenhuma classe ativa com aluno gerou pedido de revista.",
+        titulo: prazoPedidoVencido ? `${c.nome} — pedido não confirmado, prazo vencido` : `${c.nome} — ainda sem pedido confirmado`,
+        descricao: prazoPedidoVencido
+          ? "O prazo para confirmar o pedido já passou e nenhuma quantidade foi confirmada."
+          : "Nenhuma quantidade foi confirmada neste trimestre ainda.",
       });
       continue;
     }

@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertCircle, AlertTriangle, BadgeCheck, BookMarked, Building2, ChevronRight,
-  Clock, Coins, HandCoins, Loader2, PenLine, Plus, Sparkles, Trash2, Users,
+  ClipboardList, Clock, Coins, HandCoins, Loader2, PenLine, Plus, Sparkles, Trash2, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -32,9 +33,15 @@ interface ClasseItem {
   professores: number; precoProfessor: number | null; subtotalProfessor: number;
 }
 type SituacaoCongregacao = "sem-pedido" | "quitado" | "pendente" | "parcial" | "atraso";
+interface PedidoResumo {
+  confirmado: boolean; confirmadoEm: string | null; confirmadoPor: string | null;
+  total: number; revistas: number;
+}
+interface Sugestao { revistas: number; total: number }
 interface CongPedido {
   congId: number; nome: string; revistas: number; totalDevido: number;
   pago: number; saldo: number; situacao: SituacaoCongregacao;
+  pedido: PedidoResumo | null; sugestao: Sugestao;
   semPreco: number; classes: ClasseItem[]; pagamentos: Baixa[];
 }
 interface Preco {
@@ -50,6 +57,7 @@ interface AlertaRevista {
 }
 interface Dados {
   trimestre: { rotulo: string; tema: string | null };
+  trimestreProximo: string;
   dataLimite: string; dataLimitePadrao: string; dataLimiteDefinida: boolean; podeDefinirLimite: boolean;
   dataLimitePagamento: string; dataLimitePedido: string | null;
   prazos: { pagamento: Prazo; pedido: Prazo | null };
@@ -477,7 +485,9 @@ function CartaoCongregacao({ cong, aberto, aoAlternar, editavel, aoMudar }: {
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-[0.92rem] font-semibold text-white">{cong.nome}</p>
           <p className="text-[0.72rem] text-brand-200/55">
-            {cong.revistas} revistas · {cong.classes.length} classes
+            {cong.pedido?.confirmado ? `${cong.pedido.revistas} revistas pedidas` : "pedido não confirmado"}
+            {" · "}
+            {cong.classes.length} classe(s)
           </p>
         </div>
         <div className="shrink-0 text-right">
@@ -502,11 +512,49 @@ function CartaoCongregacao({ cong, aberto, aoAlternar, editavel, aoMudar }: {
 
       {aberto && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="border-t border-white/6 p-3">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-white/8 bg-white/[0.02] px-3.5 py-3">
+            <div className="min-w-0">
+              {cong.pedido?.confirmado ? (
+                <>
+                  <p className="flex items-center gap-1.5 text-[0.82rem] text-brand-50">
+                    <BadgeCheck className="h-4 w-4 shrink-0 text-emerald-300" />
+                    Pedido confirmado — {cong.pedido.revistas} revista(s), {dinheiro.format(cong.pedido.total)}
+                  </p>
+                  {cong.pedido.confirmadoEm && (
+                    <p className="mt-0.5 text-[0.72rem] text-brand-200/45">
+                      {cong.pedido.confirmadoPor ? `por ${cong.pedido.confirmadoPor} — ` : ""}
+                      {fmtData.format(new Date(cong.pedido.confirmadoEm))}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-[0.82rem] text-brand-50">Ainda sem pedido confirmado neste trimestre</p>
+                  <p className="mt-0.5 text-[0.72rem] text-brand-200/45">
+                    Sugestão calculada: {cong.sugestao.revistas} revista(s), {dinheiro.format(cong.sugestao.total)}
+                  </p>
+                </>
+              )}
+            </div>
+            {editavel && (
+              <Link
+                href={`/dashboard/revistas/pedido/${cong.congId}`}
+                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gold-400/30 bg-gold-400/10 px-3 py-1.5 text-[0.78rem] font-medium text-gold-200 transition-colors hover:bg-gold-400/20"
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+                {cong.pedido?.confirmado ? "Ver pedido" : "Fazer Pedido"}
+              </Link>
+            )}
+          </div>
+
           {cong.semPreco > 0 && (
             <p className="mb-2 text-[0.74rem] text-gold-200/70">
-              {cong.semPreco} classe(s) sem preço de categoria — não entraram no total.
+              {cong.semPreco} classe(s) sem preço de categoria — não entraram na sugestão.
             </p>
           )}
+          <p className="mb-1.5 text-[0.68rem] uppercase tracking-[0.1em] text-brand-200/40">
+            Sugestão calculada (alunos/professores ativos) — não é o pedido oficial
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[30rem] text-left">
               <thead>
@@ -547,8 +595,8 @@ function CartaoCongregacao({ cong, aberto, aoAlternar, editavel, aoMudar }: {
               </tbody>
               <tfoot>
                 <tr className="border-t border-white/10">
-                  <td colSpan={4} className="px-3 py-2 text-right text-[0.76rem] uppercase tracking-wide text-brand-200/50">Total da congregação</td>
-                  <td className="px-3 py-2 text-right text-[0.9rem] font-semibold tabular-nums text-white">{dinheiro.format(cong.totalDevido)}</td>
+                  <td colSpan={4} className="px-3 py-2 text-right text-[0.76rem] uppercase tracking-wide text-brand-200/50">Total sugerido</td>
+                  <td className="px-3 py-2 text-right text-[0.9rem] font-semibold tabular-nums text-white">{dinheiro.format(cong.sugestao.total)}</td>
                 </tr>
               </tfoot>
             </table>

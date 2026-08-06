@@ -1,4 +1,4 @@
-# Continuação — Fase 15b: Central de Revistas CPAD (cards e gráficos financeiros)
+# Continuação — Fase 15c: Central de Revistas CPAD (cards e gráficos financeiros)
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -48,6 +48,7 @@ Substitui um sistema antigo em Google Apps Script.
 | 14a | **Central de Relatórios (BI) — o cérebro: IGS, IGE, alertas, análise automática** |
 | 14b | **Central de Relatórios (BI) — gráficos avançados: evolução, radar e comparativo** |
 | 15a | **Central de Revistas CPAD — painel do trimestre e alertas** |
+| 15b | **Central de Revistas CPAD — o pedido é digitado e confirmado (tela "Fazer Pedido")** |
 
 ## A Fase 15 — Central de Revistas CPAD — e o corte combinado com o usuário
 
@@ -76,19 +77,63 @@ histórico da sessão):
 | Sub-fase | Entrega |
 |---|---|
 | **15a** | ✅ Entregue — painel do trimestre (tema, situação, prazos), alertas automáticos, cards de resumo, e a Revista do Professor somada ao cálculo |
-| 15b | Cards por congregação redesenhados (ícones de pagar/imprimir/editar/histórico) + gráficos financeiros (barra, pizza, evolução semanal) |
-| 15c | Categorias extras (Discipulado, Apoio, Visuais, Material Complementar) — **bloqueado até o usuário informar os preços** |
-| 15d | Impressão profissional (pedido individual com timbre e assinaturas) + impressão geral (todas/pendentes/pagas/por categoria) |
-| 15e | Histórico multi-trimestre + comparativos automáticos (trimestre anterior, mesmo trimestre do ano passado) + estatísticas |
-| 15f | Exportação PDF/Excel/CSV |
+| **15b** | ✅ Entregue — **não estava no corte original**, foi pedida pelo usuário ao testar a 15a. Tela "Fazer Pedido": quantidade digitada por categoria, rascunho salvo, confirmação que trava quantidade e preço. Ver detalhe abaixo. |
+| 15c | Cards por congregação redesenhados (ícones de pagar/imprimir/editar/histórico) + gráficos financeiros (barra, pizza, evolução semanal) |
+| 15d | Categorias extras (Discipulado, Apoio, Visuais, Material Complementar) — **bloqueado até o usuário informar os preços** |
+| 15e | Impressão profissional (pedido individual com timbre e assinaturas) + impressão geral (todas/pendentes/pagas/por categoria) |
+| 15f | Histórico multi-trimestre + comparativos automáticos (trimestre anterior, mesmo trimestre do ano passado) + estatísticas |
+| 15g | Exportação PDF/Excel/CSV |
 | — | Comprovante de pagamento (upload) — recusado por enquanto; exigiria configurar um serviço de armazenamento de arquivo novo |
 
-**Antes de começar 15b, confirme com o usuário se a ordem continua essa** — a
-aprovação foi dada só para 15a.
+**Antes de começar 15c, confirme com o usuário se a ordem continua essa** — a
+aprovação foi dada para 15a, e 15b entrou fora de ordem por pedido direto do
+usuário. O resto é a sequência que pareceu mais lógica, não uma decisão
+fechada.
 
 **A Fase 14c/14d (BI: rankings expandidos e exportação) segue proposta e não
 aprovada** — o usuário abriu a Fase 15 antes de decidir sobre elas. Não
-presumir qual delas vem depois de 15b; perguntar.
+presumir qual delas vem depois; perguntar.
+
+## O que a Fase 15b entregou (para não refazer)
+
+O usuário testou a 15a e resumiu o problema: *"parece que só visualizo"*, e
+foi direto sobre os números já calculados: *"zere todos, pois elas vão
+colocar o novo pedido do IV trimestre"*. O pedido virou um registro real —
+digitado, salvo em rascunho, confirmado com trava — em vez de uma conta em
+memória.
+
+- **Duas tabelas novas**: `Pedidos_Revistas` (cabeçalho — confirmado ou
+  rascunho, quem/quando confirmou) e `Pedidos_Revistas_Itens` (uma linha por
+  categoria × tipo aluno/professor, com quantidade e **preço travado no
+  momento em que foi salva**).
+- **Tela nova `/dashboard/revistas/pedido/[congId]`** ("Fazer Pedido", link
+  em cada card de congregação da tela principal): quantidade começa em
+  branco (não pré-preenchida com o cálculo — o "zere todos" do usuário), a
+  sugestão calculada aparece do lado só como referência. "Salvar rascunho" e
+  "Confirmar Pedido" — confirmar TRAVA a quantidade e o preço.
+- **Reabrir um pedido confirmado é só do campo** (`podeReabrir`), mesma regra
+  de quem define tema e prazos — evita que uma secretária local desfaça
+  sozinha um pedido que já foi pra CPAD.
+- **O total que conta para pagamento agora vem do pedido CONFIRMADO — sem
+  confirmação, é zero.** `/api/revistas` (a tela principal) mudou: cada
+  congregação tem `pedido` (o confirmado, ou `null`) e `sugestao` (o cálculo
+  automático, só informativo). `situacaoDaCongregacao`/`gerarAlertasRevistas`
+  continuam iguais — só o que alimenta `totalDevido` mudou.
+- **Abre no PRÓXIMO trimestre por padrão**, não no atual — a CPAD recebe
+  pedido com antecedência. `lib/revistas/trimestre.ts` (novo): `trimestreDe`
+  (atual), `proximoTrimestre`, `resolverTrimestre("atual"|"proximo")`.
+  `/api/revistas` (painel financeiro) olha o atual por padrão;
+  `/api/revistas/pedido` (Fazer Pedido) olha o próximo por padrão — mesma
+  chave de trimestre, defaults diferentes.
+- **Corrigido de brinde**: Berçário só tem preço de "Manual do Mestre"
+  (`manual-mestre`, R$ 18) — chave diferente de `mestre-comum`. A 15a não
+  reconhecia essa chave; `lib/revistas/precos.ts` (extraído, compartilhado
+  entre as duas rotas) agora entende as duas formas.
+- **Alerta "sem-pedido" sobe para crítico** quando `dataLimitePedido` já
+  passou sem confirmação.
+- `npm run verificar:revistas` — **56 asserções** (27 da 15a + 29 novas).
+- **Precisa aplicar no banco:** `prisma/aplicar-fase-15b.sql` — cria as duas
+  tabelas novas, vazias, sem tocar em nada existente.
 
 ## O que a Fase 15a entregou (para não refazer)
 
@@ -351,6 +396,11 @@ o sistema no ar e seguro rodar duas vezes.
    **E `prisma/aplicar-fase-12.sql`** — sem ele a auditoria nova não grava.
    **E `prisma/aplicar-fase-15a.sql`** — sem ele o tema e o prazo de pedido do
    trimestre não salvam (o resto do painel funciona igual).
+   **E `prisma/aplicar-fase-15b.sql` — URGENTE, diferente dos outros três:**
+   sem ele a tela inteira de Revistas para de funcionar (`/dashboard/revistas`
+   e `/dashboard/revistas/pedido/...`), porque as tabelas `Pedidos_Revistas` e
+   `Pedidos_Revistas_Itens` ainda não existem no banco e a rota consulta as
+   duas em toda carga da página.
 3. **Reunião da liderança para trocar as senhas.** Depois dela, virar
    `EXIGIR_SENHA_PROPRIA_PARA_GRAVAR` para `true` em `lib/config.ts`.
 4. **Trocar a senha do banco no Neon** — ela apareceu num print compartilhado.
