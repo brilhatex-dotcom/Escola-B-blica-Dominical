@@ -317,6 +317,142 @@ tocar em nenhuma tabela existente.
 
 ---
 
+## Fase 16 — três ajustes pedidos ao vivo, testando o portal publicado
+
+Feedback direto, testando `/dashboard` já no ar: (1) usuários normais também
+podem e devem editar quem são os professores locais, o dirigente e o
+secretário; (2) a lista de Alunos devia vir organizada em caixinhas por
+classe; (3) o Pedido de Lição precisava de um seletor de trimestre — a
+pergunta era se ficava travado num trimestre só, ou se mudava sozinho.
+
+### 1. O Grupo B agora define a própria liderança local
+
+Até aqui, **ninguém** tinha como trocar o professor de uma classe pela tela —
+a Fase 05 já *lia* `PessoaCargos` certo, mas não existia rota nenhuma para
+*escrever*. E definir Dirigente/Vice/Secretário Local de uma congregação
+(`GerirResponsaveis`, desde os "Refinamentos") exigia a permissão
+`hierarquia`, que só o campo tem — um Dirigente não conseguia dizer quem era
+o Vice da própria congregação.
+
+- **`/api/classes/[id]/professores`** (nova): `POST` adiciona (pessoa
+  existente, aluno promovido, ou nome novo — mesma busca unificada de
+  `/api/pessoas/candidatos`), `DELETE` encerra o vínculo (`fim`, nunca
+  apaga). Mesma permissão de editar a classe (`classes`, recortada por
+  congregação) — não uma trava nova.
+- **`/api/congregacoes/dirigente` ganhou o recorte que faltava.** A rota
+  aceitava `congId` de QUALQUER congregação sem conferir nada — inofensivo
+  enquanto só o campo (que já vê tudo) a usava, mas deixaria de ser inofensivo
+  no instante em que o Grupo B ganhasse acesso. Agora `escopoDeEscrita` +
+  `exigirCongregacaoPermitida` garantem que o `congId` do pedido é
+  exatamente o da sessão.
+- **A permissão virou `congregacoes`** (que o Grupo B já tinha, recortada),
+  em vez de `hierarquia` (que continua só do campo — Pastor Presidente,
+  Supervisor… nunca ficam ao alcance de uma congregação). `GerirResponsaveis`
+  e a tela de Congregações passaram a checar `congregacoes`.
+- **`/api/pessoas/candidatos`** (a busca usada nos dois seletores) exigia ver
+  a aba **Professores** — que o Grupo B não tem, por decisão explícita da
+  liderança (ver "Escola Bíblica", abaixo). Em vez de abrir essa aba,
+  `exigirLeituraDeAlguma(["professores", "congregacoes", "classes"])` (nova,
+  em `lib/auth/guarda.ts`) libera a BUSCA para quem tem qualquer uma das
+  três — sem reabrir o cadastro geral de pessoas do campo.
+- Verificado com `npm run verificar:permissoes`: nova seção conferindo que o
+  Grupo B grava `congregacoes`/`classes` mas continua sem `hierarquia` e sem
+  ver `professores`.
+
+### 2. Alunos em caixinhas por classe
+
+`/dashboard/alunos` era uma lista corrida — respondia "quantos alunos
+existem", não "quem está na Adolescentes". Os mesmos dados, agrupados por
+`classe.id` (com "Sem classe" numa caixinha própria, nunca escondida) e
+ordenados por nome de classe, viram um grid de cartões — a mesma unidade que
+a secretaria já usa para pensar (é nela que a chamada acontece, dela que sai
+o pedido de revista).
+
+### 3. Trimestre atual muda sozinho; agora dá para ver os dois
+
+A dúvida era legítima: `trimestreDe(hoje)` é recalculado a cada carregamento
+da página a partir da data de hoje, então o "trimestre atual" **já mudava
+sozinho** quando o calendário virava — só não havia como *ver* isso
+acontecer, nem olhar o próximo trimestre a partir do Painel (só de dentro de
+Fazer Pedido).
+
+`/dashboard/revistas` ganhou o mesmo seletor Atual/Próximo que Fazer Pedido
+já tinha, com uma frase fixa explicando o automatismo. Escolher "Próximo
+trimestre" no Painel e depois abrir "Fazer Pedido" de uma congregação carrega
+o mesmo período (`?trimestre=` na URL) — não troca sozinho no meio do
+caminho.
+
+---
+
+## Fase 17 — Relatório Semanal e a saudação de verdade
+
+Dois pedidos: uma aba nova, no exato modelo do formulário de papel da
+Superintendência das Escolas Dominicais (foto em mãos), e a saudação do
+Dashboard completa — "Bom dia, Irmã Ilma", não cortada.
+
+### Relatório Semanal — sem bíblias, sem ofertas, com o que é real
+
+`/dashboard/relatorios/semanal` reproduz a tabela do papel — Classe,
+Matriculados, Presentes, Visitantes, Professor, Total — **sem** as colunas de
+Bíblias e Ofertas, por pedido explícito (a oferta já tinha saído dos
+relatórios do portal antes desta fase). Abaixo, os campos de liderança
+(Dirigente, Vice-Dirigente, Secretário(a), Coordenador(a) se a congregação
+usar esse nome de cargo) e os quadros "1º Lugar — Frequência/Visitantes".
+
+**O que é calculado, e o que fica em branco de propósito:**
+
+- Matriculados, Presentes, Visitantes e Professor (por classe) vêm de dado
+  real — `Alunos`, `Frequencias`, `Visitantes`, `PessoaCargos`. "Presentes"
+  chega `null` (mostrado como "—") numa classe que não fez chamada naquele
+  domingo, nunca `0` — a mesma regra de sempre.
+- "Professor" conta **vínculos por classe**, não pessoas únicas: quem dá aula
+  em duas classes entra duas vezes nessa coluna, igual ao card de estrutura do
+  Dashboard já avisa ("uma pessoa em vários cargos continua sendo uma
+  pessoa"). O card de liderança, embaixo, mostra o total de professores SEM
+  repetição.
+- **"Visita Ministerial" e "Nº de Conversões" ficam em branco.** Nenhuma
+  tabela do sistema — nem a antiga, nem esta — guarda isso. Inventar um zero
+  pareceria apurado; um espaço em branco, pronto pra caneta depois de
+  imprimir, não mente.
+- **"1º Lugar" compara pelo TOTAL bruto**, não pela taxa — de propósito,
+  diferente do Ranking (que compara por taxa de frequência). O papel é uma
+  disputa simples entre classes num domingo só; a taxa é a pergunta certa
+  para "quem está indo melhor ao longo do tempo", que é outra tela.
+- Botão **Imprimir** (`window.print()`), com um reset de impressão novo em
+  `app/globals.css`: o portal é escuro, papel não é — sem ele, imprimir
+  gastaria tinta pintando a folha de azul-marinho antes de escrever por cima.
+  Vale para as três telas com botão de imprimir (Ficha do Aluno,
+  Certificados, e esta), não só a nova.
+
+### "Bom dia, Ir.ª." — dois bugs, uma correção
+
+O usuário mandou um print: a saudação do Dashboard cortava no tratamento,
+sem nome nenhum. Dois problemas empilhados:
+
+1. `Usuario.nome` é texto livre, e quem cadastra às vezes digita o
+   tratamento junto ("Ir.ª Jéssica Sousa"). A saudação pegava a primeira
+   PALAVRA do texto pra soar como gente — e a primeira palavra era o próprio
+   tratamento.
+2. Corrigir isso com `separarTratamento` (a função que já existia, usada em
+   Pessoas) esbarrou num segundo bug, mais antigo: "ª" (indicador ordinal
+   feminino, U+00AA) **não é uma marca diacrítica** — é uma letra própria — e
+   `\p{Diacritic}` não a removia. `"Ir.ª".normalize("NFD")` não virava
+   `"ir.a"`, e o tratamento nunca era reconhecido, nem aqui nem em nenhum
+   outro lugar do sistema que usa a mesma normalização (busca de pessoas,
+   chave única de `Pessoa`).
+
+`semAcento()` (novo, em `lib/pessoas/nome.ts`) troca "ª"/"º" por "a"/"o"
+explicitamente, depois do NFD — conserta os dois bugs na raiz, para todo
+mundo que usa `normalizarChave`/`separarTratamento`, não só a saudação.
+`tratamentoPorExtenso()` (novo) troca a abreviação de crachá pela forma que
+se diz em voz alta: "Ir.ª" → "Irmã", "Pr." → "Pastor", "Pb." → "Presbítero"
+— uma saudação não é uma etiqueta de lista.
+
+Verificado com `npm run verificar:saudacao`: **16 asserções**, incluindo o
+caso real reportado ("Ir.ª Jéssica Sousa" → "Irmã Jéssica").
+
+---
+
 ## Relatórios (Fase 10)
 
 ### "Faltou" não é "não foi marcado"
@@ -1384,6 +1520,7 @@ só na hora de exibir.
 | `/api/relatorios/painel` | Índice de Saúde por congregação, IGE do campo, alertas, análise e evolução mensal |
 | `/api/relatorios/comparativo` | 2 a 4 congregações lado a lado: componentes do IGS e evolução de 6 meses |
 | `/api/revistas` | pedido confirmado + sugestão calculada por congregação, pagamentos, prazos, alertas |
+| `/api/relatorios/semanal` | o relatório de domingo por classe (matriculados/presentes/visitantes/professor) |
 | `/api/revistas/pedido` | GET o rascunho/confirmado de uma congregação, PUT salva, POST confirma ou reabre |
 | `/api/agenda` | eventos e reuniões numa lista só, mais as escalas |
 | `/api/lideranca` | GET a hierarquia, POST troca quem ocupa um cargo |

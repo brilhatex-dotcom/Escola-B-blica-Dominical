@@ -23,6 +23,7 @@ import { FormularioModal, type CampoForm } from "@/components/crud/FormularioMod
 import { useCrud, type Crud } from "@/components/crud/useCrud";
 import { iniciais } from "@/lib/dashboard/formato";
 import { GerirResponsaveis } from "@/components/dashboard/GerirResponsaveis";
+import { GerirProfessoresDaClasse } from "@/components/dashboard/GerirProfessoresDaClasse";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { CATEGORIAS_DE_CLASSE, rotuloDaCategoria } from "@/lib/ebd/categorias";
 import { POSICOES } from "@/lib/ebd/posicoes";
@@ -117,7 +118,9 @@ export default function CongregacoesPage() {
   const [gerindo, setGerindo] = useState<number | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
   const { podeGravar } = useAcesso();
-  const editavel = podeGravar("hierarquia");
+  // "congregacoes" (não "hierarquia"): quem dirige uma congregação pode
+  // definir a própria liderança local — "hierarquia" continua só do campo.
+  const editavel = podeGravar("congregacoes");
 
   const carregar = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -729,19 +732,26 @@ function LinhaDeClasse({
   const [criandoAluno, setCriandoAluno] = useState(false);
   const [alunoEmEdicao, setAlunoEmEdicao] = useState<AlunoDaClasseResumo | null>(null);
 
+  const recarregarDetalhe = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const r = await fetch(`/api/classes/${c.id}`, { signal, cache: "no-store" });
+      const d = await r.json();
+      setDetalhe({ professores: d.professores ?? [], alunos: d.alunos ?? [] });
+    } catch {
+      setDetalhe({ professores: [], alunos: [] });
+    }
+  }, [c.id]);
+
   useEffect(() => {
     if (!aberta) return;
     const controle = new AbortController();
     setDetalhe(null);
-    void fetch(`/api/classes/${c.id}`, { signal: controle.signal, cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) => setDetalhe({ professores: d.professores ?? [], alunos: d.alunos ?? [] }))
-      .catch(() => setDetalhe({ professores: [], alunos: [] }));
+    void recarregarDetalhe(controle.signal);
     return () => controle.abort();
     // `crudAlunos.recarga`: matricular, editar ou tirar um aluno daqui dentro
     // precisa atualizar esta mesma lista, sem esperar a pessoa fechar e abrir
     // a classe de novo.
-  }, [aberta, c.id, crudAlunos.recarga]);
+  }, [aberta, c.id, crudAlunos.recarga, recarregarDetalhe]);
 
   return (
     <li className={cn(!c.ativa && "opacity-50")}>
@@ -795,20 +805,14 @@ function LinhaDeClasse({
           </p>
           {detalhe === null ? (
             <p className="mb-3 text-[0.78rem] text-brand-200/45">Carregando…</p>
-          ) : detalhe.professores.length === 0 ? (
-            <p className="mb-3 text-[0.78rem] italic text-brand-200/45">Nenhum professor registrado.</p>
           ) : (
-            <ul className="mb-3 flex flex-wrap gap-1.5">
-              {detalhe.professores.map((p) => (
-                <li
-                  key={p.vinculoId}
-                  className="rounded-full bg-white/6 px-2.5 py-1 text-[0.76rem] text-brand-50"
-                >
-                  {p.tratamento && <span className="text-gold-200/80">{p.tratamento} </span>}
-                  {p.nome}
-                </li>
-              ))}
-            </ul>
+            <div className="mb-3">
+              <GerirProfessoresDaClasse
+                classeId={c.id}
+                professores={detalhe.professores}
+                aoMudar={() => void recarregarDetalhe()}
+              />
+            </div>
           )}
 
           <div className="mb-1.5 flex items-center justify-between">

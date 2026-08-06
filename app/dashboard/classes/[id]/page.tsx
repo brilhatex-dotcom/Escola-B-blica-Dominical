@@ -19,6 +19,7 @@ import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro } from "@/components/dashboard/PaginaModulo";
+import { GerirProfessoresDaClasse } from "@/components/dashboard/GerirProfessoresDaClasse";
 import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
@@ -242,71 +243,50 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
           Quem dá a aula
         </h2>
 
-        {classe.professores.length === 0 && classe.outrosCargos.length === 0 ? (
-          <p className="text-[0.84rem] text-brand-200/55">
-            Nenhum professor registrado para esta classe.
-            {classe.profOriginal && (
-              <>
-                {" "}
-                No sistema antigo estava escrito{" "}
-                <span className="text-brand-100">“{classe.profOriginal}”</span> — o texto foi
-                mantido, mas ninguém do cadastro de pessoas foi ligado a ele ainda.
-              </>
-            )}
+        <GerirProfessoresDaClasse
+          classeId={classe.id}
+          professores={classe.professores}
+          aoMudar={() => void carregar()}
+        />
+
+        {classe.professores.length === 0 && classe.profOriginal && (
+          <p className="mt-2 text-[0.76rem] text-brand-200/50">
+            No sistema antigo estava escrito{" "}
+            <span className="text-brand-100">“{classe.profOriginal}”</span> — o texto foi
+            mantido, mas ninguém do cadastro de pessoas foi ligado a ele ainda.
           </p>
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            {/*
-              O cargo é resolvido AQUI, e não no JSX.
-              Os professores vêm sem o campo `cargo` (ele é implícito) e os
-              demais vêm com ele. Testar isso no meio da marcação obrigaria a
-              conferir o formato duas vezes por linha, e é o tipo de coisa que
-              silencia quando um dos dois lados muda.
-            */}
-            {[
-              ...classe.professores.map((p) => ({ ...p, cargo: "Professor" })),
-              ...classe.outrosCargos,
-            ].map((p) => (
-              <li
-                key={p.vinculoId}
-                className="flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2"
-              >
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
-                  <span className="font-display text-[0.6rem] font-semibold tracking-wider text-brand-50">
-                    {iniciais(p.nome)}
-                  </span>
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-[0.84rem] text-brand-50">
-                    {[p.tratamento, p.nome].filter(Boolean).join(" ")}
-                  </span>
-                  <span className="block truncate text-[0.7rem] text-brand-200/50">
-                    {p.cargo}
-                    {p.tel && ` · ${p.tel}`}
-                  </span>
-                </span>
-              </li>
-            ))}
-          </ul>
         )}
 
-        {/*
-          Trocar professor é alteração de CARGO, e o lugar disso é a Liderança —
-          a mesma fonte que decide o acesso da pessoa ao portal. Um segundo
-          lugar para atribuir professor faria as duas telas discordarem, e o
-          organograma passaria a mentir sobre quem dá aula onde.
-        */}
-        <p className="mt-3 border-t border-white/6 pt-3 text-[0.72rem] leading-relaxed text-brand-200/45">
-          Para trocar quem dá aula nesta classe, altere o cargo da pessoa em{" "}
-          <Link
-            href="/dashboard/configuracoes"
-            className="text-gold-200/80 underline-offset-2 hover:underline"
-          >
-            Administração → Liderança
-          </Link>
-          . É a mesma informação que define o acesso dela ao portal — por isso mora
-          num lugar só.
-        </p>
+        {classe.outrosCargos.length > 0 && (
+          <div className="mt-4 border-t border-white/6 pt-3">
+            <p className="mb-2 text-[0.66rem] uppercase tracking-[0.14em] text-brand-200/40">
+              Outros cargos desta classe
+            </p>
+            <ul className="flex flex-wrap gap-2">
+              {classe.outrosCargos.map((p) => (
+                <li
+                  key={p.vinculoId}
+                  className="flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
+                    <span className="font-display text-[0.6rem] font-semibold tracking-wider text-brand-50">
+                      {iniciais(p.nome)}
+                    </span>
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-[0.84rem] text-brand-50">
+                      {[p.tratamento, p.nome].filter(Boolean).join(" ")}
+                    </span>
+                    <span className="block truncate text-[0.7rem] text-brand-200/50">
+                      {p.cargo}
+                      {p.tel && ` · ${p.tel}`}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {/* ---------------- Alunos ---------------- */}

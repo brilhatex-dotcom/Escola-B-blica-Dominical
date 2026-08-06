@@ -170,66 +170,7 @@ export default function AlunosPage() {
           dica="Somente alunos ativos aparecem nesta lista."
         />
       ) : (
-        <ul className="glass-panel divide-y divide-white/6 overflow-hidden rounded-2xl">
-          {itens.map((a, i) => (
-            <motion.li
-              key={a.id}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: Math.min(i, 20) * 0.02, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-wrap items-center gap-3 px-4 py-3 transition-colors duration-300 hover:bg-white/[0.03]"
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
-                <span className="font-display text-[0.68rem] font-semibold tracking-wider text-brand-50">
-                  {iniciais(a.nome)}
-                </span>
-              </span>
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[0.88rem] text-brand-50">{a.nome}</p>
-                <p className="truncate text-[0.74rem] text-brand-200/55">
-                  {a.classe?.nome ?? "Sem classe"}
-                  {a.congregacao?.nome && <span className="text-brand-200/40"> · {a.congregacao.nome}</span>}
-                </p>
-                {a.resp && (
-                  <p className="truncate text-[0.7rem] text-brand-200/40">Resp.: {a.resp}</p>
-                )}
-              </div>
-
-              <div className="flex shrink-0 items-center gap-3">
-                {a.nasc && (
-                  <span className="hidden items-center gap-1.5 text-[0.74rem] text-brand-200/50 md:flex">
-                    <Cake className="h-3 w-3" />
-                    {diaEMes(new Date(a.nasc))}
-                  </span>
-                )}
-                {a.tel && (
-                  <span className="hidden items-center gap-1.5 text-[0.74rem] tabular-nums text-brand-200/55 sm:flex">
-                    <Phone className="h-3 w-3" />
-                    {a.tel}
-                  </span>
-                )}
-                {/*
-                  A posição no ministério vem ANTES da faixa etária.
-                  "Pb." e "Dc." mudam como a pessoa é tratada na igreja; a faixa
-                  etária é atributo da classe, não dela.
-                */}
-                {a.posicao && <Badge variant="alerta">{rotuloDaPosicao(a.posicao)}</Badge>}
-                {a.classe?.faixa && <Badge variant="info">{a.classe.faixa}</Badge>}
-
-                {podeMexer && (
-                  <AcoesDoRegistro
-                    nome={a.nome}
-                    onEditar={() => setEmEdicao(a)}
-                    onExcluir={async () => {
-                      await gravar(`/api/alunos/${a.id}`, "DELETE", {});
-                    }}
-                  />
-                )}
-              </div>
-            </motion.li>
-          ))}
-        </ul>
+        <AlunosPorClasse itens={itens} podeMexer={podeMexer} onEditar={setEmEdicao} gravar={gravar} />
       )}
 
       <FormularioModal
@@ -277,6 +218,137 @@ export default function AlunosPage() {
         }
       />
     </>
+  );
+}
+
+/**
+ * Os alunos, agrupados em caixinhas por classe.
+ *
+ * ============================================================================
+ * "A LISTA CORRIDA" NÃO RESPONDIA "QUEM ESTÁ NA ADOLESCENTES" SEM ROLAR A TELA
+ * INTEIRA CATANDO NOME POR NOME
+ *
+ * Uma classe é a unidade que a secretaria pensa — é nela que a chamada
+ * acontece, é dela que sai o pedido de revista. Agrupar por classe, com o
+ * nome da classe e a contagem no topo de cada caixinha, deixa a pergunta
+ * "quem tem a Adolescentes?" respondida com um olhar, sem procurar.
+ *
+ * Um aluno sem classe (o cadastro tem alguns) cai numa caixinha própria,
+ * "Sem classe" — nunca escondido, porque é exatamente o registro que precisa
+ * de atenção.
+ * ============================================================================
+ */
+function AlunosPorClasse({
+  itens,
+  podeMexer,
+  onEditar,
+  gravar,
+}: {
+  itens: AlunoLista[];
+  podeMexer: boolean;
+  onEditar: (a: AlunoLista) => void;
+  gravar: (url: string, metodo: string, corpo: unknown) => Promise<string | void>;
+}) {
+  interface Grupo {
+    chave: string;
+    classeNome: string;
+    faixa: string | null;
+    congNome: string | null;
+    alunos: AlunoLista[];
+  }
+  const porClasse = new Map<string, Grupo>();
+  for (const a of itens) {
+    const chave = a.classe ? String(a.classe.id) : "sem-classe";
+    let g = porClasse.get(chave);
+    if (!g) {
+      g = {
+        chave,
+        classeNome: a.classe?.nome ?? "Sem classe",
+        faixa: a.classe?.faixa || null,
+        congNome: a.congregacao?.nome ?? null,
+        alunos: [],
+      };
+      porClasse.set(chave, g);
+    }
+    g.alunos.push(a);
+  }
+  const grupos = [...porClasse.values()].sort((x, y) => {
+    if (x.chave === "sem-classe") return 1;
+    if (y.chave === "sem-classe") return -1;
+    return x.classeNome.localeCompare(y.classeNome, "pt-BR");
+  });
+
+  return (
+    <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+      {grupos.map((g, gi) => (
+        <motion.section
+          key={g.chave}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: Math.min(gi, 12) * 0.035, ease: [0.16, 1, 0.3, 1] }}
+          className="glass-panel overflow-hidden rounded-2xl"
+        >
+          <header className="flex items-center justify-between gap-2 border-b border-white/8 px-4 py-3">
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-[0.86rem] font-semibold text-white">{g.classeNome}</h2>
+              <p className="truncate text-[0.7rem] text-brand-200/50">
+                {g.congNome}
+                {g.faixa && <span> · {g.faixa}</span>}
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-white/8 px-2.5 py-1 text-[0.72rem] tabular-nums text-brand-100/80">
+              {g.alunos.length}
+            </span>
+          </header>
+
+          <ul className="divide-y divide-white/6">
+            {g.alunos.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-wrap items-center gap-2.5 px-4 py-2.5 transition-colors duration-300 hover:bg-white/[0.03]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
+                  <span className="font-display text-[0.6rem] font-semibold tracking-wider text-brand-50">
+                    {iniciais(a.nome)}
+                  </span>
+                </span>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.84rem] text-brand-50">{a.nome}</p>
+                  {a.resp && <p className="truncate text-[0.68rem] text-brand-200/40">Resp.: {a.resp}</p>}
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  {a.nasc && (
+                    <span className="hidden items-center gap-1 text-[0.7rem] text-brand-200/50 md:flex">
+                      <Cake className="h-3 w-3" />
+                      {diaEMes(new Date(a.nasc))}
+                    </span>
+                  )}
+                  {a.tel && (
+                    <span className="hidden items-center gap-1 text-[0.7rem] tabular-nums text-brand-200/55 lg:flex">
+                      <Phone className="h-3 w-3" />
+                      {a.tel}
+                    </span>
+                  )}
+                  {a.posicao && <Badge variant="alerta">{rotuloDaPosicao(a.posicao)}</Badge>}
+
+                  {podeMexer && (
+                    <AcoesDoRegistro
+                      nome={a.nome}
+                      onEditar={() => onEditar(a)}
+                      onExcluir={async () => {
+                        await gravar(`/api/alunos/${a.id}`, "DELETE", {});
+                      }}
+                    />
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </motion.section>
+      ))}
+    </div>
   );
 }
 

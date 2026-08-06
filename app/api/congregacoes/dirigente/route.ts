@@ -1,79 +1,29 @@
-import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { erro, responder } from "@/lib/api";
-import { exigirEscrita } from "@/lib/auth/guarda";
+import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
 import { registrar } from "@/lib/auditoria";
-import { normalizarChave, separarTratamento } from "@/lib/pessoas/nome";
-
-/**
- * Garante uma Pessoa a partir de um aluno, e devolve o pessoaId.
- *
- * É o que permite promover a dirigente alguém que só existia como aluno
- * ("Aux. Bartolomeu"). Não altera o aluno — ADICIONA uma pessoa, o que a regra
- * da igreja permite (não alterar registro antigo ≠ não poder cadastrar gente).
- * Se já existir uma pessoa com a mesma chave, reaproveita em vez de duplicar.
- */
-async function pessoaDeAluno(tx: Prisma.TransactionClient, alunoId: number): Promise<number> {
-  const aluno = await tx.aluno.findUnique({
-    where: { id: alunoId },
-    select: { nome: true, tel: true, nasc: true },
-  });
-  if (!aluno) throw new Error("Aluno não encontrado.");
-
-  const { tratamento, nome } = separarTratamento(aluno.nome);
-  const chave = normalizarChave(nome);
-
-  const existente = await tx.pessoa.findUnique({ where: { chave }, select: { id: true } });
-  if (existente) return existente.id;
-
-  const criada = await tx.pessoa.create({
-    data: {
-      nome,
-      tratamento,
-      chave,
-      tel: aluno.tel,
-      nasc: aluno.nasc,
-      observacao: `Criada ao receber um cargo (era aluno #${alunoId}).`,
-    },
-    select: { id: true },
-  });
-  return criada.id;
-}
-
-/**
- * Cria (ou reaproveita) uma Pessoa a partir de um nome digitado.
- *
- * É o que permite pôr como dirigente alguém que NÃO está em lugar nenhum do
- * cadastro. Separa o tratamento do nome e usa a `chave` normalizada como
- * âncora: se já existe uma pessoa com o mesmo nome, reaproveita em vez de criar
- * uma segunda — a regra de não duplicar gente, mesmo quando o nome é digitado à
- * mão.
- */
-async function pessoaDeNome(tx: Prisma.TransactionClient, nomeCompleto: string): Promise<number> {
-  const { tratamento, nome } = separarTratamento(nomeCompleto.trim());
-  const chave = normalizarChave(nome);
-  if (!chave || nome.length < 2) throw new Error("Informe um nome válido.");
-
-  const existente = await tx.pessoa.findUnique({ where: { chave }, select: { id: true } });
-  if (existente) return existente.id;
-
-  const criada = await tx.pessoa.create({
-    data: { nome, tratamento, chave, observacao: "Cadastrada ao definir um cargo." },
-    select: { id: true },
-  });
-  return criada.id;
-}
+import { pessoaDeAluno, pessoaDeNome } from "@/lib/pessoas/resolver";
 
 /**
  * Define quem dirige uma congregação — Dirigente, Vice ou Secretário Local.
  *
  * ============================================================================
- * O MESMO MODELO DA LIDERANÇA DO CAMPO, AGORA COM CONGREGAÇÃO
+ * O MESMO MODELO DA LIDERANÇA DO CAMPO, AGORA COM CONGREGAÇÃO — E QUEM DIRIGE
+ * A PRÓPRIA CONGREGAÇÃO PODE DEFINIR ISSO (FASE 16)
  *
  * A rota de Liderança (app/api/lideranca) troca os cargos do CAMPO, que não têm
  * congregação. Esta faz o mesmo para os cargos de CONGREGAÇÃO: grava o vínculo
  * em `PessoaCargos` com o `congId` preenchido, que é a peça que faltava para o
  * organograma poder receber os dirigentes pela tela.
+ *
+ * Até a Fase 16, só quem enxergava o campo inteiro (`hierarquia`) conseguia
+ * gravar aqui. A liderança pediu explicitamente que um Dirigente pudesse dizer
+ * quem é o Vice e o Secretário Local DA PRÓPRIA CONGREGAÇÃO — por isso a
+ * permissão virou `congregacoes` (que o Grupo B já tem, recortada) em vez de
+ * `hierarquia` (que continua só do campo). `escopoDeEscrita` +
+ * `exigirCongregacaoPermitida` garantem que o `congId` do pedido é
+ * exatamente o da sessão — um Dirigente da Cong. Bandeiras não consegue
+ * mandar `congId` de outra congregação, mesmo sabendo o número.
  *
  * O vínculo anterior é ENCERRADO (`fim`), nunca apagado — a ata do ano passado
  * precisa continuar dizendo quem dirigia a congregação. E como o papel de
@@ -89,9 +39,7 @@ export const dynamic = "force-dynamic";
 const CARGOS_PERMITIDOS = ["Dirigente", "Vice-Dirigente", "Secretário Local"];
 
 export async function POST(req: Request) {
-  // Definir quem dirige uma congregação é decisão de quem edita o organograma
-  // do campo — o mesmo alcance da Hierarquia.
-  const { sessao, recusa } = await exigirEscrita("hierarquia");
+  const { sessao, recusa, congId: doAcesso } = await escopoDeEscrita("congregacoes");
   if (recusa) return recusa;
 
   let corpo: {
@@ -121,6 +69,10 @@ export async function POST(req: Request) {
   }
 
   return responder(async () => {
+    // Um Dirigente da Cong. Bandeiras não define liderança de outra
+    // congregação, mesmo sabendo o id dela.
+    exigirCongregacaoPermitida(doAcesso, congId!);
+
     const [congregacao, cargoReg] = await Promise.all([
       prisma.congregacao.findUnique({ where: { id: congId! }, select: { id: true, nome: true } }),
       prisma.cargo.findUnique({ where: { nome: cargo } }),

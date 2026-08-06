@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Quote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dataPorExtenso, saudacao } from "@/lib/dashboard/formato";
+import { separarTratamento, tratamentoPorExtenso } from "@/lib/pessoas/nome";
 import type { DadosPainel } from "@/lib/dashboard/tipos";
 
 /**
@@ -27,9 +28,28 @@ export interface SaudacaoProps {
   className?: string;
 }
 
-/** Primeiro nome — "Bom dia, Maria" soa como gente; o nome completo, como cadastro. */
-function primeiroNome(nome: string): string {
-  return nome.trim().split(/\s+/)[0] ?? nome;
+/**
+ * A saudação completa: tratamento por extenso + primeiro nome.
+ *
+ * ============================================================================
+ * "BOM DIA, IR.ª." ERA UM DEFEITO, NÃO SÓ UMA ABREVIAÇÃO
+ *
+ * `Usuario.nome` é texto livre, e quem cadastra a conta às vezes digita o
+ * tratamento junto ("Ir.ª Jéssica Sousa"). O código antigo pegava a primeira
+ * PALAVRA do texto pra soar como gente — e a primeira palavra era o próprio
+ * tratamento. A saudação terminava em "Bom dia, Ir.ª.", sem nome nenhum.
+ *
+ * `separarTratamento` (a mesma função que já resolvia isso em Pessoas) tira o
+ * tratamento antes de pegar o primeiro nome, e `tratamentoPorExtenso` troca a
+ * abreviação de crachá ("Ir.ª") pela forma que alguém diria em voz alta
+ * ("Irmã") — uma saudação não é uma etiqueta de lista.
+ * ============================================================================
+ */
+function saudacaoDoNome(nomeCompleto: string): string {
+  const { tratamento, nome } = separarTratamento(nomeCompleto);
+  const primeiro = nome.trim().split(/\s+/)[0] ?? nome;
+  const extenso = tratamentoPorExtenso(tratamento);
+  return extenso ? `${extenso} ${primeiro}` : primeiro;
 }
 
 export function Saudacao({ nome, versiculo, licao, className }: SaudacaoProps) {
@@ -64,7 +84,7 @@ export function Saudacao({ nome, versiculo, licao, className }: SaudacaoProps) {
         {agora ? (
           <>
             {saudacao(agora)},{" "}
-            <span className="text-gold-gradient">{primeiroNome(nome)}</span>.
+            <span className="text-gold-gradient">{saudacaoDoNome(nome)}</span>.
           </>
         ) : (
           <span className="sr-only">Carregando a saudação</span>

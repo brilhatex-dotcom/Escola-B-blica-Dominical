@@ -94,7 +94,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         Duas luzes muito difusas, fixas. Sao o que impede o painel de virar um
         retangulo azul chapado — a mesma profundidade do card de login, sem
         video, que aqui pesaria no carregamento a cada visita. */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden print:hidden">
         <div
           className="absolute -left-[12%] -top-[18%] h-[42rem] w-[42rem] rounded-full opacity-55"
           style={{
@@ -114,8 +114,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
 
       {/* ---------------- Menu fixo (desktop) ---------------- */}
+      {/* print:hidden: o relatório impresso (Ficha, Certificados, Relatório
+          Semanal) não leva o menu do sistema — ninguém arquiva isso numa pasta. */}
       <aside
-        className="fixed inset-y-0 left-0 z-40 hidden w-[var(--lateral)] transition-[width] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:block"
+        className="fixed inset-y-0 left-0 z-40 hidden w-[var(--lateral)] transition-[width] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] lg:block print:hidden"
       >
         <Sidebar recolhida={recolhida} />
       </aside>
@@ -152,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </AnimatePresence>
 
       {/* ---------------- Conteudo ---------------- */}
-      <div className="relative lg:pl-[var(--lateral)] lg:transition-[padding] lg:duration-500 lg:ease-[cubic-bezier(0.16,1,0.3,1)]">
+      <div className="relative lg:pl-[var(--lateral)] lg:transition-[padding] lg:duration-500 lg:ease-[cubic-bezier(0.16,1,0.3,1)] print:pl-0">
         {/*
           O cabecalho so monta quando o usuario chega — um `Header` com nome
           vazio e depois preenchido muda de largura no primeiro quadro e arrasta
@@ -171,7 +173,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ) : (
           <div
             aria-hidden="true"
-            className="sticky top-0 z-40 h-16 border-b border-white/8 bg-brand-950/80 backdrop-blur-2xl"
+            className="sticky top-0 z-40 h-16 border-b border-white/8 bg-brand-950/80 backdrop-blur-2xl print:hidden"
           />
         )}
 
@@ -181,7 +183,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             protecao do portal vale em toda tela, e quem entra direto em
             /dashboard/chamada precisa ve-lo tanto quanto quem passa pelo painel.
           */}
-          <AvisoDeSeguranca />
+          <div className="print:hidden">
+            <AvisoDeSeguranca />
+          </div>
           {children}
         </main>
       </div>

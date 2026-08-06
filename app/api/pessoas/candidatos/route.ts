@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { responder } from "@/lib/api";
-import { exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
+import { exigirLeituraDeAlguma, recorteDaSessao } from "@/lib/auth/guarda";
 import { normalizarChave, separarTratamento, termoDeBusca } from "@/lib/pessoas/nome";
 
 /**
@@ -33,7 +33,10 @@ interface Candidato {
 }
 
 export async function GET(req: Request) {
-  const { sessao, recusa } = await exigirLeitura("professores");
+  // "professores" serve a Hierarquia (campo); "congregacoes" e "classes"
+  // servem o Grupo B escolhendo dirigente/vice/secretário ou professor da
+  // PRÓPRIA congregação (Fase 16). Qualquer uma das três basta.
+  const { sessao, recusa } = await exigirLeituraDeAlguma(["professores", "congregacoes", "classes"]);
   if (recusa) return recusa;
 
   return responder(async () => {

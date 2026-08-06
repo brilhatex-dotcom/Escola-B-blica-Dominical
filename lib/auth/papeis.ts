@@ -87,6 +87,7 @@ const VE_A_CONGREGACAO = [
   "revistas",
   "rel-painel",
   "rel-frequencia",
+  "rel-semanal",
   "rel-comparativo",
   "rel-ranking",
   "rel-faltas",
@@ -113,8 +114,17 @@ const VE_A_CONGREGACAO = [
  * O que NÃO muda: o recorte por congregação. Um Professor da Cong. Bandeiras
  * continua sem enxergar — e portanto sem poder alterar — coisa alguma das
  * outras treze congregações. E continua fora do alcance dele tudo o que é do
- * campo: contas de acesso, permissões, liderança, hierarquia, backup e
- * auditoria.
+ * campo: contas de acesso, permissões, liderança do CAMPO, hierarquia, backup
+ * e auditoria.
+ *
+ * "congregacoes" entrou por pedido explícito da liderança: quem dirige uma
+ * congregação define quem é o Dirigente, o Vice e o Secretário Local DELA —
+ * a mesma pessoa que já pode matricular aluno e editar classe não fazia
+ * sentido ficar sem poder dizer quem é a própria liderança local. A rota
+ * (`/api/congregacoes/dirigente`) só aceita esses três cargos de
+ * CONGREGAÇÃO, nunca os de campo (Pastor Presidente, Supervisor…), e confere
+ * o recorte antes de gravar — mesma trava de `classes`/`alunos`. NÃO abre o
+ * cadastro (nome) da congregação, que é `admin-congregacoes`, outra chave.
  *
  * Quem quiser voltar a restringir por função depois é aqui que mexe, tirando
  * itens desta lista — o resto do sistema segue a lista sem precisar de ajuste.
@@ -124,6 +134,7 @@ const GRAVA_NA_CONGREGACAO = [
   "chamada",
   "alunos",
   "classes",
+  "congregacoes",
   "visitantes",
   "aniversariantes",
   "licoes",

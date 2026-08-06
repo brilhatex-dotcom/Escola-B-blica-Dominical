@@ -1,4 +1,9 @@
-# Continuação — Fase 15c: Central de Revistas CPAD (cards e gráficos financeiros)
+# Continuação — Fase 15c ou o próximo pedido do usuário (confirme antes de escolher)
+
+> Fase 17 (Relatório Semanal + saudação) foi entregue depois da 16, também
+> fora da ordem proposta — o usuário segue mandando ajustes concretos ao vivo,
+> testando o portal publicado. Isso é esperado neste projeto: trate cada
+> pedido novo como a prioridade do momento, não como quebra do plano.
 
 > Este arquivo existe para que o trabalho continue numa sessão nova sem perder
 > contexto. Cole o bloco abaixo como primeira mensagem.
@@ -49,6 +54,94 @@ Substitui um sistema antigo em Google Apps Script.
 | 14b | **Central de Relatórios (BI) — gráficos avançados: evolução, radar e comparativo** |
 | 15a | **Central de Revistas CPAD — painel do trimestre e alertas** |
 | 15b | **Central de Revistas CPAD — o pedido é digitado e confirmado (tela "Fazer Pedido")** |
+| 16 | **Três ajustes pedidos ao vivo: Grupo B edita a liderança local, Alunos em caixinhas por classe, seletor de trimestre em Revistas** |
+| 17 | **Relatório Semanal (modelo da Superintendência das EDs) + saudação completa do Dashboard** |
+
+## O que a Fase 17 entregou (para não refazer)
+
+Dois pedidos na mesma mensagem, com foto do formulário de papel em mãos.
+
+1. **`/dashboard/relatorios/semanal`** (nova) — a mesma tabela do papel
+   (Classe/Matriculados/Presentes/Visitantes/Professor/Total), **sem**
+   Bíblias e Ofertas (pedido explícito). Tudo calculado de
+   `Alunos`/`Frequencias`/`Visitantes`/`PessoaCargos`, exceto "Visita
+   Ministerial" e "Nº de Conversões", que ficam EM BRANCO de propósito —
+   nenhuma tabela do sistema guarda isso, nem a antiga nem esta.
+   - `/api/relatorios/semanal?cong=&data=` (nova rota, só leitura).
+   - Nova permissão `rel-semanal` (Grupo B já enxerga, igual às demais telas
+     de relatório).
+   - "1º Lugar" compara pelo TOTAL bruto (não pela taxa) — de propósito,
+     diferente do Ranking; é uma disputa de um domingo só, não uma métrica
+     de saúde ao longo do tempo.
+   - Botão Imprimir. `app/globals.css` ganhou um reset de impressão
+     (`@media print`) que vale para TODAS as telas com botão de imprimir
+     (Ficha, Certificados, e esta) — sem ele, imprimir pintava a folha de
+     azul-marinho antes de escrever por cima.
+   - `domingoMaisRecente()` saiu de dentro de `chamada/page.tsx` (estava
+     duplicável) para `lib/dashboard/formato.ts`, compartilhado.
+2. **A saudação do Dashboard tinha DOIS bugs empilhados**, achados a partir
+   de um print real ("Bom dia, Ir.ª." sem nome nenhum):
+   - `Saudacao.tsx` pegava a primeira PALAVRA de `Usuario.nome` (texto
+     livre, às vezes digitado com tratamento junto) — e a primeira palavra
+     era o próprio tratamento.
+   - Corrigir com `separarTratamento` esbarrou num bug MAIS ANTIGO em
+     `lib/pessoas/nome.ts`: `"ª"` (indicador ordinal feminino) não é
+     diacrítico — `\p{Diacritic}` não a removia — e `"Ir.ª"` nunca batia com
+     `"ir.a"` no conjunto de tratamentos reconhecidos. Isso afetava TODA
+     normalização de nome no sistema, não só a saudação (busca de pessoas,
+     chave única de `Pessoa`).
+   - `semAcento()` (novo) resolve os dois na raiz. `tratamentoPorExtenso()`
+     (novo) troca a abreviação de crachá pela forma falada: "Ir.ª" → "Irmã".
+   - `npm run verificar:saudacao` (novo script): **16 asserções**.
+
+Nenhuma tabela nova, nenhum SQL para aplicar.
+
+## O que a Fase 16 entregou (para não refazer)
+
+Feedback direto do usuário testando `/dashboard` já publicado (screenshots
+reais, não descrição) — três pedidos numa mensagem só, tratados como um
+único round de ajustes (não uma fase-mega nova, cada um pequeno e concreto).
+
+1. **Grupo B (Dirigente, Vice, Secretário Local, Professor) agora define a
+   própria liderança local** — quem dá aula em cada classe, e quem é
+   Dirigente/Vice/Secretário Local da PRÓPRIA congregação. Antes disso:
+   - Não existia rota NENHUMA para trocar o professor de uma classe — a
+     tela só apontava pra Liderança, que nunca soube de classe nenhuma.
+     Nova: `/api/classes/[id]/professores` (POST adiciona, DELETE encerra),
+     mesma permissão de editar a classe (`classes`).
+   - `/api/congregacoes/dirigente` (Dirigente/Vice/Secretário Local) exigia
+     `hierarquia` (só campo) e **não conferia o `congId`** — um buraco que
+     só não doía porque só o campo (que já vê tudo) usava a rota. Trocado
+     para `congregacoes` (o Grupo B já tem, recortada) + `escopoDeEscrita` +
+     `exigirCongregacaoPermitida` novos ali.
+   - `/api/pessoas/candidatos` (a busca dos dois seletores) exigia
+     `professores`, que o Grupo B não tem por decisão explícita da
+     liderança (Fase 09). `exigirLeituraDeAlguma` (nova em
+     `lib/auth/guarda.ts`) libera a busca por QUALQUER UMA de
+     `["professores", "congregacoes", "classes"]`, sem reabrir a aba.
+   - `lib/pessoas/resolver.ts` (novo): `pessoaDeAluno`/`pessoaDeNome`
+     extraídos de `congregacoes/dirigente` para `classes/[id]/professores`
+     reusar, sem duplicar ~60 linhas.
+   - `components/dashboard/GerirProfessoresDaClasse.tsx` (novo): lista de
+     pílulas removíveis + busca para adicionar — diferente de
+     `GerirResponsaveis` (um titular só por cargo), aqui é vários professores
+     por classe. `Seletor` foi exportado de `GerirResponsaveis.tsx` para os
+     dois reaproveitarem a mesma busca.
+   - `npm run verificar:permissoes` ganhou a seção 16 conferindo que o
+     Grupo B grava `congregacoes`/`classes` mas continua sem `hierarquia`
+     nem visão de `professores`.
+2. **`/dashboard/alunos` virou um grid de caixinhas por classe** (antes:
+   lista corrida). Agrupado por `classe.id`, "Sem classe" numa caixinha
+   própria (nunca escondida), ordenado por nome da classe. Puramente visual
+   — a API não mudou.
+3. **`/dashboard/revistas` ganhou o seletor Atual/Próximo** (o mesmo que
+   Fazer Pedido já tinha), com uma frase fixa explicando que "trimestre
+   atual" já mudava sozinho (é recalculado a cada carga da página, a partir
+   de hoje) — só não dava pra VER isso nem olhar o próximo do Painel. O link
+   "Fazer Pedido" de cada card carrega `?trimestre=` para abrir no mesmo
+   período que estava selecionado.
+
+Nenhuma tabela nova, nenhum SQL para aplicar nesta fase.
 
 ## A Fase 15 — Central de Revistas CPAD — e o corte combinado com o usuário
 

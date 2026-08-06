@@ -266,3 +266,35 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   Impressão — o portal é escuro; papel não é.
+
+   `print:hidden` (na Sidebar, no Header, nos avisos) já tira o que não é o
+   relatório. O que falta é a PÁGINA em si: sem isto, "imprimir" gastaria
+   tinta preenchendo a folha inteira de azul-marinho para depois escrever em
+   branco por cima — ilegível em qualquer impressora que não reproduza cor de
+   fundo, e um desperdício nas que reproduzem. Aplicado à página inteira, não
+   só às telas com botão de imprimir (Ficha do Aluno, Certificados, Relatório
+   Semanal): a próxima tela a ganhar um botão "Imprimir" já nasce correta.
+   ========================================================================== */
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+  }
+  * {
+    color: #111111 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    background-image: none !important;
+  }
+  .glass-panel,
+  [class*="bg-brand"],
+  [class*="bg-white/"],
+  [class*="bg-gold"] {
+    background: #ffffff !important;
+    border-color: #d0d0d0 !important;
+    backdrop-filter: none !important;
+  }
+}
