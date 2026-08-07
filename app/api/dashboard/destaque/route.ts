@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { lerDestaquesDoAgrupamento } from "@/lib/dashboard/consultas";
+import { congregacaoDestaquePorIDI } from "@/lib/relatorios/metricasCongregacoes";
 import { lerSessao } from "@/lib/auth/sessao";
 import { recorteDaSessao } from "@/lib/auth/guarda";
 
@@ -19,8 +20,12 @@ import { recorteDaSessao } from "@/lib/auth/guarda";
  * rota devolve só o que o cartão precisa, e o resto do painel continua parado
  * na tela enquanto a pessoa escolhe as datas.
  *
- * A CONTA é a mesma de sempre (`lerDestaquesDoAgrupamento`, também usada por
- * `lerDestaques` para o mês e o trimestre) — só o período muda.
+ * A CONTA de Congregação Destaque é o IDI (`congregacaoDestaquePorIDI`,
+ * `lib/relatorios/metricasCongregacoes.ts`) — a mesma usada por `lerDestaques`
+ * para o mês e o trimestre, e por `/dashboard/relatorios/destaques`: as duas
+ * telas nunca podem apontar congregações diferentes para o mesmo período.
+ * Classe Destaque continua com a conta simples de sempre
+ * (`lerDestaquesDoAgrupamento`), que já era igual nos dois lugares.
  * ============================================================================
  */
 export const dynamic = "force-dynamic";
@@ -55,7 +60,7 @@ export async function GET(req: Request) {
     const [congregacao, classe] = await Promise.all([
       // Congregação Destaque não se recorta — a mesma exceção de sempre
       // (Fase 18): é uma comparação do campo inteiro.
-      lerDestaquesDoAgrupamento("congId", de, ate, undefined),
+      congregacaoDestaquePorIDI(de, ate),
       lerDestaquesDoAgrupamento("classeId", de, ate, recorte),
     ]);
 
