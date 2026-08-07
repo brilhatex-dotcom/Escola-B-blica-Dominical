@@ -64,7 +64,17 @@ export async function GET(req: Request) {
         },
       }),
       prisma.aluno.findMany({
-        where: { classeId, ativo: true },
+        /*
+         * QUEM FOI MATRICULADO DEPOIS DESTE DOMINGO NÃO ENTRA NA LISTA.
+         *
+         * Sem este filtro, abrir a chamada de um domingo passado (para
+         * corrigir uma falta esquecida, por exemplo) mostrava TODOS os
+         * alunos ativos da classe — inclusive quem se matriculou essa
+         * semana, que logicamente ainda não existia na igreja naquele
+         * domingo. `matriculadoEm: null` (as 323 linhas herdadas) nunca é
+         * filtrado: matrícula antiga não tem restrição de data.
+         */
+        where: { classeId, ativo: true, OR: [{ matriculadoEm: null }, { matriculadoEm: { lte: dia } }] },
         orderBy: { nome: "asc" },
         select: { id: true, nome: true, nasc: true },
       }),
@@ -159,11 +169,33 @@ export async function POST(req: Request) {
       });
       const idPor = new Map(existentes.map((f) => [f.alunoId, f.id]));
 
+      /*
+       * A MESMA REGRA DO GET, AGORA NA GRAVAÇÃO.
+       *
+       * O GET já não oferece quem se matriculou depois deste domingo, mas a
+       * tela pode estar aberta há um tempo, ou o pedido pode não ter vindo
+       * dali — sem esta conferência, dava para marcar presença de alguém
+       * antes de existir na igreja só mandando o alunoId direto no POST.
+       */
+      const idsAlunos = presencas.map((p) => p.alunoId).filter((id) => Number.isInteger(id));
+      const alunosDaLista = await tx.aluno.findMany({
+        where: { id: { in: idsAlunos } },
+        select: { id: true, matriculadoEm: true },
+      });
+      const matriculaPor = new Map(alunosDaLista.map((a) => [a.id, a.matriculadoEm]));
+
       let criadas = 0;
       let atualizadas = 0;
+      let ignoradasPorMatricula = 0;
 
       for (const p of presencas) {
         if (!Number.isInteger(p.alunoId) || typeof p.presente !== "boolean") continue;
+
+        const matriculadoEm = matriculaPor.get(p.alunoId);
+        if (matriculadoEm && matriculadoEm > dia) {
+          ignoradasPorMatricula++;
+          continue;
+        }
 
         const jaExiste = idPor.get(p.alunoId);
         if (jaExiste !== undefined) {
@@ -184,7 +216,7 @@ export async function POST(req: Request) {
         }
       }
 
-      return { ok: true, criadas, atualizadas, total: criadas + atualizadas };
+      return { ok: true, criadas, atualizadas, ignoradasPorMatricula, total: criadas + atualizadas };
     });
 
     /*
@@ -198,7 +230,11 @@ export async function POST(req: Request) {
       entidade: "Frequencia",
       descricao:
         `Chamada da classe ${classeId} em ${data}: ` +
-        `${resultado.criadas} marcada(s) e ${resultado.atualizadas} corrigida(s).`,
+        `${resultado.criadas} marcada(s) e ${resultado.atualizadas} corrigida(s)` +
+        (resultado.ignoradasPorMatricula > 0
+          ? `, ${resultado.ignoradasPorMatricula} ignorada(s) por matrícula posterior a esta data`
+          : "") +
+        ".",
       congId: classe.congId,
     });
 

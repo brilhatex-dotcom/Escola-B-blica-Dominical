@@ -398,7 +398,7 @@ async function metricasCongregacoes(ctx: Contexto): Promise<MetricaCong[]> {
     `,
     prisma.$queryRaw<Array<{ congId: number; comResposta: bigint; naoCrentes: bigint }>>`
       SELECT "congId", count(*) FILTER (WHERE crente IS NOT NULL) AS "comResposta",
-             count(*) FILTER (WHERE crente IS NOT NULL AND crente = false) AS "naoCrentes"
+             count(*) FILTER (WHERE crente = 'nao-evangelico') AS "naoCrentes"
       FROM "Visitantes"
       WHERE data BETWEEN ${de} AND ${ate}
       GROUP BY "congId"

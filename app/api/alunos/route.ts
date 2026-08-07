@@ -96,6 +96,7 @@ export async function GET(req: Request) {
           resp: true,
           posicao: true,
           ativo: true,
+          matriculadoEm: true,
           classe: { select: { id: true, nome: true, faixa: true } },
           congregacao: { select: { id: true, nome: true } },
         },
@@ -154,6 +155,14 @@ export async function POST(req: Request) {
           classeId: classe.id,
           congId: classe.congId,
           ativo: true,
+          /*
+           * A matrícula nasce HOJE, sempre — nunca vem do corpo da
+           * requisição. Se viesse do cliente, bastaria mandar uma data
+           * antiga para reabrir chamadas passadas em nome de alguém que
+           * acabou de se matricular. É esta data que a Chamada usa para
+           * recusar marcar presença ou falta num domingo anterior a ela.
+           */
+          matriculadoEm: dataCivil(new Date().toISOString().slice(0, 10)),
         },
         select: { id: true, nome: true },
       });
