@@ -33,21 +33,28 @@ export function proximoTrimestre(hoje: Date): Trimestre {
   return trimestreDeMes(mes0, ano);
 }
 
-/** O início (dia 1) do trimestre seguinte ao de `hoje`, em UTC. */
-function inicioDoProximoTrimestre(hoje: Date): Date {
-  const q = Math.floor(hoje.getMonth() / 3) + 1;
-  const mes = q === 4 ? 0 : q * 3;
-  const ano = q === 4 ? hoje.getFullYear() + 1 : hoje.getFullYear();
-  return new Date(Date.UTC(ano, mes, 1));
+/** O início (dia 1) de `t`, em UTC. */
+function inicioDoTrimestre(t: Trimestre): Date {
+  return new Date(Date.UTC(t.ano, (t.q - 1) * 3, 1));
 }
 
-/** A data-limite padrão de PAGAMENTO: 2º domingo do 1º mês do PRÓXIMO trimestre (≈ lição 02). */
-export function dataLimitePadrao(hoje: Date): Date {
-  const primeiro = inicioDoProximoTrimestre(hoje);
+/**
+ * A data-limite padrão de PAGAMENTO de `t`: 2º domingo do 1º mês do
+ * trimestre SEGUINTE a `t` (≈ lição 02) — não do que vem depois de hoje. Sem
+ * isso, o prazo padrão de um trimestre futuro escolhido no seletor viraria o
+ * de hoje, errado para qualquer trimestre que não seja o atual.
+ */
+export function dataLimitePadraoDoTrimestre(t: Trimestre): Date {
+  const primeiro = inicioDoTrimestre(trimestreSeguinte(t));
   const primeiroDomingo = 1 + ((7 - primeiro.getUTCDay()) % 7);
   const dia = new Date(primeiro);
   dia.setUTCDate(primeiroDomingo + 7);
   return dia;
+}
+
+/** A data-limite padrão de PAGAMENTO do trimestre atual de `hoje`. */
+export function dataLimitePadrao(hoje: Date): Date {
+  return dataLimitePadraoDoTrimestre(trimestreDe(hoje));
 }
 
 export function soDia(d: Date): string {
@@ -65,7 +72,38 @@ export function rotuloDoTrimestre(chave: string): string {
   return `${m[1]}º trimestre de ${m[2]}`;
 }
 
-/** "atual" | "proximo" (padrão) → o Trimestre correspondente a partir de hoje. */
+/** Monta o `Trimestre` a partir de uma chave "NT-AAAA" já validada por `trimestreValido`. */
+export function trimestreDaChave(chave: string): Trimestre {
+  const m = /^([1-4])T-(\d{4})$/.exec(chave)!;
+  return trimestreDeMes((Number(m[1]) - 1) * 3, Number(m[2]));
+}
+
+/**
+ * "atual" | "proximo" (padrão) → o Trimestre a partir de hoje — mantido para
+ * quem ainda chama assim. Uma chave "NT-AAAA" explícita (vinda do seletor de
+ * trimestre da tela) tem prioridade e é resolvida direto, sem passar pelo
+ * padrão atual/próximo.
+ */
 export function resolverTrimestre(hoje: Date, param: string | null): Trimestre {
+  if (param && trimestreValido(param)) return trimestreDaChave(param);
   return param === "atual" ? trimestreDe(hoje) : proximoTrimestre(hoje);
+}
+
+/** O trimestre seguinte a `t` — usado só para montar `quatroTrimestres` em sequência. */
+function trimestreSeguinte(t: Trimestre): Trimestre {
+  const mes0 = t.q === 4 ? 0 : t.q * 3;
+  const ano = t.q === 4 ? t.ano + 1 : t.ano;
+  return trimestreDeMes(mes0, ano);
+}
+
+/**
+ * Os quatro trimestres do seletor da tela de Pedido de Lição: o ATUAL (o que
+ * está sendo pago agora) e os três seguintes (para encomendar com
+ * antecedência) — uma janela que sempre faz sentido a partir de hoje, sem
+ * precisar de um seletor de ano à parte.
+ */
+export function quatroTrimestres(hoje: Date): Trimestre[] {
+  const lista: Trimestre[] = [trimestreDe(hoje)];
+  for (let i = 0; i < 3; i++) lista.push(trimestreSeguinte(lista[lista.length - 1]));
+  return lista;
 }

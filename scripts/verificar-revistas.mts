@@ -31,7 +31,16 @@ import {
   tipoValido,
   validarQuantidade,
 } from "../lib/revistas/pedidoCalculo";
-import { dataLimitePadrao, proximoTrimestre, resolverTrimestre, trimestreDe } from "../lib/revistas/trimestre";
+import {
+  dataLimitePadrao,
+  dataLimitePadraoDoTrimestre,
+  proximoTrimestre,
+  quatroTrimestres,
+  resolverTrimestre,
+  trimestreDaChave,
+  trimestreDe,
+  trimestreValido,
+} from "../lib/revistas/trimestre";
 
 let falhas = 0;
 const ok = (cond: boolean, msg: string) => {
@@ -224,6 +233,32 @@ ok(resolverTrimestre(emAgosto, "atual").chave === "3T-2026", "'atual' explícito
 ok(resolverTrimestre(emAgosto, "proximo").chave === "4T-2026", "'proximo' explícito confirma a mesma escolha do padrão");
 const limitePadraoAgosto = dataLimitePadrao(emAgosto);
 ok(limitePadraoAgosto.getUTCMonth() === 9, "o prazo padrão de pagamento cai em outubro (2º domingo do 4º trimestre)");
+
+/* ------------------------------------------------------------------ */
+console.log("\n10. lib/revistas/trimestre — o seletor de 4 trimestres e a chave explícita (Fase 22)");
+ok(trimestreValido("3T-2026"), "'3T-2026' é uma chave válida");
+ok(trimestreValido("4T-2026"), "'4T-2026' também");
+ok(!trimestreValido("5T-2026"), "trimestre 5 não existe");
+ok(!trimestreValido("proximo"), "'proximo' não é uma chave, é um atalho — não confundir os dois");
+
+ok(trimestreDaChave("3T-2026").rotulo === "3º trimestre de 2026", "trimestreDaChave monta o Trimestre certo a partir da chave");
+
+ok(resolverTrimestre(emAgosto, "1T-2027").chave === "1T-2027",
+  "uma chave explícita é resolvida direto, sem cair no padrão atual/próximo");
+ok(resolverTrimestre(emAgosto, "3T-2026").chave === "3T-2026", "mesmo o trimestre ATUAL, quando vem como chave explícita, é respeitado");
+
+const janela = quatroTrimestres(emAgosto);
+ok(janela.length === 4, "quatroTrimestres devolve exatamente 4");
+ok(janela.map((t) => t.chave).join(",") === "3T-2026,4T-2026,1T-2027,2T-2027",
+  "a partir de agosto de 2026 (3º tri.), a janela é 3T,4T-2026 e 1T,2T-2027 — atravessando o ano sem repetir nem pular");
+ok(janela[0].chave === trimestreDe(emAgosto).chave, "o primeiro da janela é sempre o trimestre atual");
+
+const limiteDoTriAtual = dataLimitePadraoDoTrimestre(trimestreDe(emAgosto));
+ok(limiteDoTriAtual.getTime() === dataLimitePadrao(emAgosto).getTime(),
+  "dataLimitePadraoDoTrimestre(atual) bate com o antigo dataLimitePadrao(hoje) — mesma conta, generalizada");
+const limiteDoTriFuturo = dataLimitePadraoDoTrimestre(trimestreDaChave("1T-2027"));
+ok(limiteDoTriFuturo.getUTCFullYear() === 2027 && limiteDoTriFuturo.getUTCMonth() === 3,
+  "o prazo padrão de um trimestre FUTURO escolhido no seletor é relativo A ELE — abril de 2027 (2º trim. seguinte ao 1T-2027), não a hoje");
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM\n" : `\n${falhas} FALHA(S)\n`);
 process.exit(falhas === 0 ? 0 : 1);

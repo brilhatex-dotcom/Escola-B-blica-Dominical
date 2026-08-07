@@ -3,21 +3,22 @@
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, BadgeCheck, ClipboardList, Loader2, Lock, RotateCcw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ArrowLeft, BadgeCheck, ClipboardList, Loader2, Lock, Printer, RotateCcw } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro } from "@/components/dashboard/PaginaModulo";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
+import { SeletorTrimestre } from "@/components/revistas/SeletorTrimestre";
+import { proximoTrimestre, trimestreDe, trimestreValido } from "@/lib/revistas/trimestre";
 
 /**
  * Fazer Pedido — a tela que faltava: digitar a quantidade de cada categoria
  * e CONFIRMAR, travando a quantidade e o preço daquele momento.
  *
  * Abre no próximo trimestre por padrão (a CPAD recebe pedido com antecedência
- * — ver `lib/revistas/trimestre.ts`), com um botão para olhar/editar o
- * trimestre atual também.
+ * — ver `lib/revistas/trimestre.ts`), com o seletor de trimestre para
+ * escolher qualquer um dos quatro mostrados.
  */
 
 interface Linha {
@@ -34,14 +35,20 @@ interface Dados {
 
 const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+const fmtDataAssinatura = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 export default function FazerPedidoPage({ params }: { params: Promise<{ congId: string }> }) {
   const { congId } = use(params);
-  // Chegando da tela principal com "?trimestre=atual", abre já no atual —
-  // senão, o padrão continua sendo o próximo (a CPAD recebe pedido com
+  // Chegando da tela principal, a URL já traz a chave exata do trimestre
+  // escolhido lá ("3T-2026"); "atual" continua reconhecido por link antigo.
+  // Sem nada na URL, o padrão é o próximo (a CPAD recebe pedido com
   // antecedência).
   const trimestreDaUrl = useSearchParams().get("trimestre");
-  const [periodo, setPeriodo] = useState<"proximo" | "atual">(trimestreDaUrl === "atual" ? "atual" : "proximo");
+  const [trimestre, setTrimestre] = useState(() => {
+    if (trimestreDaUrl && trimestreValido(trimestreDaUrl)) return trimestreDaUrl;
+    if (trimestreDaUrl === "atual") return trimestreDe(new Date()).chave;
+    return proximoTrimestre(new Date()).chave;
+  });
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [quantidades, setQuantidades] = useState<Record<string, string>>({});
@@ -55,7 +62,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
     try {
       const url = new URL("/api/revistas/pedido", window.location.origin);
       url.searchParams.set("congId", congId);
-      url.searchParams.set("trimestre", periodo);
+      url.searchParams.set("trimestre", trimestre);
       const res = await fetch(url, { cache: "no-store" });
       const corpo = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(corpo.erro ?? `HTTP ${res.status}`);
@@ -66,7 +73,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
     } catch (e) {
       setErro((e as Error).message || "Não foi possível carregar o pedido.");
     }
-  }, [congId, periodo]);
+  }, [congId, trimestre]);
 
   useEffect(() => { setDados(null); void carregar(); }, [carregar]);
 
@@ -93,7 +100,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
       const res = await fetch("/api/revistas/pedido", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ congId: Number(congId), trimestre: periodo, itens }),
+        body: JSON.stringify({ congId: Number(congId), trimestre, itens }),
       });
       const corpo = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível salvar.");
@@ -114,7 +121,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
       const res = await fetch("/api/revistas/pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ congId: Number(congId), trimestre: periodo, acao: "confirmar" }),
+        body: JSON.stringify({ congId: Number(congId), trimestre, acao: "confirmar" }),
       });
       const corpo = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível confirmar.");
@@ -133,7 +140,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
       const res = await fetch("/api/revistas/pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ congId: Number(congId), trimestre: periodo, acao: "reabrir" }),
+        body: JSON.stringify({ congId: Number(congId), trimestre, acao: "reabrir" }),
       });
       const corpo = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível reabrir.");
@@ -147,39 +154,43 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
 
   return (
     <>
-      <Link href="/dashboard/revistas" className="mb-3 inline-flex items-center gap-1.5 text-[0.78rem] text-brand-200/60 transition-colors duration-300 hover:text-gold-200">
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Pedido de Lição
-      </Link>
+      <div className="print:hidden">
+        <Link href="/dashboard/revistas" className="mb-3 inline-flex items-center gap-1.5 text-[0.78rem] text-brand-200/60 transition-colors duration-300 hover:text-gold-200">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Pedido de Lição
+        </Link>
 
-      <CabecalhoModulo
-        icone={ClipboardList}
-        titulo="Fazer Pedido"
-        descricao={dados ? `${dados.congNome} — ${dados.trimestre.rotulo}` : "Carregando…"}
-      >
-        <div className="flex gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1">
-          {(["proximo", "atual"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriodo(p)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-[0.78rem] transition-colors duration-300",
-                periodo === p ? "bg-gold-400/15 text-gold-200" : "text-brand-200/60 hover:text-brand-100",
-              )}
-            >
-              {p === "proximo" ? "Próximo trimestre" : "Trimestre atual"}
-            </button>
-          ))}
-        </div>
-      </CabecalhoModulo>
+        <CabecalhoModulo
+          icone={ClipboardList}
+          titulo="Fazer Pedido"
+          descricao={dados ? `${dados.congNome} — ${dados.trimestre.rotulo}` : "Carregando…"}
+        >
+          <SeletorTrimestre selecionado={trimestre} aoSelecionar={setTrimestre} />
+          {dados?.confirmado && (
+            <Button size="sm" variant="ghost" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" />
+              Imprimir
+            </Button>
+          )}
+        </CabecalhoModulo>
+      </div>
 
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={6} />
       : (
         <>
+          {dados.confirmado && (
+            <div className="hidden text-center print:mb-5 print:block print:border-b-2 print:border-black print:pb-3">
+              <p className="text-[0.72rem] uppercase tracking-[0.2em]">Assembleia de Deus — IEADPE, Campo de Betânia (PE)</p>
+              <h1 className="mt-1 text-[1.15rem] font-semibold uppercase tracking-wide">Pedido de Lição</h1>
+              <p className="mt-1 text-[0.86rem]">
+                <strong>{dados.congNome}</strong> — {dados.trimestre.rotulo}
+              </p>
+            </div>
+          )}
+
           {dados.confirmado ? (
-            <div className="mb-4 rounded-2xl border border-emerald-400/25 bg-emerald-500/[0.06] p-4">
+            <div className="mb-4 rounded-2xl border border-emerald-400/25 bg-emerald-500/[0.06] p-4 print:hidden">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <BadgeCheck className="h-5 w-5 shrink-0 text-emerald-300" />
@@ -283,7 +294,20 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
             </div>
           </div>
 
-          {msg && <p className="mt-3 text-[0.82rem] text-flame-400">{msg}</p>}
+          {dados.confirmado && (
+            <section className="mt-10 hidden grid-cols-2 gap-8 text-center text-[0.8rem] print:grid">
+              <div>
+                <div className="mb-1 border-t border-black pt-1.5">{dados.confirmadoPor || " "}</div>
+                Secretaria da EBD
+              </div>
+              <div>
+                <div className="mb-1 border-t border-black pt-1.5">{fmtDataAssinatura.format(new Date())}</div>
+                Data
+              </div>
+            </section>
+          )}
+
+          {msg && <p className="mt-3 text-[0.82rem] text-flame-400 print:hidden">{msg}</p>}
 
           {editavel && !dados.confirmado && (
             <div className="mt-4 flex flex-wrap gap-2.5">
