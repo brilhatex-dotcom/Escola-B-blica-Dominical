@@ -138,18 +138,29 @@ const ORDEM_FAIXAS: Array<{ faixa: Faixa; titulo: string }> = [
 export default function PainelRelatoriosPage() {
   const [dados, setDados] = useState<Painel | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // Em branco, a API usa o padrão dela — últimos 90 dias. Só manda `de`/`ate`
+  // quando a pessoa escolhe, para não travar todo mundo nesse padrão: quem
+  // quer comparar um trimestre inteiro, ou só o mês corrente, ajusta aqui.
+  const [de, setDe] = useState("");
+  const [ate, setAte] = useState("");
 
   useEffect(() => {
     const controle = new AbortController();
     (async () => {
       try {
         setErro(null);
-        const res = await fetch("/api/relatorios/painel", {
+        const url = new URL("/api/relatorios/painel", window.location.origin);
+        if (de) url.searchParams.set("de", de);
+        if (ate) url.searchParams.set("ate", ate);
+        const res = await fetch(url, {
           signal: controle.signal,
           cache: "no-store",
         });
         if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
-        setDados(await res.json());
+        const r: Painel = await res.json();
+        setDados(r);
+        if (!de) setDe(r.periodo.de);
+        if (!ate) setAte(r.periodo.ate);
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
         const status = (e as { status?: number }).status;
@@ -161,7 +172,7 @@ export default function PainelRelatoriosPage() {
       }
     })();
     return () => controle.abort();
-  }, []);
+  }, [de, ate]);
 
   const porFaixa = useMemo(() => {
     const mapa = new Map<Faixa, CongregacaoBI[]>();
@@ -192,6 +203,25 @@ export default function PainelRelatoriosPage() {
         descricao="Índice de Saúde por congregação, alertas e análise automática"
       >
         <div className="flex flex-wrap gap-2">
+          {([
+            ["De", de, setDe],
+            ["Até", ate, setAte],
+          ] as const).map(([rotulo, valor, definir]) => (
+            <label
+              key={rotulo}
+              className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem]"
+            >
+              <span className="shrink-0 text-brand-200/55">{rotulo}</span>
+              <input
+                type="date"
+                value={valor}
+                max={rotulo === "De" ? ate || undefined : undefined}
+                min={rotulo === "Até" ? de || undefined : undefined}
+                onChange={(e) => definir(e.target.value)}
+                className="bg-transparent text-brand-50 focus:outline-none [color-scheme:dark]"
+              />
+            </label>
+          ))}
           <Link
             href="/dashboard/relatorios/destaques"
             className="flex h-10 items-center gap-2 rounded-xl border border-gold-400/25 bg-gold-400/[0.06] px-3.5 text-[0.8rem] text-gold-200 transition-colors duration-300 hover:border-gold-400/40 hover:bg-gold-400/[0.1]"
@@ -216,7 +246,7 @@ export default function PainelRelatoriosPage() {
       ) : (
         <div className="space-y-5">
           <p className="-mt-2 text-[0.74rem] text-brand-200/45">
-            Período analisado: {diaMes(dados.periodo.de)} a {diaMes(dados.periodo.ate)} · últimos 90 dias
+            Período analisado: {diaMes(dados.periodo.de)} a {diaMes(dados.periodo.ate)}
           </p>
 
           {/* ---------------- IGE — o número que abre a tela ---------------- */}
