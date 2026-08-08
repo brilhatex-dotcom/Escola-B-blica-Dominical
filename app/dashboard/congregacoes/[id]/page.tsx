@@ -100,6 +100,7 @@ interface Pessoa {
 interface ClasseAnalise {
   classeId: number;
   nome: string;
+  ativa: boolean;
   professores: string[];
   matriculados: number;
   presentes: number;
@@ -634,6 +635,14 @@ function Prontuario({
                     >
                       {c.nome}
                     </Link>
+                    {!c.ativa && (
+                      <span
+                        className="ml-2 rounded-full bg-white/8 px-1.5 py-0.5 text-[0.62rem] uppercase tracking-wide text-brand-200/50 print:text-black"
+                        title="Esta classe foi excluída/arquivada — os números aqui são o histórico do período, que continua valendo."
+                      >
+                        arquivada
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 pr-3 text-brand-200/70 print:text-black">
                     {c.professores.length > 0 ? c.professores.join(", ") : "—"}

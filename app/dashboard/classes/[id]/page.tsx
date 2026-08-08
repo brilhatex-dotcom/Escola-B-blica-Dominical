@@ -211,6 +211,16 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
             <Button variant="ghost" size="sm" onClick={() => setEditandoClasse(true)}>
               Editar classe
             </Button>
+            {!classe.ativa && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => gravar(`/api/classes/${classe.id}`, "PATCH", { ativa: true })}
+                title="Excluída por engano? O histórico dela nunca saiu dos relatórios — reativar só volta a aceitar chamada."
+              >
+                Reativar classe
+              </Button>
+            )}
             {podeMexerEmAlunos && (
               <Button size="sm" onClick={() => setCriandoAluno(true)}>
                 <Plus className="h-4 w-4" />

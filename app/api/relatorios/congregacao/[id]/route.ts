@@ -272,13 +272,32 @@ export async function GET(req: Request, { params }: Contexto) {
     /* ---------------------------------------------------------------- *
      * Classes da congregação, com matriculados/presentes/ausentes/
      * visitantes/professores no período.
+     *
+     * ATIVAS, SEMPRE — E AS ARQUIVADAS QUE TIVERAM CHAMADA NO PERÍODO.
+     *
+     * Excluir uma classe com histórico não apaga: arquiva (`ativa = false`),
+     * e o aviso da tela promete "o histórico continua valendo nos
+     * relatórios". Filtrar aqui só por `ativa: true` quebrava essa promessa
+     * — a classe sumia por inteiro desta tabela e da de professores, mesmo
+     * tendo chamada registrada dentro do período sendo olhado agora. Uma
+     * secretária que arquiva uma classe por engano (o sistema é novo para
+     * elas) via o histórico dela desaparecer do relatório, não só da lista
+     * do dia a dia.
+     *
+     * A classe arquivada só entra se teve chamada NO PERÍODO — arquivadas
+     * de anos atrás, sem nada a dizer sobre este período, continuam de
+     * fora, senão a lista encheria de linhas zeradas.
      * ---------------------------------------------------------------- */
     const classesBase = await prisma.classe.findMany({
-      where: { congId: id, ativa: true },
+      where: {
+        congId: id,
+        OR: [{ ativa: true }, { frequencias: { some: { data: { gte: de, lte: ate } } } }],
+      },
       orderBy: { nome: "asc" },
       select: {
         id: true,
         nome: true,
+        ativa: true,
         _count: { select: { alunos: { where: { ativo: true } } } },
         pessoaCargos: {
           where: { ativo: true, fim: null, cargo: { nome: "Professor" } },
@@ -286,6 +305,7 @@ export async function GET(req: Request, { params }: Contexto) {
         },
       },
     });
+    const classesAtivas = classesBase.filter((c) => c.ativa);
 
     const freqPorClasse = await prisma.$queryRaw<
       Array<{
@@ -325,6 +345,7 @@ export async function GET(req: Request, { params }: Contexto) {
     interface ClasseAnalise {
       classeId: number;
       nome: string;
+      ativa: boolean;
       professores: string[];
       matriculados: number;
       presentes: number;
@@ -353,6 +374,7 @@ export async function GET(req: Request, { params }: Contexto) {
       return {
         classeId: c.id,
         nome: c.nome,
+        ativa: c.ativa,
         professores: c.pessoaCargos.map(
           (v) => `${v.pessoa.tratamento ? v.pessoa.tratamento + " " : ""}${v.pessoa.nome}`,
         ),
@@ -367,8 +389,12 @@ export async function GET(req: Request, { params }: Contexto) {
       };
     });
 
+    // "Atrasada" é um pedido de ação — faça a chamada dessa classe. Uma
+    // classe arquivada não vai receber chamada nenhuma de novo, então não
+    // entra nem na contagem nem no alerta, mesmo que apareça na tabela
+    // acima com o histórico do período.
     const classesAtrasadas = classesAnalise.filter(
-      (c) => c.diasSemChamada === null || c.diasSemChamada >= 21,
+      (c) => c.ativa && (c.diasSemChamada === null || c.diasSemChamada >= 21),
     ).length;
 
     /* ---------------------------------------------------------------- *
@@ -382,6 +408,9 @@ export async function GET(req: Request, { params }: Contexto) {
         nome: `${v.pessoa.tratamento ? v.pessoa.tratamento + " " : ""}${v.pessoa.nome}`,
         classe: c.nome,
         classeId: c.id,
+        // Separa "professores hoje" (contagem do cabeçalho) de "quem deu
+        // aula no período" (a tabela inteira, que inclui classe arquivada).
+        classeAtiva: c.ativa,
         frequenciaMediaClasse: analise.percentual,
         chamadasRealizadas: freqPorClasseMap.get(c.id) ? Number(freqPorClasseMap.get(c.id)!.chamados) : 0,
         visitantesRecebidos: analise.visitantes,
@@ -573,7 +602,7 @@ export async function GET(req: Request, { params }: Contexto) {
         },
       ],
       classesSemChamada: classesAnalise
-        .filter((c) => c.diasSemChamada === null || c.diasSemChamada >= 21)
+        .filter((c) => c.ativa && (c.diasSemChamada === null || c.diasSemChamada >= 21))
         .map((c) => ({ classeId: c.classeId, classe: c.nome, congregacao: esta.nome, diasSemChamada: c.diasSemChamada })),
     };
     const alertas = gerarAlertas(dadosBIParaAlertas);
@@ -618,8 +647,10 @@ export async function GET(req: Request, { params }: Contexto) {
         dirigente: dirigente ? { nome: dirigente.nome, tratamento: dirigente.tratamento, telefone: dirigente.tel } : null,
         vice: vice ? { nome: vice.nome, tratamento: vice.tratamento } : null,
         secretario: secretario ? { nome: secretario.nome, tratamento: secretario.tratamento } : null,
-        classes: classesBase.length,
-        professores: new Set(professoresAnalise.map((p) => p.pessoaId)).size,
+        classes: classesAtivas.length,
+        professores: new Set(
+          professoresAnalise.filter((p) => p.classeAtiva).map((p) => p.pessoaId),
+        ).size,
         alunos: esta.alunos,
         igsNota: esta.igsNota,
         classificacaoRotulo: esta.classificacaoRotulo,
@@ -627,8 +658,10 @@ export async function GET(req: Request, { params }: Contexto) {
       },
       resumo: {
         matriculados: esta.alunos,
-        professores: new Set(professoresAnalise.map((p) => p.pessoaId)).size,
-        classes: classesBase.length,
+        professores: new Set(
+          professoresAnalise.filter((p) => p.classeAtiva).map((p) => p.pessoaId),
+        ).size,
+        classes: classesAtivas.length,
         visitantes: esta.visitantesAnt + esta.visitantesRec,
         taxaFrequencia: esta.taxaFrequencia,
         igsNota: esta.igsNota,

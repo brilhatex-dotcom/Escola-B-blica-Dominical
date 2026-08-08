@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Building2, Check, ChevronRight, Plus, School, Users } from "lucide-react";
+import { Building2, Check, ChevronRight, Plus, RotateCcw, School, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,11 +80,13 @@ function Cartao({
   podeMexer,
   aoEditar,
   aoExcluir,
+  aoReativar,
 }: {
   c: ClasseLista;
   podeMexer: boolean;
   aoEditar: () => void;
   aoExcluir: () => Promise<void>;
+  aoReativar: () => Promise<void>;
 }) {
   return (
     <article
@@ -115,6 +117,21 @@ function Cartao({
         {c.faixa && <Badge variant="info">{c.faixa}</Badge>}
         {c.tipoClasse && <Badge variant="neutro">{rotuloDaCategoria(c.tipoClasse)}</Badge>}
         {!c.ativa && <Badge variant="erro">inativa</Badge>}
+
+        {podeMexer && !c.ativa && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              void aoReativar();
+            }}
+            title="Reativar esta classe — engano comum de quem está começando a usar o sistema."
+            className="relative z-10 flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 text-[0.72rem] text-brand-200/70 transition-all duration-300 hover:border-emerald-400/35 hover:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/60"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reativar
+          </button>
+        )}
 
         {podeMexer && (
           <AcoesDoRegistro
@@ -324,6 +341,9 @@ export default function ClassesPage() {
                         aoEditar={() => setEmEdicao(c)}
                         aoExcluir={async () => {
                           await gravar(`/api/classes/${c.id}`, "DELETE", {});
+                        }}
+                        aoReativar={async () => {
+                          await gravar(`/api/classes/${c.id}`, "PATCH", { ativa: true });
                         }}
                       />
                     ))}
