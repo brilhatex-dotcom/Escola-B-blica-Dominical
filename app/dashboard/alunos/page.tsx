@@ -35,6 +35,7 @@ interface AlunoLista {
   resp: string | null;
   posicao: string | null;
   ativo: boolean;
+  matriculadoEm: string | null;
   classe: { id: number; nome: string; faixa: string } | null;
   congregacao: { id: number; nome: string } | null;
 }
@@ -178,8 +179,16 @@ export default function AlunosPage() {
         aoFechar={() => setCriando(false)}
         titulo="Novo aluno"
         descricao="A congregação vem da classe escolhida — não precisa informar."
-        campos={camposDoAluno(classes)}
-        valores={{ nome: "", classeId: classe ? String(classe) : "", nasc: "", posicao: "", tel: "", resp: "" }}
+        campos={camposDoAluno(classes, "criar")}
+        valores={{
+          nome: "",
+          classeId: classe ? String(classe) : "",
+          nasc: "",
+          posicao: "",
+          tel: "",
+          resp: "",
+          matriculadoEm: "",
+        }}
         rotuloGravar="Matricular"
         aoGravar={(v) =>
           gravar("/api/alunos", "POST", {
@@ -189,6 +198,10 @@ export default function AlunosPage() {
             posicao: v.posicao || null,
             tel: v.tel,
             resp: v.resp,
+            // Em branco, o servidor grava HOJE — não manda nada. Só quando a
+            // pessoa preenche uma data passada é que ela vale, para matricular
+            // alguém que já frequentava a classe antes de ser cadastrado.
+            matriculadoEm: v.matriculadoEm ? v.matriculadoEm : undefined,
           })
         }
       />
@@ -197,7 +210,7 @@ export default function AlunosPage() {
         aberto={emEdicao !== null}
         aoFechar={() => setEmEdicao(null)}
         titulo="Editar aluno"
-        campos={camposDoAluno(classes)}
+        campos={camposDoAluno(classes, "editar")}
         valores={{
           nome: emEdicao?.nome ?? "",
           classeId: emEdicao?.classe ? String(emEdicao.classe.id) : "",
@@ -205,6 +218,7 @@ export default function AlunosPage() {
           posicao: emEdicao?.posicao ?? "",
           tel: emEdicao?.tel ?? "",
           resp: emEdicao?.resp ?? "",
+          matriculadoEm: emEdicao?.matriculadoEm?.slice(0, 10) ?? "",
         }}
         aoGravar={(v) =>
           gravar(`/api/alunos/${emEdicao?.id}`, "PATCH", {
@@ -214,6 +228,10 @@ export default function AlunosPage() {
             posicao: v.posicao || null,
             tel: v.tel,
             resp: v.resp,
+            // Aqui, em branco LIMPA a restrição (vira matrícula antiga, sem
+            // data) — a tela já mostra o valor atual preenchido, então apagar
+            // é uma escolha, não um esquecimento.
+            matriculadoEm: v.matriculadoEm || null,
           })
         }
       />
@@ -359,7 +377,7 @@ function AlunosPorClasse({
  * que o servidor responde. Uma constante montada na carga do módulo teria o
  * seletor de classe permanentemente vazio.
  */
-function camposDoAluno(classes: ClasseOpcao[]): readonly CampoForm[] {
+function camposDoAluno(classes: ClasseOpcao[], modo: "criar" | "editar"): readonly CampoForm[] {
   return [
     { chave: "nome", rotulo: "Nome completo", obrigatorio: true, largo: true },
     {
@@ -385,5 +403,29 @@ function camposDoAluno(classes: ClasseOpcao[]): readonly CampoForm[] {
       largo: true,
       ajuda: "Para crianças e adolescentes — quem procurar em caso de necessidade.",
     },
+    /*
+     * A Chamada só deixa marcar presença/falta a partir desta data. Serve
+     * para o caso do professor que esqueceu de cadastrar um aluno que já
+     * frequentava a classe há tempo: sem poder corrigir esta data, o aluno
+     * ficaria fora da lista de todos os domingos passados que já viveu de
+     * verdade, mesmo depois de cadastrado.
+     */
+    modo === "criar"
+      ? {
+          chave: "matriculadoEm",
+          rotulo: "Matriculado em",
+          tipo: "data",
+          ajuda:
+            "Em branco, a matrícula começa hoje. Só preencha com uma data passada se este aluno já " +
+            "frequentava a classe antes de ser cadastrado — assim ele entra na chamada desde essa data.",
+        }
+      : {
+          chave: "matriculadoEm",
+          rotulo: "Matriculado em",
+          tipo: "data",
+          ajuda:
+            "Em branco, a matrícula fica sem restrição de data (como um cadastro antigo). Preencha ou " +
+            "corrija se o aluno já frequentava a classe antes desta data.",
+        },
   ];
 }

@@ -57,6 +57,7 @@ interface AlunoDaClasse {
   resp: string | null;
   posicao: string | null;
   ativo: boolean;
+  matriculadoEm: string | null;
   presencas: number;
 }
 
@@ -83,24 +84,48 @@ interface DetalheClasse {
   ultimaChamada: string | null;
 }
 
-const CAMPOS_ALUNO: readonly CampoForm[] = [
-  { chave: "nome", rotulo: "Nome completo", obrigatorio: true, largo: true },
-  { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
-  {
-    chave: "posicao",
-    rotulo: "Posição no ministério",
-    tipo: "lista",
-    opcoes: POSICOES.map((p) => ({ valor: p.chave, rotulo: p.rotulo })),
-    ajuda: "Define o tratamento (Pr., Ev., Pb., Dc., Aux.). Não é cargo da EBD.",
-  },
-  { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
-  {
-    chave: "resp",
-    rotulo: "Responsável",
-    largo: true,
-    ajuda: "Para crianças e adolescentes — quem procurar em caso de necessidade.",
-  },
-];
+/**
+ * `modo` muda só a ajuda do campo "Matriculado em": ao matricular, em
+ * branco significa "hoje"; ao editar, em branco significa "sem restrição de
+ * data" (limpa o valor atual). Ver o mesmo campo em app/dashboard/alunos/page.tsx.
+ */
+function camposAluno(modo: "criar" | "editar"): readonly CampoForm[] {
+  return [
+    { chave: "nome", rotulo: "Nome completo", obrigatorio: true, largo: true },
+    { chave: "nasc", rotulo: "Data de nascimento", tipo: "data" },
+    {
+      chave: "posicao",
+      rotulo: "Posição no ministério",
+      tipo: "lista",
+      opcoes: POSICOES.map((p) => ({ valor: p.chave, rotulo: p.rotulo })),
+      ajuda: "Define o tratamento (Pr., Ev., Pb., Dc., Aux.). Não é cargo da EBD.",
+    },
+    { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
+    {
+      chave: "resp",
+      rotulo: "Responsável",
+      largo: true,
+      ajuda: "Para crianças e adolescentes — quem procurar em caso de necessidade.",
+    },
+    modo === "criar"
+      ? {
+          chave: "matriculadoEm",
+          rotulo: "Matriculado em",
+          tipo: "data",
+          ajuda:
+            "Em branco, a matrícula começa hoje. Só preencha com uma data passada se este aluno já " +
+            "frequentava a classe antes de ser cadastrado — assim ele entra na chamada desde essa data.",
+        }
+      : {
+          chave: "matriculadoEm",
+          rotulo: "Matriculado em",
+          tipo: "data",
+          ajuda:
+            "Em branco, a matrícula fica sem restrição de data (como um cadastro antigo). Preencha ou " +
+            "corrija se o aluno já frequentava a classe antes desta data.",
+        },
+  ];
+}
 
 export default function ClasseDetalhePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -414,8 +439,8 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
         aoFechar={() => setCriandoAluno(false)}
         titulo="Matricular aluno"
         descricao={`Ele entra direto na classe ${classe.nome}.`}
-        campos={CAMPOS_ALUNO}
-        valores={{ nome: "", nasc: "", posicao: "", tel: "", resp: "" }}
+        campos={camposAluno("criar")}
+        valores={{ nome: "", nasc: "", posicao: "", tel: "", resp: "", matriculadoEm: "" }}
         rotuloGravar="Matricular"
         aoGravar={(v) =>
           gravar("/api/alunos", "POST", {
@@ -425,6 +450,7 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
             tel: v.tel,
             resp: v.resp,
             classeId: classe.id,
+            matriculadoEm: v.matriculadoEm ? v.matriculadoEm : undefined,
           })
         }
       />
@@ -433,13 +459,14 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
         aberto={alunoEmEdicao !== null}
         aoFechar={() => setAlunoEmEdicao(null)}
         titulo="Editar aluno"
-        campos={CAMPOS_ALUNO}
+        campos={camposAluno("editar")}
         valores={{
           nome: alunoEmEdicao?.nome ?? "",
           nasc: alunoEmEdicao?.nasc?.slice(0, 10) ?? "",
           posicao: alunoEmEdicao?.posicao ?? "",
           tel: alunoEmEdicao?.tel ?? "",
           resp: alunoEmEdicao?.resp ?? "",
+          matriculadoEm: alunoEmEdicao?.matriculadoEm?.slice(0, 10) ?? "",
         }}
         aoGravar={(v) =>
           gravar(`/api/alunos/${alunoEmEdicao?.id}`, "PATCH", {
@@ -448,6 +475,7 @@ export default function ClasseDetalhePage({ params }: { params: Promise<{ id: st
             posicao: v.posicao || null,
             tel: v.tel,
             resp: v.resp,
+            matriculadoEm: v.matriculadoEm || null,
           })
         }
       />
