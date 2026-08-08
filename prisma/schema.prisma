@@ -128,6 +128,14 @@ model Aluno {
   congId   Int?
   classeId Int?
   ativo    Boolean   @default(true)
+  /// Quando esta matrícula nasceu NESTE portal — não a data em que a pessoa
+  /// começou na igreja de verdade, que ninguém registrou para as 323 linhas
+  /// herdadas. `null` nelas, de propósito: são matrículas antigas, sem
+  /// restrição de data. Só quem é matriculado a partir daqui pelo formulário
+  /// (`POST /api/alunos`) ganha a data de hoje, automaticamente — e é essa
+  /// data que a Chamada usa para não deixar marcar presença ou falta de
+  /// alguém em domingo anterior ao dia em que foi matriculado.
+  matriculadoEm DateTime? @db.Date
 
   congregacao Congregacao? @relation(fields: [congId], references: [id])
   classe      Classe?      @relation(fields: [classeId], references: [id])
@@ -236,11 +244,18 @@ model Visitante {
   /// Numero no export -> String (mesmo motivo de Aluno.tel).
   tel      String?
   obs      String?
-  /// Já é crente (frequenta outra igreja evangélica) ou não é evangélico —
-  /// a marca que decide se o retorno é "convidar para a igreja dele" ou
-  /// "apresentar o evangelho". `null` = não perguntado, nas 89 linhas
-  /// herdadas e em qualquer cadastro feito às pressas.
-  crente   Boolean?
+  /// A situação religiosa: "mesma-igreja" (crente, membro desta própria
+  /// igreja — visitou outro culto ou outra congregação do campo),
+  /// "outra-igreja" (crente, mas de outra denominação) ou "nao-evangelico".
+  /// Decide o retorno: reconduzir à própria igreja, convidar para conhecer,
+  /// ou apresentar o evangelho pela primeira vez. `null` = não perguntado,
+  /// nas 89 linhas herdadas e em qualquer cadastro feito às pressas.
+  ///
+  /// Era um Boolean até esta coluna ganhar o terceiro estado ("mesma
+  /// igreja") — ver prisma/aplicar-visitante-crente-3-estados.sql, que
+  /// converte o que já existia (`true`→"outra-igreja", `false`→
+  /// "nao-evangelico") em vez de apagar.
+  crente   String?
   classeId Int?
   congId   Int?
   data     DateTime  @db.Date

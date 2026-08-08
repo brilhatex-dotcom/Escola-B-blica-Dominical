@@ -18,7 +18,14 @@ import {
   precoAlunoDeLista,
   precoProfessorDeLista,
 } from "@/lib/revistas/precos";
-import { dataLimitePadrao, proximoTrimestre, soDia, trimestreDe } from "@/lib/revistas/trimestre";
+import {
+  dataLimitePadraoDoTrimestre,
+  proximoTrimestre,
+  soDia,
+  trimestreDaChave,
+  trimestreDe,
+  trimestreValido,
+} from "@/lib/revistas/trimestre";
 
 /**
  * Pedido de Lição — o que cada congregação pediu de verdade, quanto custa, e
@@ -57,8 +64,15 @@ export async function GET(req: Request) {
     const hoje = new Date();
     const url = new URL(req.url);
     // A tela normalmente olha o trimestre em andamento (o que está sendo
-    // pago); a tela de Fazer Pedido pode pedir explicitamente o próximo.
-    const tri = url.searchParams.get("trimestre") === "proximo" ? proximoTrimestre(hoje) : trimestreDe(hoje);
+    // pago), mas o seletor de trimestre deixa escolher qualquer um dos
+    // quatro mostrados — "proximo" continua reconhecido por compatibilidade.
+    const paramTri = url.searchParams.get("trimestre");
+    const tri =
+      paramTri === "proximo"
+        ? proximoTrimestre(hoje)
+        : paramTri && trimestreValido(paramTri)
+          ? trimestreDaChave(paramTri)
+          : trimestreDe(hoje);
 
     const [classes, precos, pagamentos, config, pedidos] = await Promise.all([
       prisma.classe.findMany({
@@ -178,7 +192,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const dataLimitePagamento = config?.dataLimite ?? dataLimitePadrao(hoje);
+    const dataLimitePagamento = config?.dataLimite ?? dataLimitePadraoDoTrimestre(tri);
     const dataLimitePedido = config?.dataLimitePedido ?? null;
 
     const congregacoes = [...porCong.values()]
@@ -235,7 +249,7 @@ export async function GET(req: Request) {
     const totalDevido = Number(congregacoes.reduce((s, c) => s + c.totalDevido, 0).toFixed(2));
     const totalPago = Number(congregacoes.reduce((s, c) => s + c.pago, 0).toFixed(2));
     const saldoTotal = Number((totalDevido - totalPago).toFixed(2));
-    const padrao = dataLimitePadrao(hoje);
+    const padrao = dataLimitePadraoDoTrimestre(tri);
 
     // As três contagens do painel — "sem-pedido" (nenhum pedido CONFIRMADO
     // no trimestre) fica de fora das três, porque não há o que pagar ainda.
@@ -401,7 +415,7 @@ export async function PUT(req: Request) {
     return erro("Só a administração do campo define o tema e os prazos.", 403);
   }
 
-  let corpo: { dataLimite?: string | null; dataLimitePedido?: string | null; tema?: string | null };
+  let corpo: { trimestre?: string; dataLimite?: string | null; dataLimitePedido?: string | null; tema?: string | null };
   try {
     corpo = await req.json();
   } catch {
@@ -423,7 +437,11 @@ export async function PUT(req: Request) {
   }
 
   return responder(async () => {
-    const tri = trimestreDe(new Date());
+    // O tema e os prazos são do trimestre que a pessoa está OLHANDO na tela
+    // (o seletor deixa escolher qualquer um dos quatro mostrados) — sem
+    // `trimestre` no corpo, cai no atual, como sempre foi.
+    const tri =
+      corpo.trimestre && trimestreValido(corpo.trimestre) ? trimestreDaChave(corpo.trimestre) : trimestreDe(new Date());
     const dados: { dataLimite?: Date | null; dataLimitePedido?: Date | null; tema?: string | null } = {};
     if (dataLimite !== undefined) dados.dataLimite = dataLimite ? new Date(`${dataLimite}T00:00:00Z`) : null;
     if (dataLimitePedido !== undefined) {

@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma, temBanco } from "@/lib/prisma";
 import { calcularDestaque, inicioDoMes, inicioDoTrimestre } from "./destaque";
+import { congregacaoDestaquePorIDI } from "@/lib/relatorios/metricasCongregacoes";
 import type {
   Aniversariante,
   Atividade,
@@ -616,8 +617,13 @@ async function lerDestaques(hoje: Date, recorte: Recorte): Promise<Destaques> {
     // Congregação Destaque NÃO se recorta — a mesma exceção de aniversariantes
     // e liderança (Fase 18): é uma comparação do campo inteiro, e a liderança
     // pediu que todo mundo visse quem se destacou, não só quem enxerga tudo.
-    lerDestaquesDoAgrupamento("congId", inicioMes, hoje, undefined),
-    lerDestaquesDoAgrupamento("congId", inicioTri, hoje, undefined),
+    //
+    // Usa o IDI (a mesma conta de `/dashboard/relatorios/destaques`), não a
+    // fórmula simples de `lerDestaquesDoAgrupamento` — para o cartão do
+    // Dashboard nunca apontar uma congregação diferente da tela de Relatórios
+    // no mesmo período. Ver `lib/relatorios/metricasCongregacoes.ts`.
+    congregacaoDestaquePorIDI(inicioMes, hoje),
+    congregacaoDestaquePorIDI(inicioTri, hoje),
     // Classe Destaque SE recorta: comparar a classe de uma congregação de 80
     // pessoas com a de uma de 15 mistura populações diferentes, e quem só
     // enxerga a própria congregação não tem o que fazer com o resultado de

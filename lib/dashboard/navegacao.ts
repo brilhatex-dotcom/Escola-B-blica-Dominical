@@ -19,7 +19,6 @@ import {
   Network,
   NotebookPen,
   PartyPopper,
-  Radar,
   School,
   ScrollText,
   Settings,
@@ -261,13 +260,6 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard/relatorios/semanal",
         icone: NotebookPen,
         descricao: "O relatório de domingo, no modelo da Superintendência das Escolas Dominicais",
-      },
-      {
-        chave: "rel-comparativo",
-        rotulo: "Comparativo",
-        href: "/dashboard/relatorios/comparativo",
-        icone: Radar,
-        descricao: "Congregação × congregação: radar dos componentes e evolução mensal",
       },
       {
         chave: "rel-ranking",

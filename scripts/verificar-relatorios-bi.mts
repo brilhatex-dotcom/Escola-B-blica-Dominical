@@ -13,13 +13,9 @@
 import {
   calcularIGS,
   classificarIGS,
-  paraRadar,
   scoreDeVariacao,
   tendenciaDe,
-  validarSelecaoComparativo,
   variacaoPct,
-  COMPARATIVO_MAXIMO,
-  COMPARATIVO_MINIMO,
   PESOS_IGS,
   type ComponentesIGS,
 } from "../lib/relatorios/indices";
@@ -274,32 +270,6 @@ ok(
   semNenhumDado[0].includes("Ainda não há chamadas suficientes"),
   "diz que faltou dado, em vez de inventar uma nota",
 );
-
-/* ------------------------------------------------------------------ *
- * Fase 14b — Radar e Comparativo
- * ------------------------------------------------------------------ */
-
-console.log("\n14. paraRadar — sempre os 5 eixos, na mesma ordem, com o rótulo positivo");
-const eixos = paraRadar({
-  frequencia: 80,
-  regularidade: 90,
-  tendencia: 50,
-  visitantes: null,
-  faltosos: 95,
-});
-ok(eixos.length === 5, "sempre 5 eixos, mesmo com um componente ausente");
-ok(eixos.map((e) => e.eixo).join(",") === "Frequência,Regularidade,Tendência,Visitantes,Presença contínua",
-  "ordem fixa, e 'faltosos' vira 'Presença contínua' — o rótulo segue o sinal do número, não o nome interno",
-);
-ok(eixos.find((e) => e.chave === "visitantes")?.valor === null, "o eixo sem dado chega como null, não como 0");
-ok(eixos.find((e) => e.chave === "faltosos")?.valor === 95, "95 aqui significa quase ninguém faltando — é o valor JÁ invertido");
-
-console.log("\n15. validarSelecaoComparativo — o teto é de legibilidade");
-ok(validarSelecaoComparativo([1]) !== null, "1 congregação sozinha: nada para comparar");
-ok(validarSelecaoComparativo([1, 2]) === null, `${COMPARATIVO_MINIMO} congregações: serve`);
-ok(validarSelecaoComparativo([1, 2, 3, 4]) === null, `${COMPARATIVO_MAXIMO} congregações: ainda serve`);
-ok(validarSelecaoComparativo([1, 2, 3, 4, 5]) !== null, "5 congregações: vira nuvem ilegível, é recusado");
-ok(validarSelecaoComparativo([1, 1, 1]) !== null, "IDs repetidos não contam como congregações distintas");
 
 console.log(falhas === 0 ? "\nTODOS OS TESTES PASSARAM\n" : `\n${falhas} FALHA(S)\n`);
 process.exit(falhas === 0 ? 0 : 1);

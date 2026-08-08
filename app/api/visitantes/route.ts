@@ -13,6 +13,7 @@ import {
 } from "@/lib/api";
 import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
 import { idadeParaExibir } from "@/lib/ebd/idade";
+import { crenteValido } from "@/lib/ebd/visitante";
 
 /**
  * Acrescenta a idade calculada, sem esconder de onde ela veio.
@@ -103,11 +104,9 @@ export async function GET(req: Request) {
   });
 }
 
-/** `corpo.crente`: "sim" | "nao" | "" (não perguntado) — nunca lançado em nenhum dos três casos. */
-function lerCrente(valor: unknown): boolean | null {
-  if (valor === "sim") return true;
-  if (valor === "nao") return false;
-  return null;
+/** `corpo.crente`: uma das três chaves de `OPCOES_CRENTE`, ou "" (não perguntado). */
+function lerCrente(valor: unknown): string | null {
+  return crenteValido(valor) ? valor : null;
 }
 
 /**

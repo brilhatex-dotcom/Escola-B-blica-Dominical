@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertCircle, AlertTriangle, BadgeCheck, BookMarked, Building2, ChevronRight,
-  ClipboardList, Clock, Coins, HandCoins, Loader2, PenLine, Plus, Sparkles, Trash2, Users,
+  Clock, Coins, FilePlus2, HandCoins, Loader2, PenLine, Plus, Sparkles, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -14,14 +14,27 @@ import {
   CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
+import { SeletorTrimestre } from "@/components/revistas/SeletorTrimestre";
+import { SituacaoBadge } from "@/components/revistas/SituacaoBadge";
+import { PrazoTexto } from "@/components/revistas/PrazoTexto";
+import { trimestreDe } from "@/lib/revistas/trimestre";
 
 /**
- * Pedido de Lição — por congregação, com detalhe por classe e baixa parcial.
+ * Pedidos de Lições — o painel de acompanhamento, separado de propósito do
+ * assistente de "Novo Pedido" (`/dashboard/revistas/novo`).
  *
- * O pedido é a conta pronta (alunos ativos × preço). O que a secretaria faz
- * aqui é acompanhar o pagamento: vê o total de cada congregação, abre as
- * classes, e vai dando baixa à medida que os alunos pagam. A data-limite é a
- * lição 02 do próximo trimestre, e a administração do campo pode mudá-la.
+ * ============================================================================
+ * ACOMPANHAR NÃO É A MESMA TAREFA QUE PEDIR
+ *
+ * Até a Fase 22, uma tela só fazia as duas coisas: digitar quantidade E
+ * conferir quem já pagou. As duas pedem atenções diferentes — uma é "eu,
+ * agora, decidindo quanto pedir"; a outra é "eu, de vez em quando, olhando
+ * como o campo está indo" — e misturadas, cada visita à tela carregava a
+ * complexidade das duas. Esta tela ficou só com a segunda: números do
+ * trimestre, quem está com pedido/rascunho/pago/atrasado, e o detalhe de
+ * cada congregação para dar baixa. Pedir revista de verdade é sempre no
+ * assistente.
+ * ============================================================================
  */
 
 interface Baixa {
@@ -56,7 +69,7 @@ interface AlertaRevista {
   titulo: string; descricao: string;
 }
 interface Dados {
-  trimestre: { rotulo: string; tema: string | null };
+  trimestre: { chave: string; rotulo: string; tema: string | null };
   trimestreProximo: string;
   dataLimite: string; dataLimitePadrao: string; dataLimiteDefinida: boolean; podeDefinirLimite: boolean;
   dataLimitePagamento: string; dataLimitePedido: string | null;
@@ -77,7 +90,7 @@ const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 const fmtData = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
 export default function RevistasPage() {
-  const [periodo, setPeriodo] = useState<"atual" | "proximo">("atual");
+  const [trimestre, setTrimestre] = useState(() => trimestreDe(new Date()).chave);
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [aberta, setAberta] = useState<number | null>(null);
@@ -87,7 +100,7 @@ export default function RevistasPage() {
 
   const carregar = useCallback(async () => {
     try {
-      const res = await fetch(`/api/revistas?trimestre=${periodo}`, { cache: "no-store" });
+      const res = await fetch(`/api/revistas?trimestre=${trimestre}`, { cache: "no-store" });
       if (!res.ok) throw Object.assign(new Error(), { status: res.status });
       setDados(await res.json());
       setErro(null);
@@ -95,33 +108,25 @@ export default function RevistasPage() {
       const status = (e as { status?: number }).status;
       setErro(status === 403 ? "O seu acesso não permite ver o pedido." : "Não foi possível carregar o pedido.");
     }
-  }, [periodo]);
+  }, [trimestre]);
 
   useEffect(() => { setDados(null); void carregar(); }, [carregar]);
 
+  const pedidosDoTrimestre = dados ? dados.resumo.congregacoes - dados.resumo.congregacoesSemPedido : 0;
+  const nenhumPedidoAinda = dados ? dados.congregacoes.every((c) => c.pedido === null) : false;
+
   return (
     <>
-      <CabecalhoModulo
-        icone={BookMarked}
-        titulo="Pedido de Lição"
-        descricao={dados ? dados.trimestre.rotulo : "Revistas por congregação"}
-        total={dados?.congregacoes.length ?? null}
-      >
-        <div className="flex gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] p-1">
-          {(["atual", "proximo"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriodo(p)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-[0.78rem] transition-colors duration-300",
-                periodo === p ? "bg-gold-400/15 text-gold-200" : "text-brand-200/60 hover:text-brand-100",
-              )}
-            >
-              {p === "atual" ? "Trimestre atual" : "Próximo trimestre"}
-            </button>
-          ))}
-        </div>
+      <CabecalhoModulo icone={BookMarked} titulo="Pedidos de Lições" descricao="Faça e acompanhe os pedidos de revistas da Escola Bíblica Dominical.">
+        {editavel && (
+          <Button asChild>
+            <Link href={`/dashboard/revistas/novo?trimestre=${trimestre}`}>
+              <Plus className="h-4 w-4" />
+              Novo Pedido
+            </Link>
+          </Button>
+        )}
+        <SeletorTrimestre selecionado={trimestre} aoSelecionar={setTrimestre} />
         {dados && (
           <button
             type="button"
@@ -134,25 +139,43 @@ export default function RevistasPage() {
         )}
       </CabecalhoModulo>
 
-      <p className="-mt-2 mb-4 text-[0.74rem] text-brand-200/45">
-        "Trimestre atual" muda sozinho quando a data virar o trimestre seguinte — não precisa mexer em
-        nada. Use "Próximo trimestre" para acompanhar o pedido que está sendo feito agora, com
-        antecedência.
-      </p>
-
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={6} />
-      : (
+      : nenhumPedidoAinda ? (
+        <>
+          {verPrecos && <TabelaPrecos precos={dados.precos} />}
+          <PainelTrimestre dados={dados} editavel={editavel} aoMudar={() => void carregar()} />
+          <div className="glass-panel mt-4 rounded-2xl px-6 py-14 text-center">
+            <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.06] ring-1 ring-gold-400/20">
+              <FilePlus2 className="h-6 w-6 text-gold-300" />
+            </span>
+            <p className="mx-auto mt-4 max-w-sm text-[0.94rem] text-brand-50">
+              Você ainda não possui pedidos neste trimestre.
+            </p>
+            <p className="mx-auto mt-1.5 max-w-sm text-[0.8rem] text-brand-200/55">
+              Comece fazendo o pedido de revistas da sua congregação.
+            </p>
+            {editavel && (
+              <Button asChild className="mt-5">
+                <Link href={`/dashboard/revistas/novo?trimestre=${trimestre}`}>
+                  <Plus className="h-4 w-4" />
+                  Fazer Primeiro Pedido
+                </Link>
+              </Button>
+            )}
+          </div>
+        </>
+      ) : (
         <>
           {verPrecos && <TabelaPrecos precos={dados.precos} />}
 
           <PainelTrimestre dados={dados} editavel={editavel} aoMudar={() => void carregar()} />
 
-          {/* Resumo financeiro do campo */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Cartao icone={BookMarked} rotulo="Revistas no total" valor={String(dados.resumo.revistas)} nota="aluno + professor" />
-            <Cartao icone={Coins} rotulo="Total do pedido" valor={dinheiro.format(dados.resumo.totalDevido)} nota="calculado" />
-            <Cartao icone={HandCoins} rotulo="Já pago" valor={dinheiro.format(dados.resumo.totalPago)} nota="soma das baixas" cor="text-emerald-300" />
+          {/* Indicadores do trimestre */}
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Cartao icone={BookMarked} rotulo="Pedidos do trimestre" valor={String(pedidosDoTrimestre)} nota={`de ${dados.resumo.congregacoes} congregações`} />
+            <Cartao icone={Coins} rotulo="Total pedido" valor={dinheiro.format(dados.resumo.totalDevido)} nota="calculado" />
+            <Cartao icone={HandCoins} rotulo="Total pago" valor={dinheiro.format(dados.resumo.totalPago)} nota="soma das baixas" cor="text-emerald-300" />
             <Cartao
               icone={Coins}
               rotulo="Saldo a pagar"
@@ -160,27 +183,16 @@ export default function RevistasPage() {
               nota={dados.resumo.percentualPago !== null ? `${dados.resumo.percentualPago}% do pedido pago` : "total menos o pago"}
               cor={dados.resumo.saldo > 0 ? "text-gold-200" : "text-emerald-300"}
             />
-          </div>
-
-          {/* Congregações por situação de pagamento */}
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            <Cartao
-              icone={BadgeCheck}
-              rotulo="Congregações em dia"
-              valor={String(dados.resumo.congregacoesPagas)}
-              nota={`de ${dados.resumo.congregacoes - dados.resumo.congregacoesSemPedido} com pedido`}
-              cor="text-emerald-300"
-            />
             <Cartao
               icone={Clock}
-              rotulo="Pendentes"
+              rotulo="Pedidos pendentes"
               valor={String(dados.resumo.congregacoesPendentes)}
               nota="dentro do prazo"
               cor="text-gold-200"
             />
             <Cartao
               icone={AlertTriangle}
-              rotulo="Em atraso"
+              rotulo="Pedidos em atraso"
               valor={String(dados.resumo.congregacoesAtrasadas)}
               nota="prazo já passou"
               cor={dados.resumo.congregacoesAtrasadas > 0 ? "text-flame-400" : "text-brand-100/80"}
@@ -188,10 +200,10 @@ export default function RevistasPage() {
           </div>
 
           {dados.alertas.length > 0 && (
-            <AlertasRevistas alertas={dados.alertas} aoAbrirCongregacao={(id) => setAberta(id)} />
+            <AlertasRevistas alertas={dados.alertas} congregacoes={dados.congregacoes} trimestre={trimestre} editavel={editavel} aoAbrirCongregacao={(id) => setAberta(id)} />
           )}
 
-          {/* Congregações */}
+          {/* Pedidos */}
           <div className="mt-4 space-y-2.5">
             {dados.congregacoes.length === 0 ? (
               <EstadoVazio mensagem="Nenhuma congregação no seu alcance." />
@@ -200,7 +212,7 @@ export default function RevistasPage() {
                 <CartaoCongregacao
                   key={c.congId}
                   cong={c}
-                  periodo={periodo}
+                  trimestre={trimestre}
                   aberto={aberta === c.congId}
                   aoAlternar={() => setAberta(aberta === c.congId ? null : c.congId)}
                   editavel={editavel}
@@ -290,22 +302,6 @@ const VARIANTE_SITUACAO: Record<SituacaoTrimestre, "info" | "neutro" | "sucesso"
   atraso: "erro",
 };
 
-/** Verde / amarelo / vermelho — o pedido original em três cores; "urgente" e
- * "vencido" dividem o vermelho por texto, não por cor nova. */
-const COR_NIVEL: Record<NivelPrazo, { texto: string; ponto: string }> = {
-  tranquilo: { texto: "text-emerald-300", ponto: "bg-emerald-400" },
-  atencao: { texto: "text-gold-200", ponto: "bg-gold-400" },
-  urgente: { texto: "text-flame-400", ponto: "bg-flame-500" },
-  vencido: { texto: "text-flame-400", ponto: "bg-flame-500" },
-};
-
-function textoPrazo(prazo: Prazo): string {
-  if (prazo.nivel === "vencido") return `vencido há ${Math.abs(prazo.dias)} dia(s)`;
-  if (prazo.dias === 0) return "vence hoje";
-  if (prazo.dias === 1) return "vence amanhã";
-  return `${prazo.dias} dias restantes`;
-}
-
 function PainelTrimestre({ dados, editavel, aoMudar }: { dados: Dados; editavel: boolean; aoMudar: () => void }) {
   const [editando, setEditando] = useState(false);
   const [tema, setTema] = useState(dados.trimestre.tema ?? "");
@@ -320,6 +316,7 @@ function PainelTrimestre({ dados, editavel, aoMudar }: { dados: Dados; editavel:
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          trimestre: dados.trimestre.chave,
           tema: tema.trim() || null,
           dataLimitePedido: pedido || null,
           dataLimite: pagamento || null,
@@ -408,27 +405,13 @@ function PainelTrimestre({ dados, editavel, aoMudar }: { dados: Dados; editavel:
       ) : (
         <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2">
           {dados.prazos.pedido && (
-            <div className="flex items-center gap-2">
-              <span className={cn("h-2 w-2 shrink-0 rounded-full", COR_NIVEL[dados.prazos.pedido.nivel].ponto)} />
-              <p className="text-[0.8rem] text-brand-100/80">
-                Prazo do pedido:{" "}
-                <strong className="text-brand-50">{fmtData.format(new Date(`${dados.dataLimitePedido}T12:00:00`))}</strong>
-                {" — "}
-                <span className={COR_NIVEL[dados.prazos.pedido.nivel].texto}>{textoPrazo(dados.prazos.pedido)}</span>
-              </p>
-            </div>
+            <PrazoTexto rotulo="Prazo do pedido" data={dados.dataLimitePedido!} dias={dados.prazos.pedido.dias} nivel={dados.prazos.pedido.nivel} />
           )}
           <div className="flex items-center gap-2">
-            <span className={cn("h-2 w-2 shrink-0 rounded-full", COR_NIVEL[dados.prazos.pagamento.nivel].ponto)} />
-            <p className="text-[0.8rem] text-brand-100/80">
-              Prazo de pagamento:{" "}
-              <strong className="text-brand-50">{fmtData.format(new Date(`${dados.dataLimitePagamento}T12:00:00`))}</strong>
-              {" — "}
-              <span className={COR_NIVEL[dados.prazos.pagamento.nivel].texto}>{textoPrazo(dados.prazos.pagamento)}</span>
-              <span className="ml-1.5 text-[0.72rem] text-brand-200/45">
-                {dados.dataLimiteDefinida ? "(definido)" : "(padrão: lição 02 do próximo trimestre)"}
-              </span>
-            </p>
+            <PrazoTexto rotulo="Prazo de pagamento" data={dados.dataLimitePagamento} dias={dados.prazos.pagamento.dias} nivel={dados.prazos.pagamento.nivel} />
+            <span className="text-[0.72rem] text-brand-200/45">
+              {dados.dataLimiteDefinida ? "(definido)" : "(padrão: lição 02 do próximo trimestre)"}
+            </span>
           </div>
         </div>
       )}
@@ -437,47 +420,76 @@ function PainelTrimestre({ dados, editavel, aoMudar }: { dados: Dados; editavel:
 }
 
 /* ------------------------------------------------------------------ *
- * Alertas automáticos
+ * Alertas automáticos — sempre com uma ação, nunca só um aviso passivo
  * ------------------------------------------------------------------ */
 
 const ICONE_ALERTA_REVISTA: Record<TipoAlertaRevista, typeof AlertCircle> = {
   "pagamento-vencido": AlertCircle,
   "prazo-encerrando": Clock,
   "sem-pagamento": HandCoins,
-  "sem-pedido": Users,
+  "sem-pedido": FilePlus2,
 };
 
-function AlertasRevistas({ alertas, aoAbrirCongregacao }: { alertas: AlertaRevista[]; aoAbrirCongregacao: (congId: number) => void }) {
+function AlertasRevistas({
+  alertas,
+  congregacoes,
+  trimestre,
+  editavel,
+  aoAbrirCongregacao,
+}: {
+  alertas: AlertaRevista[];
+  congregacoes: CongPedido[];
+  trimestre: string;
+  editavel: boolean;
+  aoAbrirCongregacao: (congId: number) => void;
+}) {
+  const congPorId = new Map(congregacoes.map((c) => [c.congId, c]));
+
   return (
     <section className="mt-4">
       <h2 className="mb-2 px-1 text-[0.78rem] font-semibold uppercase tracking-[0.14em] text-brand-200/50">
-        Alertas ({alertas.length})
+        Ação necessária ({alertas.length})
       </h2>
       <div className="space-y-2">
         {alertas.map((a, i) => {
           const Icone = ICONE_ALERTA_REVISTA[a.tipo] ?? AlertTriangle;
           const critico = a.nivel === "critico";
+          const cong = congPorId.get(a.congId);
+          const semPedido = a.tipo === "sem-pedido";
+
           return (
-            <button
+            <div
               key={i}
-              type="button"
-              onClick={() => aoAbrirCongregacao(a.congId)}
               className={cn(
-                "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-colors duration-300",
-                critico
-                  ? "border-flame-500/30 bg-flame-500/[0.06] hover:bg-flame-500/[0.09]"
-                  : "border-gold-400/25 bg-gold-400/[0.05] hover:bg-gold-400/[0.08]",
+                "flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3.5",
+                critico ? "border-flame-500/30 bg-flame-500/[0.06]" : "border-gold-400/25 bg-gold-400/[0.05]",
               )}
             >
               <Icone className={cn("mt-0.5 h-4 w-4 shrink-0", critico ? "text-flame-400" : "text-gold-300")} />
               <div className="min-w-0 flex-1">
                 <p className="text-[0.84rem] text-brand-50">{a.titulo}</p>
                 <p className="mt-0.5 text-[0.76rem] leading-relaxed text-brand-200/60">{a.descricao}</p>
+                {cong && (
+                  <p className="mt-1 text-[0.72rem] text-brand-200/45">
+                    {cong.classes.length} {cong.classes.length === 1 ? "classe" : "classes"} · {cong.classes.reduce((s, c) => s + c.alunos, 0)} alunos
+                  </p>
+                )}
               </div>
-              <Badge variant={critico ? "erro" : "alerta"} className="shrink-0">
-                {critico ? "crítico" : "atenção"}
-              </Badge>
-            </button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge variant={critico ? "erro" : "alerta"}>{critico ? "crítico" : "atenção"}</Badge>
+                {editavel && (
+                  semPedido ? (
+                    <Button asChild size="sm">
+                      <Link href={`/dashboard/revistas/novo?congId=${a.congId}&trimestre=${trimestre}`}>Fazer Pedido</Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => aoAbrirCongregacao(a.congId)}>
+                      Ver detalhe
+                    </Button>
+                  )
+                )}
+              </div>
+            </div>
           );
         })}
       </div>
@@ -485,20 +497,11 @@ function AlertasRevistas({ alertas, aoAbrirCongregacao }: { alertas: AlertaRevis
   );
 }
 
-const BADGE_SITUACAO_CONG: Record<SituacaoCongregacao, { texto: string; variant: "sucesso" | "erro" | "alerta" | "neutro" } | null> = {
-  quitado: { texto: "quitado", variant: "sucesso" },
-  atraso: { texto: "atrasado", variant: "erro" },
-  parcial: null, // sem badge — a barra de progresso já mostra o andamento
-  pendente: null,
-  "sem-pedido": { texto: "sem pedido", variant: "neutro" },
-};
-
-function CartaoCongregacao({ cong, periodo, aberto, aoAlternar, editavel, aoMudar }: {
-  cong: CongPedido; periodo: "atual" | "proximo"; aberto: boolean; aoAlternar: () => void; editavel: boolean; aoMudar: () => void;
+function CartaoCongregacao({ cong, trimestre, aberto, aoAlternar, editavel, aoMudar }: {
+  cong: CongPedido; trimestre: string; aberto: boolean; aoAlternar: () => void; editavel: boolean; aoMudar: () => void;
 }) {
   const pct = cong.totalDevido > 0 ? Math.min(100, (cong.pago / cong.totalDevido) * 100) : 0;
   const quitado = cong.situacao === "quitado";
-  const badge = BADGE_SITUACAO_CONG[cong.situacao];
 
   return (
     <div className="glass-panel overflow-hidden rounded-2xl">
@@ -508,20 +511,14 @@ function CartaoCongregacao({ cong, periodo, aberto, aoAlternar, editavel, aoMuda
         <div className="min-w-0 flex-1">
           <p className="truncate font-display text-[0.92rem] font-semibold text-white">{cong.nome}</p>
           <p className="text-[0.72rem] text-brand-200/55">
-            {cong.pedido?.confirmado ? `${cong.pedido.revistas} revistas pedidas` : "pedido não confirmado"}
+            {cong.pedido?.confirmado ? `${cong.pedido.revistas} revistas pedidas` : cong.pedido ? "rascunho iniciado" : "pedido não iniciado"}
             {" · "}
             {cong.classes.length} classe(s)
           </p>
         </div>
         <div className="shrink-0 text-right">
           <p className="text-[0.86rem] font-semibold tabular-nums text-white">{dinheiro.format(cong.totalDevido)}</p>
-          {badge ? (
-            <Badge variant={badge.variant}>{badge.texto}</Badge>
-          ) : (
-            <p className={cn("text-[0.72rem] tabular-nums", cong.situacao === "atraso" ? "text-flame-400" : "text-gold-200/80")}>
-              saldo {dinheiro.format(cong.saldo)}
-            </p>
-          )}
+          <SituacaoBadge situacao={cong.situacao} pedido={cong.pedido} />
         </div>
       </button>
 
@@ -550,9 +547,16 @@ function CartaoCongregacao({ cong, periodo, aberto, aoAlternar, editavel, aoMuda
                     </p>
                   )}
                 </>
+              ) : cong.pedido ? (
+                <>
+                  <p className="text-[0.82rem] text-brand-50">Rascunho salvo, ainda não confirmado</p>
+                  <p className="mt-0.5 text-[0.72rem] text-brand-200/45">
+                    {cong.pedido.revistas} revista(s) digitada(s) até agora, {dinheiro.format(cong.pedido.total)}
+                  </p>
+                </>
               ) : (
                 <>
-                  <p className="text-[0.82rem] text-brand-50">Ainda sem pedido confirmado neste trimestre</p>
+                  <p className="text-[0.82rem] text-brand-50">Pedido ainda não iniciado neste trimestre</p>
                   <p className="mt-0.5 text-[0.72rem] text-brand-200/45">
                     Sugestão calculada: {cong.sugestao.revistas} revista(s), {dinheiro.format(cong.sugestao.total)}
                   </p>
@@ -560,13 +564,11 @@ function CartaoCongregacao({ cong, periodo, aberto, aoAlternar, editavel, aoMuda
               )}
             </div>
             {editavel && (
-              <Link
-                href={`/dashboard/revistas/pedido/${cong.congId}?trimestre=${periodo}`}
-                className="flex shrink-0 items-center gap-1.5 rounded-lg border border-gold-400/30 bg-gold-400/10 px-3 py-1.5 text-[0.78rem] font-medium text-gold-200 transition-colors hover:bg-gold-400/20"
-              >
-                <ClipboardList className="h-3.5 w-3.5" />
-                {cong.pedido?.confirmado ? "Ver pedido" : "Fazer Pedido"}
-              </Link>
+              <Button asChild size="sm">
+                <Link href={cong.pedido?.confirmado ? `/dashboard/revistas/pedido/${cong.congId}?trimestre=${trimestre}` : `/dashboard/revistas/novo?congId=${cong.congId}&trimestre=${trimestre}`}>
+                  {cong.pedido?.confirmado ? "Ver pedido" : cong.pedido ? "Continuar pedido" : "Fazer Pedido"}
+                </Link>
+              </Button>
             )}
           </div>
 

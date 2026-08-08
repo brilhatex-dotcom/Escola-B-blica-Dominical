@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { dataCivil, erro, lerCorpo, responder, texto, textoOpcional } from "@/lib/api";
 import { escopoDeEscrita, exigirCongregacaoPermitida } from "@/lib/auth/escopo";
+import { crenteValido } from "@/lib/ebd/visitante";
 
 /**
  * Um visitante: editar e excluir.
@@ -14,11 +15,9 @@ export const dynamic = "force-dynamic";
 
 type Contexto = { params: Promise<{ id: string }> };
 
-/** `corpo.crente`: "sim" | "nao" | "" (não perguntado) — nunca lançado em nenhum dos três casos. */
-function lerCrente(valor: unknown): boolean | null {
-  if (valor === "sim") return true;
-  if (valor === "nao") return false;
-  return null;
+/** `corpo.crente`: uma das três chaves de `OPCOES_CRENTE`, ou "" (não perguntado). */
+function lerCrente(valor: unknown): string | null {
+  return crenteValido(valor) ? valor : null;
 }
 
 export async function PATCH(req: Request, { params }: Contexto) {

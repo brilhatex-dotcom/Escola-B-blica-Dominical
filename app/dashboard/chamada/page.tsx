@@ -25,7 +25,7 @@ import {
   Filtro,
 } from "@/components/dashboard/PaginaModulo";
 import { domingoMaisRecente, iniciais } from "@/lib/dashboard/formato";
-import { crenteParaTexto, rotuloCrente } from "@/lib/ebd/visitante";
+import { OPCOES_CRENTE, rotuloCrente, varianteCrente } from "@/lib/ebd/visitante";
 import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
@@ -92,7 +92,7 @@ interface VisitanteDoDia {
   local: string | null;
   tel: string | null;
   obs: string | null;
-  crente: boolean | null;
+  crente: string | null;
   anos: number | null;
 }
 
@@ -108,13 +108,10 @@ const CAMPOS_VISITANTE: readonly CampoForm[] = [
   { chave: "tel", rotulo: "Telefone", tipo: "telefone", placeholder: "(87) 9 9999-9999" },
   {
     chave: "crente",
-    rotulo: "Já é crente?",
+    rotulo: "Situação religiosa",
     tipo: "lista",
-    opcoes: [
-      { valor: "sim", rotulo: "Crente — frequenta outra igreja" },
-      { valor: "nao", rotulo: "Não é evangélico" },
-    ],
-    ajuda: "Decide o retorno: convidar de volta, ou apresentar o evangelho.",
+    opcoes: OPCOES_CRENTE.map((o) => ({ valor: o.chave, rotulo: o.rotulo })),
+    ajuda: "Decide o retorno: reconduzir à igreja, convidar de volta, ou apresentar o evangelho.",
   },
   { chave: "obs", rotulo: "Observação", tipo: "area", placeholder: "quem convidou, se quer retorno…" },
 ];
@@ -728,7 +725,7 @@ export default function ChamadaPage() {
                     </div>
 
                     {rotuloCrente(v.crente) && (
-                      <Badge variant={v.crente ? "info" : "alerta"}>{rotuloCrente(v.crente)}</Badge>
+                      <Badge variant={varianteCrente(v.crente)}>{rotuloCrente(v.crente)}</Badge>
                     )}
 
                     {podeGravarVisitante && (
@@ -786,7 +783,7 @@ export default function ChamadaPage() {
           nasc: visitanteEmEdicao?.nasc?.slice(0, 10) ?? "",
           local: visitanteEmEdicao?.local ?? "",
           tel: visitanteEmEdicao?.tel ?? "",
-          crente: crenteParaTexto(visitanteEmEdicao?.crente),
+          crente: visitanteEmEdicao?.crente ?? "",
           obs: visitanteEmEdicao?.obs ?? "",
         }}
         aoGravar={(v) =>
