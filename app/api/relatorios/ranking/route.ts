@@ -19,6 +19,22 @@ import { alvoDaConsulta, dataOu, MINIMO_DE_CHAMADAS, periodoPadrao, recorteSql }
  * estava presente marca 100%. Daí o piso de chamadas — abaixo dele a linha
  * aparece, mas FORA da classificação, com o motivo escrito.
  * ============================================================================
+ *
+ * ============================================================================
+ * O RANKING DE CONGREGAÇÕES NUNCA SE RECORTA — SENÃO NÃO É RANKING
+ *
+ * Um "ranking" com uma linha só (a própria congregação de quem está vendo)
+ * não classifica nada: a pergunta que essa tela responde é "em que posição a
+ * minha congregação está, comparada com as outras do campo?", e essa
+ * pergunta exige ver as outras. Por isso a consulta de congregações roda
+ * sempre sem filtro — inclusive ignorando `?cong=`, que só faz sentido para
+ * o ranking de CLASSES (comparar as classes de uma congregação entre si é
+ * uma pergunta razoável; comparar UMA congregação com ela mesma não é). O
+ * ranking de classes continua recortado como sempre: comparar a classe de
+ * uma congregação de 80 pessoas com a de uma de 15 mistura populações
+ * diferentes, e quem só enxerga a própria congregação não tem o que fazer
+ * com o resultado de outra.
+ * ============================================================================
  */
 export const dynamic = "force-dynamic";
 
@@ -54,7 +70,7 @@ export async function GET(req: Request) {
                count(DISTINCT f."alunoId")           AS alunos
         FROM "Frequencias" f
         JOIN "Congregacoes" g ON g.id = f."congId"
-        WHERE f.data BETWEEN ${de} AND ${ate} ${soAlvo}
+        WHERE f.data BETWEEN ${de} AND ${ate}
         GROUP BY g.id, g.nome
       `,
       prisma.$queryRaw<LinhaBruta[]>`

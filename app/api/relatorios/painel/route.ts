@@ -59,10 +59,28 @@ export async function GET(req: Request) {
     const ate = dataOu(url.searchParams.get("ate"), ateP);
     const meio = new Date((de.getTime() + ate.getTime()) / 2);
 
-    const soCongFreq = recorteSql(Prisma.sql`"congId"`, alvo);
-    const soCongVis = recorteSql(Prisma.sql`"congId"`, alvo);
-    const soCongG = recorteSql(Prisma.sql`g.id`, alvo);
-    const soCongAluno = recorteSql(Prisma.sql`a."congId"`, alvo);
+    /*
+     * SEM recorte nas quatro linhas abaixo — de propósito, e é a mudança da
+     * Fase 23.
+     *
+     * `porCongregacao`, `domingosCampo`, `serieMensalCampo` e
+     * `faltososPorCong` são a base de DUAS coisas: o `campo: CampoBI` (o IGE
+     * que abre a tela, a evolução de 12 meses, a primeira frase da análise) e
+     * o `congregacoes: CongregacaoBI[]` (o detalhe por congregação). O
+     * pedido da liderança foi "quem só enxerga a própria congregação
+     * continua vendo só o PRÓPRIO detalhe, mas o retrato do campo que abre a
+     * tela precisa ser o campo de verdade, não uma congregação sozinha
+     * disfarçada de campo". Por isso as quatro consultas rodam SEM filtro, e
+     * só depois — depois de calcular `campo` a partir de TUDO — é que
+     * `congregacoesBI` é recortada para o que a sessão pode ver (mais abaixo,
+     * `congregacoesVisiveis`). `classesSemChamada` e `totais` continuam
+     * recortados como sempre: são detalhe operacional de outras
+     * congregações, não o retrato geral.
+     */
+    const soCongFreq = Prisma.empty;
+    const soCongVis = Prisma.empty;
+    const soCongG = Prisma.empty;
+    const soCongAluno = Prisma.empty;
 
     /*
      * QUANTOS DOMINGOS O PERÍODO TEM — calculado em JavaScript, não em SQL.
@@ -262,6 +280,11 @@ export async function GET(req: Request) {
       };
     });
 
+    // O detalhe por congregação continua recortado — `campo` (calculado
+    // abaixo, a partir de `porCongregacao` inteiro) é que passou a ser
+    // sempre o campo de verdade.
+    const congregacoesVisiveis = alvo ? congregacoesBI.filter((c) => alvo.includes(c.congId)) : congregacoesBI;
+
     /* ------------------------------------------------------------ *
      * O campo — a MESMA fórmula, sobre a soma de tudo (não a média das
      * médias): evita o paradoxo de Simpson de misturar congregações de
@@ -407,17 +430,19 @@ export async function GET(req: Request) {
     const dadosBI = {
       periodo: { de: de.toISOString().slice(0, 10), ate: ate.toISOString().slice(0, 10) },
       campo,
-      congregacoes: congregacoesBI,
+      congregacoes: congregacoesVisiveis,
       classesSemChamada,
     };
 
     return {
       ...dadosBI,
-      congregacoes: congregacoesBI.map((c) => ({ ...c, dadosSuficientes: temDadoSuficiente(c) })),
+      congregacoes: congregacoesVisiveis.map((c) => ({ ...c, dadosSuficientes: temDadoSuficiente(c) })),
       totais: {
         pessoas: await prisma.pessoa.count({ where: { ativo: true } }),
         alunos: await prisma.aluno.count({ where: { ativo: true, congId: alvo ? { in: alvo } : undefined } }),
         classes: await prisma.classe.count({ where: { ativa: true, congId: alvo ? { in: alvo } : undefined } }),
+        // Sempre o campo inteiro — mesmo motivo do `campo: CampoBI`: dá a
+        // noção do tamanho do campo, sem expor o detalhe de cada uma.
         congregacoes: porCongregacao.length,
         professores: await contarPorCargo("Professor", alvo),
         dirigentes: await contarPorCargo(["Dirigente", "Coordenador de Congregação"], alvo),

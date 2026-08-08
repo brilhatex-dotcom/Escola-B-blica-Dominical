@@ -11,6 +11,7 @@ import {
   EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
 import { FiltroPeriodo } from "@/components/dashboard/FiltroPeriodo";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 
 /**
  * Ranking por congregação e por classe.
@@ -35,7 +36,7 @@ interface Linha {
 
 const MEDALHAS = ["text-gold-300", "text-brand-100", "text-[#b87333]"];
 
-function Tabela({ titulo, linhas, minimo }: { titulo: string; linhas: Linha[]; minimo: number }) {
+function Tabela({ titulo, linhas, minimo, minhaId }: { titulo: string; linhas: Linha[]; minimo: number; minhaId?: number | null }) {
   const classificados = linhas.filter((l) => l.classificado);
   const fora = linhas.filter((l) => !l.classificado);
 
@@ -59,39 +60,52 @@ function Tabela({ titulo, linhas, minimo }: { titulo: string; linhas: Linha[]; m
         <EstadoVazio mensagem="Nenhum registro no período." />
       ) : (
         <ul className="divide-y divide-white/6">
-          {classificados.map((l, i) => (
-            <li key={`${l.id}-${l.nome}`} className="flex items-center gap-3 px-5 py-2.5">
-              <span
-                className={cn(
-                  "w-7 shrink-0 text-center font-display text-[0.9rem] font-semibold tabular-nums",
-                  i < 3 ? MEDALHAS[i] : "text-brand-200/40",
-                )}
+          {classificados.map((l, i) => {
+            const ehMinha = minhaId != null && l.id === minhaId;
+            return (
+              <li
+                key={`${l.id}-${l.nome}`}
+                className={cn("flex items-center gap-3 px-5 py-2.5", ehMinha && "bg-gold-400/[0.06]")}
               >
-                {i < 3 ? <Medal className={cn("mx-auto h-4 w-4", MEDALHAS[i])} /> : i + 1}
-              </span>
+                <span
+                  className={cn(
+                    "w-7 shrink-0 text-center font-display text-[0.9rem] font-semibold tabular-nums",
+                    i < 3 ? MEDALHAS[i] : "text-brand-200/40",
+                  )}
+                >
+                  {i < 3 ? <Medal className={cn("mx-auto h-4 w-4", MEDALHAS[i])} /> : i + 1}
+                </span>
 
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[0.86rem] text-brand-50">{l.nome}</p>
-                <p className="truncate text-[0.72rem] text-brand-200/50">
-                  {l.congregacao ? `${l.congregacao} · ` : ""}
-                  {l.domingos} {l.domingos === 1 ? "domingo" : "domingos"} · {l.alunos} alunos
-                </p>
-              </div>
-
-              <div className="hidden w-40 shrink-0 sm:block">
-                <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
-                  <span
-                    className="block h-full rounded-full bg-gradient-to-r from-brand-400 to-gold-400"
-                    style={{ width: `${Math.min(100, l.taxa)}%` }}
-                  />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.86rem] text-brand-50">
+                    {l.nome}
+                    {ehMinha && (
+                      <span className="ml-1.5 rounded-full bg-gold-400/15 px-1.5 py-0.5 text-[0.62rem] font-medium uppercase tracking-wide text-gold-200">
+                        sua congregação
+                      </span>
+                    )}
+                  </p>
+                  <p className="truncate text-[0.72rem] text-brand-200/50">
+                    {l.congregacao ? `${l.congregacao} · ` : ""}
+                    {l.domingos} {l.domingos === 1 ? "domingo" : "domingos"} · {l.alunos} alunos
+                  </p>
                 </div>
-              </div>
 
-              <span className="w-20 shrink-0 text-right text-[0.86rem] font-semibold tabular-nums text-gold-200">
-                {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
-              </span>
-            </li>
-          ))}
+                <div className="hidden w-40 shrink-0 sm:block">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+                    <span
+                      className="block h-full rounded-full bg-gradient-to-r from-brand-400 to-gold-400"
+                      style={{ width: `${Math.min(100, l.taxa)}%` }}
+                    />
+                  </div>
+                </div>
+
+                <span className="w-20 shrink-0 text-right text-[0.86rem] font-semibold tabular-nums text-gold-200">
+                  {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
+                </span>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -111,7 +125,12 @@ function Tabela({ titulo, linhas, minimo }: { titulo: string; linhas: Linha[]; m
             trimestre inteiro.
           </p>
           <p className="mt-1 text-[0.72rem] text-brand-200/40">
-            {fora.map((f) => f.nome).join(" · ")}
+            {fora.map((f, i) => (
+              <span key={`${f.id}-${f.nome}`} className={f.id === minhaId ? "font-medium text-gold-200" : undefined}>
+                {i > 0 && " · "}
+                {f.nome}
+              </span>
+            ))}
           </p>
         </div>
       )}
@@ -120,6 +139,7 @@ function Tabela({ titulo, linhas, minimo }: { titulo: string; linhas: Linha[]; m
 }
 
 export default function RankingPage() {
+  const { sessao } = useAcesso();
   const [de, setDe] = useState("");
   const [ate, setAte] = useState("");
   const [dados, setDados] = useState<{
@@ -165,7 +185,7 @@ export default function RankingPage() {
         <EsqueletoLista linhas={8} />
       ) : (
         <div className="space-y-4">
-          <Tabela titulo="Congregações" linhas={dados.congregacoes} minimo={dados.minimoDeDomingos} />
+          <Tabela titulo="Congregações" linhas={dados.congregacoes} minimo={dados.minimoDeDomingos} minhaId={sessao?.congId} />
           <Tabela titulo="Classes" linhas={dados.classes} minimo={dados.minimoDeDomingos} />
         </div>
       )}
