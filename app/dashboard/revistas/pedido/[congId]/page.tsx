@@ -1,11 +1,10 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, BadgeCheck, ClipboardList, Loader2, Lock, Printer, RotateCcw } from "lucide-react";
+import { ArrowLeft, BadgeCheck, FilePlus2, Loader2, PenLine, Printer, ReceiptText, RotateCcw } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro } from "@/components/dashboard/PaginaModulo";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
@@ -13,12 +12,22 @@ import { SeletorTrimestre } from "@/components/revistas/SeletorTrimestre";
 import { proximoTrimestre, trimestreDe, trimestreValido } from "@/lib/revistas/trimestre";
 
 /**
- * Fazer Pedido — a tela que faltava: digitar a quantidade de cada categoria
- * e CONFIRMAR, travando a quantidade e o preço daquele momento.
+ * Detalhe do Pedido — a leitura de UM pedido, confirmado ou em rascunho.
  *
- * Abre no próximo trimestre por padrão (a CPAD recebe pedido com antecedência
- * — ver `lib/revistas/trimestre.ts`), com o seletor de trimestre para
- * escolher qualquer um dos quatro mostrados.
+ * ============================================================================
+ * QUEM EDITA A QUANTIDADE É SÓ O ASSISTENTE, NUNCA ESTA TELA
+ *
+ * Até a Fase 22 esta página TAMBÉM digitava quantidade — o mesmo trabalho que
+ * o assistente de Novo Pedido (`/dashboard/revistas/novo`) faz agora, em
+ * campos de texto soltos numa tabela, sem as sugestões, sem confirmação em
+ * etapas. Duas telas editando a mesma coisa por caminhos diferentes é onde
+ * bugs de sincronização nascem — e onde a mesma pergunta ("quanto eu pedi?")
+ * tinha duas respostas possíveis, dependendo de qual link a pessoa clicou.
+ *
+ * Esta tela agora só LÊ: confirmado, mostra a tabela travada, o botão de
+ * imprimir e o de reabrir. Rascunho ou pedido nunca começado, ela aponta para
+ * o assistente — sem oferecer um segundo jeito de fazer a mesma coisa.
+ * ============================================================================
  */
 
 interface Linha {
@@ -26,6 +35,7 @@ interface Linha {
   precoUnitario: number | null; quantidade: number; sugestao: number;
 }
 interface Dados {
+  id: number | null;
   congId: number; congNome: string;
   trimestre: { chave: string; rotulo: string };
   confirmado: boolean; confirmadoEm: string | null; confirmadoPor: string | null;
@@ -37,13 +47,12 @@ const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 const fmtDataHora = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const fmtDataAssinatura = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
-export default function FazerPedidoPage({ params }: { params: Promise<{ congId: string }> }) {
+export default function DetalhePedidoPage({ params }: { params: Promise<{ congId: string }> }) {
   const { congId } = use(params);
-  // Chegando da tela principal, a URL já traz a chave exata do trimestre
-  // escolhido lá ("3T-2026"); "atual" continua reconhecido por link antigo.
-  // Sem nada na URL, o padrão é o próximo (a CPAD recebe pedido com
-  // antecedência).
-  const trimestreDaUrl = useSearchParams().get("trimestre");
+  const parametros = useSearchParams();
+  // Chegando da tela principal ou do assistente, a URL já traz a chave exata
+  // do trimestre ("3T-2026"); "atual" continua reconhecido por link antigo.
+  const trimestreDaUrl = parametros.get("trimestre");
   const [trimestre, setTrimestre] = useState(() => {
     if (trimestreDaUrl && trimestreValido(trimestreDaUrl)) return trimestreDaUrl;
     if (trimestreDaUrl === "atual") return trimestreDe(new Date()).chave;
@@ -51,8 +60,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
   });
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [quantidades, setQuantidades] = useState<Record<string, string>>({});
-  const [salvando, setSalvando] = useState<"rascunho" | "confirmar" | "reabrir" | null>(null);
+  const [reabrindo, setReabrindo] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const { podeGravar } = useAcesso();
   const editavel = podeGravar("revistas");
@@ -67,9 +75,6 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
       const corpo = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(corpo.erro ?? `HTTP ${res.status}`);
       setDados(corpo);
-      setQuantidades(
-        Object.fromEntries((corpo.linhas as Linha[]).map((l) => [`${l.categoria}|${l.tipo}`, l.quantidade > 0 ? String(l.quantidade) : ""])),
-      );
     } catch (e) {
       setErro((e as Error).message || "Não foi possível carregar o pedido.");
     }
@@ -77,64 +82,19 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
 
   useEffect(() => { setDados(null); void carregar(); }, [carregar]);
 
-  const totalDigitado = useMemo(() => {
-    if (!dados) return 0;
-    return dados.linhas.reduce((s, l) => {
-      const q = Number(quantidades[`${l.categoria}|${l.tipo}`] || 0);
-      return s + (Number.isFinite(q) && l.precoUnitario !== null ? q * l.precoUnitario : 0);
-    }, 0);
-  }, [dados, quantidades]);
-  const revistasDigitadas = useMemo(() => {
-    if (!dados) return 0;
-    return dados.linhas.reduce((s, l) => s + (Number(quantidades[`${l.categoria}|${l.tipo}`]) || 0), 0);
-  }, [dados, quantidades]);
-
-  async function salvarRascunho(): Promise<boolean> {
-    setSalvando("rascunho");
-    setMsg(null);
-    try {
-      const itens = Object.entries(quantidades).map(([chave, valor]) => {
-        const [categoria, tipo] = chave.split("|");
-        return { categoria, tipo, quantidade: valor === "" ? 0 : Number(valor) };
-      });
-      const res = await fetch("/api/revistas/pedido", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ congId: Number(congId), trimestre, itens }),
-      });
-      const corpo = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível salvar.");
-      return true;
-    } catch (e) {
-      setMsg((e as Error).message);
-      return false;
-    } finally {
-      setSalvando(null);
-    }
-  }
-
-  async function confirmar() {
-    const salvou = await salvarRascunho();
-    if (!salvou) return;
-    setSalvando("confirmar");
-    try {
-      const res = await fetch("/api/revistas/pedido", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ congId: Number(congId), trimestre, acao: "confirmar" }),
-      });
-      const corpo = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível confirmar.");
-      await carregar();
-    } catch (e) {
-      setMsg((e as Error).message);
-    } finally {
-      setSalvando(null);
-    }
-  }
+  // "Imprimir Pedido" na tela de sucesso do assistente chega aqui com
+  // `?imprimir=1` — dispara a impressão sozinho, assim que o pedido confirmado
+  // estiver na tela, sem exigir um segundo clique.
+  const jaImprimiu = useRef(false);
+  useEffect(() => {
+    if (jaImprimiu.current || !dados?.confirmado || parametros.get("imprimir") !== "1") return;
+    jaImprimiu.current = true;
+    const id = setTimeout(() => window.print(), 300);
+    return () => clearTimeout(id);
+  }, [dados, parametros]);
 
   async function reabrir() {
-    setSalvando("reabrir");
+    setReabrindo(true);
     setMsg(null);
     try {
       const res = await fetch("/api/revistas/pedido", {
@@ -148,21 +108,23 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
-      setSalvando(null);
+      setReabrindo(false);
     }
   }
+
+  const linkAssistente = `/dashboard/revistas/novo?congId=${congId}&trimestre=${trimestre}`;
 
   return (
     <>
       <div className="print:hidden">
         <Link href="/dashboard/revistas" className="mb-3 inline-flex items-center gap-1.5 text-[0.78rem] text-brand-200/60 transition-colors duration-300 hover:text-gold-200">
           <ArrowLeft className="h-3.5 w-3.5" />
-          Pedido de Lição
+          Pedidos de Lições
         </Link>
 
         <CabecalhoModulo
-          icone={ClipboardList}
-          titulo="Fazer Pedido"
+          icone={ReceiptText}
+          titulo="Detalhe do Pedido"
           descricao={dados ? `${dados.congNome} — ${dados.trimestre.rotulo}` : "Carregando…"}
         >
           <SeletorTrimestre selecionado={trimestre} aoSelecionar={setTrimestre} />
@@ -177,7 +139,25 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
 
       {erro ? <EstadoErro mensagem={erro} />
       : !dados ? <EsqueletoLista linhas={6} />
-      : (
+      : dados.id === null ? (
+        <div className="glass-panel rounded-2xl px-6 py-14 text-center print:hidden">
+          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.06] ring-1 ring-gold-400/20">
+            <FilePlus2 className="h-6 w-6 text-gold-300" />
+          </span>
+          <p className="mx-auto mt-4 max-w-sm text-[0.94rem] text-brand-50">
+            {dados.congNome} ainda não tem pedido neste trimestre.
+          </p>
+          <p className="mx-auto mt-1.5 max-w-sm text-[0.8rem] text-brand-200/55">{dados.trimestre.rotulo}</p>
+          {editavel && (
+            <Button asChild className="mt-5">
+              <Link href={linkAssistente}>
+                <FilePlus2 className="h-4 w-4" />
+                Fazer Pedido
+              </Link>
+            </Button>
+          )}
+        </div>
+      ) : (
         <>
           {dados.confirmado && (
             <div className="hidden text-center print:mb-5 print:block print:border-b-2 print:border-black print:pb-3">
@@ -203,8 +183,8 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
                   </div>
                 </div>
                 {editavel && dados.podeReabrir && (
-                  <Button size="sm" variant="ghost" onClick={() => void reabrir()} disabled={salvando !== null}>
-                    {salvando === "reabrir" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                  <Button size="sm" variant="ghost" onClick={() => void reabrir()} disabled={reabrindo}>
+                    {reabrindo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                     Reabrir para editar
                   </Button>
                 )}
@@ -216,32 +196,38 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
               )}
             </div>
           ) : (
-            <Alert tipo="info" titulo="Pedido em rascunho" className="mb-4">
-              As quantidades abaixo ainda não foram confirmadas. Ninguém é cobrado por um rascunho — só
-              depois de "Confirmar Pedido" ele passa a valer para pagamento.
+            <Alert tipo="info" titulo="Rascunho salvo, ainda não confirmado" className="mb-4 print:hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span>Ninguém é cobrado por um rascunho — continue no assistente para revisar e confirmar.</span>
+                {editavel && (
+                  <Button asChild size="sm">
+                    <Link href={linkAssistente}>
+                      <PenLine className="h-3.5 w-3.5" />
+                      Continuar pedido
+                    </Link>
+                  </Button>
+                )}
+              </div>
             </Alert>
           )}
 
           <div className="glass-panel overflow-hidden rounded-2xl">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[38rem] text-left">
+              <table className="w-full min-w-[34rem] text-left">
                 <thead>
                   <tr className="border-b border-white/8 text-[0.64rem] uppercase tracking-[0.12em] text-brand-200/45">
                     <th className="px-4 py-2.5 font-medium">Categoria</th>
                     <th className="px-3 py-2.5 font-medium">Tipo</th>
                     <th className="px-3 py-2.5 text-right font-medium">Preço</th>
                     <th className="px-3 py-2.5 text-right font-medium">Quantidade</th>
-                    <th className="px-3 py-2.5 text-right font-medium">Sugestão</th>
                     <th className="px-4 py-2.5 text-right font-medium">Subtotal</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/6">
-                  {dados.linhas.map((l) => {
-                    const chave = `${l.categoria}|${l.tipo}`;
-                    const qtd = quantidades[chave] ?? "";
-                    const subtotal = l.precoUnitario !== null ? (Number(qtd) || 0) * l.precoUnitario : 0;
+                  {dados.linhas.filter((l) => l.quantidade > 0 || !dados.confirmado).map((l) => {
+                    const subtotal = l.precoUnitario !== null ? l.quantidade * l.precoUnitario : 0;
                     return (
-                      <tr key={chave}>
+                      <tr key={`${l.categoria}|${l.tipo}`}>
                         <td className="px-4 py-2 text-[0.82rem] text-brand-50">{l.categoriaRotulo}</td>
                         <td className="px-3 py-2 text-[0.78rem] text-brand-200/60">
                           {l.tipo === "aluno" ? "Revista do Aluno" : "Revista do Professor"}
@@ -249,25 +235,7 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
                         <td className="px-3 py-2 text-right text-[0.8rem] tabular-nums text-brand-200/60">
                           {l.precoUnitario !== null ? dinheiro.format(l.precoUnitario) : <span className="text-flame-400/70">sem preço</span>}
                         </td>
-                        <td className="px-3 py-2 text-right">
-                          {editavel && !dados.confirmado && l.precoUnitario !== null ? (
-                            <input
-                              inputMode="numeric"
-                              value={qtd}
-                              onChange={(e) => {
-                                const v = e.target.value.replace(/[^0-9]/g, "");
-                                setQuantidades((q) => ({ ...q, [chave]: v }));
-                              }}
-                              placeholder="0"
-                              className="h-8 w-16 rounded-lg border border-white/10 bg-white/[0.06] px-2 text-right text-[0.82rem] tabular-nums text-brand-50 focus:outline-none focus:border-gold-400/40"
-                            />
-                          ) : (
-                            <span className="text-[0.82rem] tabular-nums text-brand-100/80">{l.quantidade || "—"}</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2 text-right text-[0.74rem] tabular-nums text-brand-200/40">
-                          {l.sugestao > 0 ? l.sugestao : "—"}
-                        </td>
+                        <td className="px-3 py-2 text-right text-[0.82rem] tabular-nums text-brand-100/85">{l.quantidade || "—"}</td>
                         <td className="px-4 py-2 text-right text-[0.82rem] font-semibold tabular-nums text-gold-200">
                           {subtotal > 0 ? dinheiro.format(subtotal) : "—"}
                         </td>
@@ -277,17 +245,11 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-white/10">
-                    <td colSpan={3} className="px-4 py-3 text-[0.72rem] text-brand-200/45">
-                      "Sugestão" é o que o cálculo automático aponta (alunos/professores ativos) — só
-                      referência, não é o pedido.
+                    <td colSpan={3} className="px-4 py-3 text-[0.72rem] text-brand-200/45 print:hidden">
+                      {dados.confirmado ? "Quantidade e preço travados na confirmação." : "Ainda em rascunho — nada travado."}
                     </td>
-                    <td className="px-3 py-3 text-right text-[0.78rem] tabular-nums text-brand-200/60">
-                      {dados.confirmado ? dados.revistas : revistasDigitadas} revista(s)
-                    </td>
-                    <td />
-                    <td className="px-4 py-3 text-right text-[0.94rem] font-semibold tabular-nums text-white">
-                      {dinheiro.format(dados.confirmado ? dados.total : totalDigitado)}
-                    </td>
+                    <td className="px-3 py-3 text-right text-[0.78rem] tabular-nums text-brand-200/60 print:pl-4">{dados.revistas} revista(s)</td>
+                    <td className="px-4 py-3 text-right text-[0.94rem] font-semibold tabular-nums text-white">{dinheiro.format(dados.total)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -308,19 +270,6 @@ export default function FazerPedidoPage({ params }: { params: Promise<{ congId: 
           )}
 
           {msg && <p className="mt-3 text-[0.82rem] text-flame-400 print:hidden">{msg}</p>}
-
-          {editavel && !dados.confirmado && (
-            <div className="mt-4 flex flex-wrap gap-2.5">
-              <Button variant="ghost" onClick={() => void salvarRascunho()} disabled={salvando !== null}>
-                {salvando === "rascunho" && <Loader2 className="h-4 w-4 animate-spin" />}
-                Salvar rascunho
-              </Button>
-              <Button onClick={() => void confirmar()} disabled={salvando !== null || revistasDigitadas === 0}>
-                {salvando === "confirmar" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-                Confirmar Pedido
-              </Button>
-            </div>
-          )}
         </>
       )}
     </>

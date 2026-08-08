@@ -118,6 +118,7 @@ export async function GET(req: Request) {
     });
 
     return {
+      id: pedido?.id ?? null,
       congId: cong.id,
       congNome: cong.nome?.trim() || `Congregação ${cong.id}`,
       trimestre: tri,
@@ -287,7 +288,7 @@ export async function POST(req: Request) {
         descricao: `Pedido de revistas de ${nomeCong} confirmado — ${tri.rotulo}, ${calcularTotalRevistas(pedido.itens)} revista(s), R$ ${total.toFixed(2)}.`,
         congId: congId!,
       });
-      return { ok: true, confirmado: true };
+      return { ok: true, confirmado: true, id: pedido.id };
     }
 
     // reabrir
