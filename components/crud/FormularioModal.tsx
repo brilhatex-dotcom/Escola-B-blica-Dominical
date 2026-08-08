@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Loader2, Save } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { CampoDeNomes } from "@/components/crud/CampoDeNomes";
 
 /**
  * Formulário de cadastro em modal.
@@ -33,7 +34,7 @@ import { Button } from "@/components/ui/button";
  * pior momento possível para perder um formulário.
  */
 
-export type TipoCampo = "texto" | "data" | "telefone" | "numero" | "lista" | "area";
+export type TipoCampo = "texto" | "data" | "telefone" | "numero" | "lista" | "area" | "nomes";
 
 export interface CampoForm {
   chave: string;
@@ -74,6 +75,17 @@ export function FormularioModal({
   const [estado, setEstado] = useState<Record<string, string>>(valores);
   const [gravando, setGravando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /*
+   * Quantos campos "nomes" estão com a busca aberta agora.
+   *
+   * O Radix fecha o Dialog no Esc através de um listener de CAPTURA no
+   * `document` — ele dispara antes de qualquer handler dentro do formulário,
+   * então nenhum `stopPropagation` no campo de busca chega a tempo. Só o
+   * próprio `onEscapeKeyDown` do Dialog (abaixo) consegue interceptar a
+   * tempo. Sem isto, apertar Esc para só cancelar a busca de um nome fechava
+   * a reunião inteira, derrubando os nomes já adicionados.
+   */
+  const buscasDeNomesAbertas = useRef(0);
 
   /*
    * Os valores são recarregados a cada abertura.
@@ -86,6 +98,7 @@ export function FormularioModal({
     if (aberto) {
       setEstado(valores);
       setErro(null);
+      buscasDeNomesAbertas.current = 0;
     }
     // `valores` é recriado a cada render pelo chamador; depender dele aqui
     // apagaria o que está sendo digitado a cada tecla.
@@ -115,7 +128,12 @@ export function FormularioModal({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !gravando && !v && aoFechar()}>
-      <DialogContent className="max-w-xl">
+      <DialogContent
+        className="max-w-xl"
+        onEscapeKeyDown={(e) => {
+          if (buscasDeNomesAbertas.current > 0) e.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{titulo}</DialogTitle>
           {descricao && <DialogDescription>{descricao}</DialogDescription>}
@@ -123,10 +141,29 @@ export function FormularioModal({
 
         <form onSubmit={enviar} noValidate className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            {campos.map((campo) => (
-              <label
+            {campos.map((campo) => {
+              /*
+               * `<label>` só é seguro em volta de UM controle. O navegador
+               * encaminha o clique dentro do `<label>` para "o controle
+               * associado" — é o que faz clicar no texto de um checkbox
+               * marcá-lo, e é inofensivo quando dentro só existe um campo.
+               *
+               * "nomes" tem VÁRIOS botões dentro (resultado da busca, pílula,
+               * remover). O mesmo encaminhamento então mira o botão errado —
+               * depois de adicionar um nome, o navegador reenvia o clique
+               * para quem estiver na mesma posição, que passa a ser o "x" de
+               * remover: o nome some sozinho, ~20ms depois de ser
+               * adicionado, sem nenhum segundo clique da pessoa. Por isso
+               * este campo usa `<div>`, sem o encaminhamento implícito.
+               */
+              const Rotulo = campo.tipo === "nomes" ? "div" : "label";
+              return (
+              <Rotulo
                 key={campo.chave}
-                className={cn("block", (campo.largo || campo.tipo === "area") && "sm:col-span-2")}
+                className={cn(
+                  "block",
+                  (campo.largo || campo.tipo === "area" || campo.tipo === "nomes") && "sm:col-span-2",
+                )}
               >
                 <span className="mb-1.5 block text-[0.76rem] text-brand-200/70">
                   {campo.rotulo}
@@ -156,6 +193,19 @@ export function FormularioModal({
                       </option>
                     ))}
                   </select>
+                ) : campo.tipo === "nomes" ? (
+                  <CampoDeNomes
+                    value={estado[campo.chave] ?? ""}
+                    onChange={(v) => {
+                      setEstado((a) => ({ ...a, [campo.chave]: v }));
+                      setErro(null);
+                    }}
+                    disabled={gravando}
+                    placeholder={campo.placeholder}
+                    aoAlternarBusca={(ativa) => {
+                      buscasDeNomesAbertas.current += ativa ? 1 : -1;
+                    }}
+                  />
                 ) : campo.tipo === "area" ? (
                   <textarea
                     rows={3}
@@ -190,8 +240,9 @@ export function FormularioModal({
                     {campo.ajuda}
                   </span>
                 )}
-              </label>
-            ))}
+              </Rotulo>
+              );
+            })}
           </div>
 
           {erro && (
