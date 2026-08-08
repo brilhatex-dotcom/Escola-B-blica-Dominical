@@ -250,6 +250,15 @@ export default function RelatoriosPage() {
     totalPresencas + totalFaltas > 0
       ? Math.round((1000 * totalPresencas) / (totalPresencas + totalFaltas)) / 10
       : 0;
+  // Média, não a soma: um total de presenças cresce sozinho com o tamanho do
+  // período (90 dias sempre bate 30 dias, mesmo com a EBD do mesmo jeito) —
+  // quem lê o número quer saber "quantos vêm num domingo comum", não "quanto
+  // deu para somar". `serie` já está no mesmo balde escolhido no filtro
+  // (domingo/mês/trimestre), então a média sai dividindo pelo nº de baldes
+  // com chamada.
+  const mediaPresencasPorBalde =
+    dados && dados.serie.length > 0 ? Math.round((totalPresencas / dados.serie.length) * 10) / 10 : 0;
+  const rotuloBalde = dados?.por === "domingo" ? "domingo" : dados?.por === "mes" ? "mês" : "trimestre";
   const maxSerie = Math.max(1, ...(dados?.serie.map((s) => s.presentes) ?? [1]));
 
   // Destaques: quem mais cresceu e quem mais caiu, entre as congregações com
@@ -309,8 +318,8 @@ export default function RelatoriosPage() {
             />
             <Resumo
               icone={Users}
-              rotulo="Presenças no período"
-              valor={numero(totalPresencas)}
+              rotulo={`Média por ${rotuloBalde}`}
+              valor={mediaPresencasPorBalde.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
               nota={`${dados.serie.length} ${dados.por === "domingo" ? "domingos" : dados.por === "mes" ? "meses" : "trimestres"} com chamada`}
             />
             <Resumo
@@ -470,7 +479,7 @@ export default function RelatoriosPage() {
                         {agrupar === "congregacao" ? "Classes" : "Congregação"}
                       </th>
                       <th className="px-3 py-2.5 text-right font-medium">Domingos</th>
-                      <th className="px-3 py-2.5 text-right font-medium">Presenças</th>
+                      <th className="px-3 py-2.5 text-right font-medium">Média</th>
                       <th className="px-3 py-2.5 text-right font-medium">Faltas</th>
                       <th className="px-3 py-2.5 text-right font-medium">Taxa</th>
                       <th className="px-5 py-2.5 text-right font-medium">Tendência</th>
@@ -483,7 +492,9 @@ export default function RelatoriosPage() {
                             <td className="px-5 py-2.5 text-[0.84rem] text-brand-50">{l.congregacao}</td>
                             <td className="px-3 py-2.5 text-[0.8rem] tabular-nums text-brand-200/60">{l.classes}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{l.domingos}</td>
-                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">{numero(l.presencas)}</td>
+                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">
+                              {l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            </td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">{numero(l.faltas)}</td>
                             <td className={cn("px-3 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
                               {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
@@ -496,7 +507,9 @@ export default function RelatoriosPage() {
                             <td className="px-5 py-2.5 text-[0.84rem] text-brand-50">{l.classe}</td>
                             <td className="px-3 py-2.5 text-[0.78rem] text-brand-200/60">{l.congregacao}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{l.domingos}</td>
-                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">{numero(l.presencas)}</td>
+                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">
+                              {l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            </td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">{numero(l.faltas)}</td>
                             <td className={cn("px-3 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
                               {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
