@@ -89,6 +89,10 @@ export async function PATCH(req: Request, { params }: Contexto) {
         ...(classeId !== undefined ? { classeId } : {}),
         ...(congId !== undefined ? { congId } : {}),
         ...(typeof corpo.ativo === "boolean" ? { ativo: corpo.ativo } : {}),
+        // `null` limpa a restrição (vira "matrícula antiga", como as 323
+        // linhas herdadas) — para corrigir quem entrou no sistema depois de
+        // já frequentar a classe há tempo. Ver o comentário em POST /api/alunos.
+        ...(corpo.matriculadoEm !== undefined ? { matriculadoEm: dataCivil(corpo.matriculadoEm) } : {}),
       },
       select: { id: true, nome: true, ativo: true },
     });

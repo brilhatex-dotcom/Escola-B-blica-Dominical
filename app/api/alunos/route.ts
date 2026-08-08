@@ -156,13 +156,20 @@ export async function POST(req: Request) {
           congId: classe.congId,
           ativo: true,
           /*
-           * A matrícula nasce HOJE, sempre — nunca vem do corpo da
-           * requisição. Se viesse do cliente, bastaria mandar uma data
-           * antiga para reabrir chamadas passadas em nome de alguém que
-           * acabou de se matricular. É esta data que a Chamada usa para
-           * recusar marcar presença ou falta num domingo anterior a ela.
+           * Por padrão, a matrícula nasce HOJE — mas quem tem acesso de
+           * escrita em Alunos pode informar outra data (ou `null`, "sem
+           * restrição") no corpo da requisição. Pedido explícito da
+           * secretaria: às vezes o professor esquece de cadastrar um aluno
+           * que já estava na classe desde o início, e sem poder corrigir a
+           * data de matrícula esse aluno ficaria fora da Chamada de todos
+           * os domingos passados que ele já frequentou de verdade. Quem
+           * pode matricular já podia editar qualquer outro dado do aluno —
+           * isto não abre um acesso novo, só estende o mesmo.
            */
-          matriculadoEm: dataCivil(new Date().toISOString().slice(0, 10)),
+          matriculadoEm:
+            corpo.matriculadoEm !== undefined
+              ? dataCivil(corpo.matriculadoEm)
+              : dataCivil(new Date().toISOString().slice(0, 10)),
         },
         select: { id: true, nome: true },
       });
