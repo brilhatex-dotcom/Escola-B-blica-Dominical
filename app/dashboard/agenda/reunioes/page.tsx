@@ -258,10 +258,16 @@ const CAMPOS_REUNIAO: readonly CampoForm[] = [
   { chave: "local", rotulo: "Local", largo: true },
   {
     chave: "presentes",
-    rotulo: "Presentes (um nome por linha)",
-    tipo: "area",
-    ajuda: "Nomes repetidos são descartados — colar do WhatsApp costuma duplicar.",
+    rotulo: "Presentes",
+    tipo: "nomes",
+    placeholder: "Buscar e adicionar quem esteve presente…",
+    ajuda: "Busca entre pessoas e alunos do cadastro — e aceita um nome que não está em nenhum dos dois.",
   },
-  { chave: "ausentes", rotulo: "Ausentes (um nome por linha)", tipo: "area" },
+  {
+    chave: "ausentes",
+    rotulo: "Ausentes",
+    tipo: "nomes",
+    placeholder: "Buscar e adicionar quem faltou…",
+  },
   { chave: "obs", rotulo: "Observação", tipo: "area" },
 ];
