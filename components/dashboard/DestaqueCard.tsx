@@ -3,13 +3,28 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowRight, Building2, CalendarRange, Loader2, School, Trophy } from "lucide-react";
+import { ArrowRight, Building2, CalendarRange, Loader2, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Destaque, Destaques } from "@/lib/dashboard/tipos";
 
 /**
- * Congregação Destaque e Classe Destaque — quem mais veio e mais trouxe gente,
- * no mês, no trimestre, ou num período escolhido na tela (Fase 20).
+ * Congregação Destaque — quem mais veio e mais trouxe gente, no mês, no
+ * trimestre, ou num período escolhido na tela (Fase 20).
+ *
+ * ============================================================================
+ * SÓ CONGREGAÇÃO, DE PROPÓSITO — E SEMPRE O CAMPO INTEIRO
+ *
+ * Este cartão do Dashboard mostra só a Congregação Destaque, nunca a Classe
+ * Destaque (essa fica na tela cheia de Relatórios → Destaques, que também
+ * tem mais nove categorias e o Hall da Fama). Duas razões: um cartão do
+ * Dashboard não é lugar para explicar por que "Classe Destaque" É recortada
+ * pelo acesso de quem vê e "Congregação Destaque" NÃO é — e cortar a
+ * segunda linha corta a pergunta antes dela nascer. A Congregação Destaque
+ * em si é sempre o resultado real do campo inteiro (Fase 22, pedido
+ * explícito da liderança): mesmo quem só enxerga a própria congregação vê
+ * aqui quem venceu no campo todo, não um resultado limitado ao que o acesso
+ * dela alcança.
+ * ============================================================================
  *
  * ============================================================================
  * O QUE O DESTAQUE PREMIA: ASSIDUIDADE + TRAZER VISITANTE, NUNCA TAMANHO
@@ -17,13 +32,12 @@ import type { Destaque, Destaques } from "@/lib/dashboard/tipos";
  * A nota é a MÉDIA de duas taxas — nunca um total bruto. "Presentes ÷
  * chamados" pergunta "essa gente vem sempre?"; "domingos com visitante ÷
  * domingos com chamada" pergunta "essa gente traz alguém?" — não "quantos
- * visitantes trouxe", porque isso premiaria sempre a congregação maior. As
- * duas perguntas cabem em qualquer congregação ou classe, do tamanho que for.
+ * visitantes trouxe", porque isso premiaria sempre a congregação maior.
  *
  * Sem pelo menos 3 domingos com chamada no período, ninguém entra na disputa
- * — a mesma trava do Ranking e dos Certificados. Sem isso, uma classe que fez
- * chamada uma vez, com 100% de presença, venceria uma que compareceu 11 dos
- * 12 domingos do trimestre.
+ * — a mesma trava do Ranking e dos Certificados. Sem isso, uma congregação
+ * que fez chamada uma vez, com 100% de presença, venceria uma que compareceu
+ * 11 dos 12 domingos do trimestre.
  * ============================================================================
  *
  * ============================================================================
@@ -43,7 +57,6 @@ type Modo = "mensal" | "trimestral" | "personalizado";
 
 interface ResultadoCustom {
   congregacao: Destaque | null;
-  classe: Destaque | null;
 }
 
 export function DestaqueCard({ destaques, className }: { destaques: Destaques; className?: string }) {
@@ -72,7 +85,7 @@ export function DestaqueCard({ destaques, className }: { destaques: Destaques; c
           });
           const corpo = await res.json();
           if (!res.ok) throw new Error(corpo?.erro ?? `HTTP ${res.status}`);
-          setCustom({ congregacao: corpo.congregacao, classe: corpo.classe });
+          setCustom({ congregacao: corpo.congregacao });
         } catch (e) {
           if ((e as Error).name === "AbortError") return;
           setErro((e as Error).message || "Não foi possível calcular este período.");
@@ -89,7 +102,6 @@ export function DestaqueCard({ destaques, className }: { destaques: Destaques; c
   }, [modo, de, ate]);
 
   const cong = modo === "personalizado" ? (custom?.congregacao ?? null) : destaques.congregacao[modo];
-  const classe = modo === "personalizado" ? (custom?.classe ?? null) : destaques.classe[modo];
   const janela = modo === "personalizado" ? { de, ate } : destaques.periodo[modo];
 
   return (
@@ -171,7 +183,6 @@ export function DestaqueCard({ destaques, className }: { destaques: Destaques; c
       ) : (
         <div className="space-y-3">
           <LinhaDestaque icone={Building2} rotulo="Congregação Destaque" destaque={cong} carregando={carregando} />
-          <LinhaDestaque icone={School} rotulo="Classe Destaque" destaque={classe} carregando={carregando} />
         </div>
       )}
 

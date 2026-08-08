@@ -15,6 +15,7 @@ import { SummaryCard } from "@/components/dashboard/SummaryCard";
 import { SystemStatus } from "@/components/dashboard/SystemStatus";
 import { Alert } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { carregarPainel } from "@/lib/dashboard/dados";
 import type { ChaveIndicador, DadosPainel } from "@/lib/dashboard/tipos";
 
@@ -67,6 +68,13 @@ const ICONES: Record<ChaveIndicador, typeof Users> = {
 export default function DashboardPage() {
   const [dados, setDados] = useState<DadosPainel | null>(null);
   const [hoje, setHoje] = useState<Date | undefined>(undefined);
+  const { sessao } = useAcesso();
+  // Equipe e Estrutura, e Atividades Recentes, são informação de quem
+  // administra o campo — uma secretária de congregação não precisa saber
+  // quantos professores o campo inteiro tem, nem o que mudou em cadastros que
+  // não são o dela. Pedido explícito da liderança: os dois cartões ficam só
+  // para quem enxerga o campo inteiro (`escopo === "campo"`).
+  const ehAdministracaoDoCampo = sessao?.escopo === "campo";
 
   useEffect(() => {
     // `hoje` so no cliente: o servidor esta em UTC e marcaria o aniversariante
@@ -144,8 +152,8 @@ export default function DashboardPage() {
         ))}
       </section>
 
-      {/* ---------------- Equipe e estrutura ---------------- */}
-      <StructureStrip estrutura={dados.estrutura} className="mt-4" />
+      {/* ---------------- Equipe e estrutura (só administração do campo) ---------------- */}
+      {ehAdministracaoDoCampo && <StructureStrip estrutura={dados.estrutura} className="mt-4" />}
 
       {/* ----------------------------------------------------------------
         Grafico + coluna da direita.
@@ -170,7 +178,7 @@ export default function DashboardPage() {
         */}
         <LeadershipCard lideranca={dados.lideranca} />
         <DestaqueCard destaques={dados.destaques} />
-        <RecentActivity atividades={dados.atividades} />
+        {ehAdministracaoDoCampo && <RecentActivity atividades={dados.atividades} />}
         <BirthdayCard aniversariantes={dados.aniversariantes} hoje={hoje} />
         <AgendaCard agenda={dados.agenda} />
 

@@ -573,7 +573,24 @@ export async function lerDestaquesDoAgrupamento(
 ): Promise<Destaque | null> {
   const colunaSql = coluna === "congId" ? Prisma.sql`"congId"` : Prisma.sql`"classeId"`;
   const nomeTabela = coluna === "congId" ? Prisma.sql`"Congregacoes"` : Prisma.sql`"Classes"`;
-  const colunaRecorte = coluna === "congId" ? Prisma.sql`f."congId"` : Prisma.sql`c."congId"`;
+  /*
+   * SEMPRE `f."congId"` — nunca `c."congId"`, mesmo agrupando por classe.
+   *
+   * O recorte filtra "de quais congregações eu posso ver a Frequencia",
+   * independente do que a consulta está CONTANDO (congregação ou classe). O
+   * CTE `chamadas` só enxerga o alias `f` (`"Frequencias" f`); o `c` só passa
+   * a existir na consulta final, como apelido do PRÓPRIO CTE (`FROM chamadas
+   * c`) — nunca um JOIN com `Classes`. Referenciar `c."congId"` aqui dentro
+   * gerava "missing FROM-clause entry for table c" toda vez que o Destaque do
+   * Dashboard pedia a Classe Destaque de uma sessão recortada por
+   * congregação — ou seja, TODA visita de uma secretária de congregação —, o
+   * que derrubava a rota inteira (`/api/painel`) e fazia o Dashboard cair
+   * para os dados de exemplo (números e AGENDA fictícios) em vez dos dados
+   * reais. Como `Frequencias` já tem `congId` na própria linha (não precisa
+   * de join nenhum para saber de qual congregação ela é), a coluna certa é
+   * sempre a mesma.
+   */
+  const colunaRecorte = Prisma.sql`f."congId"`;
 
   const linhas = await prisma.$queryRaw<LinhaBrutaDestaque[]>`
     WITH chamadas AS (
