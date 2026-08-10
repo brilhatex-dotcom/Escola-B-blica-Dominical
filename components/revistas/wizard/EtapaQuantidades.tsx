@@ -44,8 +44,8 @@ export function EtapaQuantidades({
       const item = { categoria, rotulo: linhas[0].categoriaRotulo, linhas };
       (temSugestao || temQuantidade ? principais : outras).push(item);
     }
-    const totalAlunos = dados.linhas.filter((l) => l.tipo === "aluno").reduce((s, l) => s + l.sugestao, 0);
-    const totalProfessores = dados.linhas.filter((l) => l.tipo === "professor").reduce((s, l) => s + l.sugestao, 0);
+    const totalAlunos = dados.linhas.filter((l) => l.grupo === "aluno").reduce((s, l) => s + l.sugestao, 0);
+    const totalProfessores = dados.linhas.filter((l) => l.grupo === "professor").reduce((s, l) => s + l.sugestao, 0);
     return { principais, outras, totalAlunosCadastrados: totalAlunos, totalProfessoresCadastrados: totalProfessores };
   }, [dados.linhas, valores]);
 

@@ -7,11 +7,6 @@ import type { DadosPedido, Prazo } from "./tipos";
 
 const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-const ROTULO_TIPO: Record<"aluno" | "professor", string> = {
-  aluno: "Revista do Aluno",
-  professor: "Revista do Professor",
-};
-
 /**
  * Etapa 4 — a última chance de conferir antes de travar quantidade e preço.
  * Só os itens com quantidade > 0 aparecem aqui: uma revisão de vinte linhas
@@ -83,7 +78,7 @@ export function EtapaRevisao({
                 {itens.map((l) => (
                   <tr key={`${l.categoria}|${l.tipo}`}>
                     <td className="px-5 py-2 text-[0.84rem] text-brand-50">
-                      {l.categoriaRotulo} — {ROTULO_TIPO[l.tipo]}
+                      {l.categoriaRotulo} — {l.rotulo}
                     </td>
                     <td className="px-3 py-2 text-right text-[0.8rem] tabular-nums text-brand-200/60">
                       {dinheiro.format(l.precoUnitario ?? 0)}

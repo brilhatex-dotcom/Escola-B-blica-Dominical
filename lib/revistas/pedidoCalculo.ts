@@ -6,7 +6,8 @@
 
 export interface ItemPedido {
   categoria: string;
-  tipo: "aluno" | "professor";
+  /** A modalidade — a `key` de `PrecoRevista` ("aluno-comum", "visual", "ensinador-cristao"...). */
+  tipo: string;
   quantidade: number;
   precoUnitario: number;
 }
@@ -27,9 +28,3 @@ export function validarQuantidade(valor: unknown): number | null {
   return n;
 }
 
-export const TIPOS_ITEM = ["aluno", "professor"] as const;
-export type TipoItem = (typeof TIPOS_ITEM)[number];
-
-export function tipoValido(valor: unknown): valor is TipoItem {
-  return valor === "aluno" || valor === "professor";
-}
