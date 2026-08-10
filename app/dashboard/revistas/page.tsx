@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  AlertCircle, AlertTriangle, BadgeCheck, BookMarked, Building2, ChevronRight,
+  AlertTriangle, BadgeCheck, BookMarked, Building2, ChevronRight,
   Clock, Coins, FilePlus2, HandCoins, Loader2, PenLine, Plus, Settings2, Sparkles, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -207,10 +207,6 @@ export default function RevistasPage() {
               cor={dados.resumo.congregacoesAtrasadas > 0 ? "text-flame-400" : "text-brand-100/80"}
             />
           </div>
-
-          {dados.alertas.length > 0 && (
-            <AlertasRevistas alertas={dados.alertas} congregacoes={dados.congregacoes} trimestre={trimestre} editavel={editavel} aoAbrirCongregacao={(id) => setAberta(id)} />
-          )}
 
           {/* Pedidos */}
           <div className="mt-4 space-y-2.5">
@@ -428,84 +424,6 @@ function PainelTrimestre({ dados, editavel, aoMudar }: { dados: Dados; editavel:
   );
 }
 
-/* ------------------------------------------------------------------ *
- * Alertas automáticos — sempre com uma ação, nunca só um aviso passivo
- * ------------------------------------------------------------------ */
-
-const ICONE_ALERTA_REVISTA: Record<TipoAlertaRevista, typeof AlertCircle> = {
-  "pagamento-vencido": AlertCircle,
-  "prazo-encerrando": Clock,
-  "sem-pagamento": HandCoins,
-  "sem-pedido": FilePlus2,
-};
-
-function AlertasRevistas({
-  alertas,
-  congregacoes,
-  trimestre,
-  editavel,
-  aoAbrirCongregacao,
-}: {
-  alertas: AlertaRevista[];
-  congregacoes: CongPedido[];
-  trimestre: string;
-  editavel: boolean;
-  aoAbrirCongregacao: (congId: number) => void;
-}) {
-  const congPorId = new Map(congregacoes.map((c) => [c.congId, c]));
-
-  return (
-    <section className="mt-4">
-      <h2 className="mb-2 px-1 text-[0.78rem] font-semibold uppercase tracking-[0.14em] text-brand-200/50">
-        Ação necessária ({alertas.length})
-      </h2>
-      <div className="space-y-2">
-        {alertas.map((a, i) => {
-          const Icone = ICONE_ALERTA_REVISTA[a.tipo] ?? AlertTriangle;
-          const critico = a.nivel === "critico";
-          const cong = congPorId.get(a.congId);
-          const semPedido = a.tipo === "sem-pedido";
-
-          return (
-            <div
-              key={i}
-              className={cn(
-                "flex flex-wrap items-start gap-3 rounded-xl border px-4 py-3.5",
-                critico ? "border-flame-500/30 bg-flame-500/[0.06]" : "border-gold-400/25 bg-gold-400/[0.05]",
-              )}
-            >
-              <Icone className={cn("mt-0.5 h-4 w-4 shrink-0", critico ? "text-flame-400" : "text-gold-300")} />
-              <div className="min-w-0 flex-1">
-                <p className="text-[0.84rem] text-brand-50">{a.titulo}</p>
-                <p className="mt-0.5 text-[0.76rem] leading-relaxed text-brand-200/60">{a.descricao}</p>
-                {cong && (
-                  <p className="mt-1 text-[0.72rem] text-brand-200/45">
-                    {cong.classes.length} {cong.classes.length === 1 ? "classe" : "classes"} · {cong.classes.reduce((s, c) => s + c.alunos, 0)} alunos
-                  </p>
-                )}
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Badge variant={critico ? "erro" : "alerta"}>{critico ? "crítico" : "atenção"}</Badge>
-                {editavel && (
-                  semPedido ? (
-                    <Button asChild size="sm">
-                      <Link href={`/dashboard/revistas/novo?congId=${a.congId}&trimestre=${trimestre}`}>Fazer Pedido</Link>
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="ghost" onClick={() => aoAbrirCongregacao(a.congId)}>
-                      Ver detalhe
-                    </Button>
-                  )
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 function CartaoCongregacao({ cong, trimestre, aberto, aoAlternar, editavel, aoMudar }: {
   cong: CongPedido; trimestre: string; aberto: boolean; aoAlternar: () => void; editavel: boolean; aoMudar: () => void;
 }) {
@@ -564,12 +482,7 @@ function CartaoCongregacao({ cong, trimestre, aberto, aoAlternar, editavel, aoMu
                   </p>
                 </>
               ) : (
-                <>
-                  <p className="text-[0.82rem] text-brand-50">Pedido ainda não iniciado neste trimestre</p>
-                  <p className="mt-0.5 text-[0.72rem] text-brand-200/45">
-                    Sugestão calculada: {cong.sugestao.revistas} revista(s), {dinheiro.format(cong.sugestao.total)}
-                  </p>
-                </>
+                <p className="text-[0.82rem] text-brand-50">Pedido ainda não iniciado neste trimestre</p>
               )}
             </div>
             {editavel && (
@@ -579,61 +492,6 @@ function CartaoCongregacao({ cong, trimestre, aberto, aoAlternar, editavel, aoMu
                 </Link>
               </Button>
             )}
-          </div>
-
-          {cong.semPreco > 0 && (
-            <p className="mb-2 text-[0.74rem] text-gold-200/70">
-              {cong.semPreco} classe(s) sem preço de categoria — não entraram na sugestão.
-            </p>
-          )}
-          <p className="mb-1.5 text-[0.68rem] uppercase tracking-[0.1em] text-brand-200/40">
-            Sugestão calculada (alunos/professores ativos) — não é o pedido oficial
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[30rem] text-left">
-              <thead>
-                <tr className="text-[0.64rem] uppercase tracking-[0.12em] text-brand-200/45">
-                  <th className="px-3 py-2 font-medium">Classe</th>
-                  <th className="px-3 py-2 font-medium">Categoria</th>
-                  <th className="px-3 py-2 text-right font-medium">Alunos</th>
-                  <th className="px-3 py-2 text-right font-medium">Unit.</th>
-                  <th className="px-3 py-2 text-right font-medium">Subtotal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/6">
-                {cong.classes.map((cl) => (
-                  <tr key={cl.classeId}>
-                    <td className="px-3 py-2 text-[0.82rem] text-brand-50">
-                      {cl.classe}
-                      {cl.professores > 0 && (
-                        <p className="mt-0.5 text-[0.68rem] text-brand-200/45">
-                          + {cl.professores} revista(s) do professor
-                          {cl.precoProfessor !== null
-                            ? ` · ${dinheiro.format(cl.precoProfessor)} cada · ${dinheiro.format(cl.subtotalProfessor)}`
-                            : " · sem preço de professor cadastrado"}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-[0.76rem] text-brand-200/60">
-                      {cl.categoriaEncontrada ? cl.categoriaRotulo : <span className="text-flame-400/70">sem preço</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[0.8rem] tabular-nums text-brand-100/80">{cl.alunos}</td>
-                    <td className="px-3 py-2 text-right text-[0.8rem] tabular-nums text-brand-200/60">
-                      {cl.precoUnitario !== null ? dinheiro.format(cl.precoUnitario) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right text-[0.82rem] font-semibold tabular-nums text-gold-200">
-                      {dinheiro.format(cl.subtotal + cl.subtotalProfessor)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-white/10">
-                  <td colSpan={4} className="px-3 py-2 text-right text-[0.76rem] uppercase tracking-wide text-brand-200/50">Total sugerido</td>
-                  <td className="px-3 py-2 text-right text-[0.9rem] font-semibold tabular-nums text-white">{dinheiro.format(cong.sugestao.total)}</td>
-                </tr>
-              </tfoot>
-            </table>
           </div>
 
           <PagamentosDaCong cong={cong} editavel={editavel} aoMudar={aoMudar} />
