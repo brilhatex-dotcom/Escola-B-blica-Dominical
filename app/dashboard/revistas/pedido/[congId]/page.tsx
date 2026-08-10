@@ -31,7 +31,7 @@ import { proximoTrimestre, trimestreDe, trimestreValido } from "@/lib/revistas/t
  */
 
 interface Linha {
-  categoria: string; categoriaRotulo: string; tipo: "aluno" | "professor";
+  categoria: string; categoriaRotulo: string; tipo: string; rotulo: string;
   precoUnitario: number | null; quantidade: number; sugestao: number;
 }
 interface Dados {
@@ -229,9 +229,7 @@ export default function DetalhePedidoPage({ params }: { params: Promise<{ congId
                     return (
                       <tr key={`${l.categoria}|${l.tipo}`}>
                         <td className="px-4 py-2 text-[0.82rem] text-brand-50">{l.categoriaRotulo}</td>
-                        <td className="px-3 py-2 text-[0.78rem] text-brand-200/60">
-                          {l.tipo === "aluno" ? "Revista do Aluno" : "Revista do Professor"}
-                        </td>
+                        <td className="px-3 py-2 text-[0.78rem] text-brand-200/60">{l.rotulo}</td>
                         <td className="px-3 py-2 text-right text-[0.8rem] tabular-nums text-brand-200/60">
                           {l.precoUnitario !== null ? dinheiro.format(l.precoUnitario) : <span className="text-flame-400/70">sem preço</span>}
                         </td>

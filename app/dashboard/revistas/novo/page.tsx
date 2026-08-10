@@ -154,9 +154,8 @@ function Conteudo() {
 
   const itensResumo: ItemResumo[] = useMemo(() => {
     if (!pedido) return [];
-    const ROTULO_TIPO: Record<"aluno" | "professor", string> = { aluno: "Aluno", professor: "Professor" };
     return pedido.linhas
-      .map((l) => ({ rotulo: `${l.categoriaRotulo} — ${ROTULO_TIPO[l.tipo]}`, quantidade: Number(valores[chaveItem(l.categoria, l.tipo)] || 0) }))
+      .map((l) => ({ rotulo: `${l.categoriaRotulo} — ${l.rotulo}`, quantidade: Number(valores[chaveItem(l.categoria, l.tipo)] || 0) }))
       .filter((it) => it.quantidade > 0);
   }, [pedido, valores]);
 

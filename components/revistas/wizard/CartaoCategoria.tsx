@@ -6,11 +6,6 @@ import { chaveItem, type LinhaPedido } from "./tipos";
 
 const dinheiro = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-const ROTULO_TIPO: Record<"aluno" | "professor", string> = {
-  aluno: "Revista do Aluno",
-  professor: "Revista do Professor",
-};
-
 /**
  * Uma categoria (ex.: "Adultos"), com uma linha por tipo (aluno/professor)
  * que tem preço cadastrado — dois tipos por card em vez de vinte cards
@@ -85,7 +80,7 @@ function LinhaCartao({
   return (
     <div className={cn("flex flex-wrap items-center gap-3 px-4 py-3.5", semPreco && "opacity-50")}>
       <div className="min-w-0 flex-1">
-        <p className="text-[0.86rem] text-brand-50">{ROTULO_TIPO[linha.tipo]}</p>
+        <p className="text-[0.86rem] text-brand-50">{linha.rotulo}</p>
         <p className="mt-0.5 text-[0.72rem] text-brand-200/50">
           {semPreco ? (
             "sem preço cadastrado"
@@ -116,7 +111,7 @@ function LinhaCartao({
               onChange={(e) => aoMudar(e.target.value.replace(/[^0-9]/g, ""))}
               disabled={somenteLeitura}
               placeholder="0"
-              aria-label={`Quantidade de ${ROTULO_TIPO[linha.tipo]} — ${linha.categoriaRotulo}`}
+              aria-label={`Quantidade de ${linha.rotulo} — ${linha.categoriaRotulo}`}
               className="h-10 w-14 rounded-xl border border-white/10 bg-white/[0.06] text-center text-[0.94rem] font-semibold tabular-nums text-brand-50 focus:outline-none focus:border-gold-400/40 disabled:opacity-60"
             />
             <button

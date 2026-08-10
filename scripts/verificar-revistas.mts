@@ -21,14 +21,16 @@ import {
 } from "../lib/revistas/situacao";
 import {
   agruparPrecos,
+  chaveDeReferencia,
+  grupoDoTipo,
   normalizarCategoria,
   precoAlunoDeLista,
   precoProfessorDeLista,
+  rotuloDaLinha,
 } from "../lib/revistas/precos";
 import {
   calcularTotalPedido,
   calcularTotalRevistas,
-  tipoValido,
   validarQuantidade,
 } from "../lib/revistas/pedidoCalculo";
 import {
@@ -220,8 +222,31 @@ ok(validarQuantidade("") === 0, "string vazia também vira 0");
 ok(validarQuantidade(-1) === null, "quantidade negativa é rejeitada");
 ok(validarQuantidade(2.5) === null, "quantidade fracionária é rejeitada — revista não parte ao meio");
 ok(validarQuantidade("abc") === null, "texto não numérico é rejeitado");
-ok(tipoValido("aluno") && tipoValido("professor"), "os dois tipos válidos");
-ok(!tipoValido("obreiro"), "qualquer outra coisa é inválida");
+
+/* ------------------------------------------------------------------ */
+console.log("\n8b. lib/revistas/precos — cada modalidade vira sua própria linha de pedido");
+const listaAdultos = agruparPrecos([
+  { key: "aluno-comum", categoria: "adultos", label: "Adultos — Aluno — Capa Comum", preco: 12 },
+  { key: "aluno-ampliada", categoria: "adultos", label: "Adultos — Aluno — Letra Ampliada", preco: 20 },
+  { key: "mestre-comum", categoria: "adultos", label: "Adultos — Professor — Capa Comum", preco: 17 },
+  { key: "mestre-ampliada", categoria: "adultos", label: "Adultos — Professor — Letra Ampliada", preco: 22 },
+]).get("adultos")!;
+ok(chaveDeReferencia(listaAdultos, "aluno") === "aluno-comum", "a referência do aluno é sempre 'aluno-comum', quando existe");
+ok(chaveDeReferencia(listaAdultos, "professor") === "mestre-comum", "idem para o professor");
+const listaBercario = agruparPrecos([
+  { key: "manual-mestre", categoria: "bercario", label: "Berçário — Manual do Mestre", preco: 14 },
+  { key: "visual", categoria: "bercario", label: "Berçário — Visual", preco: 28 },
+]).get("bercario")!;
+ok(chaveDeReferencia(listaBercario, "professor") === "manual-mestre",
+  "sem 'mestre-comum', o Berçário cai para 'manual-mestre' — a mesma exceção de sempre");
+ok(chaveDeReferencia(listaBercario, "aluno") === null, "Berçário genuinamente não tem modalidade de aluno");
+ok(grupoDoTipo("aluno-comum") === "aluno" && grupoDoTipo("aluno-ampliada") === "aluno", "toda chave 'aluno*' é do grupo aluno");
+ok(grupoDoTipo("mestre-comum") === "professor" && grupoDoTipo("manual-mestre") === "professor", "'mestre*' e 'manual-mestre' são do grupo professor");
+ok(grupoDoTipo("visual") === null && grupoDoTipo("ensinador-cristao") === null, "modalidade sem grupo não herda sugestão de ninguém");
+ok(rotuloDaLinha("Adultos", "Adultos — Aluno — Letra Ampliada") === "Aluno — Letra Ampliada",
+  "o rótulo da linha tira o prefixo da categoria, que o card já mostra");
+ok(rotuloDaLinha("Material de Apoio", "Revista Ensinador Cristão") === "Revista Ensinador Cristão",
+  "sem o prefixo no label (itens de apoio), o rótulo vem inteiro");
 
 /* ------------------------------------------------------------------ */
 console.log("\n9. lib/revistas/trimestre — o pedido abre no PRÓXIMO trimestre, o painel financeiro no ATUAL");

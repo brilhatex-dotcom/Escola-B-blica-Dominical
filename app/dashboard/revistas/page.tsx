@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertCircle, AlertTriangle, BadgeCheck, BookMarked, Building2, ChevronRight,
-  Clock, Coins, FilePlus2, HandCoins, Loader2, PenLine, Plus, Sparkles, Trash2,
+  Clock, Coins, FilePlus2, HandCoins, Loader2, PenLine, Plus, Settings2, Sparkles, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -136,6 +136,15 @@ export default function RevistasPage() {
             <Coins className="h-4 w-4" />
             {verPrecos ? "Ocultar preços" : "Tabela de preços"}
           </button>
+        )}
+        {dados?.podeDefinirLimite && (
+          <Link
+            href="/dashboard/revistas/precos"
+            className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem] text-brand-200/70 transition-colors hover:border-gold-400/30 hover:text-gold-200"
+          >
+            <Settings2 className="h-4 w-4" />
+            Editar preços
+          </Link>
         )}
       </CabecalhoModulo>
 

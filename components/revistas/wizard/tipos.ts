@@ -57,7 +57,12 @@ export interface PainelDados {
 export interface LinhaPedido {
   categoria: string;
   categoriaRotulo: string;
-  tipo: "aluno" | "professor";
+  /** A modalidade — a `key` de `PrecoRevista` ("aluno-comum", "visual", "ensinador-cristao"...). */
+  tipo: string;
+  /** Texto curto pronto pra tela — "Aluno — Letra Ampliada", "Revista Ensinador Cristão". */
+  rotulo: string;
+  /** Só para casar com a quantidade sugerida (matriculados/professores). `null` quando a modalidade não tem grupo (Visual, itens de apoio). */
+  grupo: "aluno" | "professor" | null;
   precoUnitario: number | null;
   quantidade: number;
   sugestao: number;
