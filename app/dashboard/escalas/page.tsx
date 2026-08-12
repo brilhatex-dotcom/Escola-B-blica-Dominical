@@ -43,7 +43,7 @@ interface EscalaArquivo {
 }
 
 interface EscalaMensal {
-  id: number; titulo: string; mesAno: string; autor: string; atualizado: string; quantidadeItens: number;
+  id: number; titulo: string; mesAno: string; status: string; autor: string; atualizado: string; quantidadeItens: number;
 }
 
 const fmt = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -159,7 +159,12 @@ export default function EscalasPage() {
                       </h3>
                       <p className="mt-0.5 truncate text-[0.78rem] text-brand-200/60">{m.titulo}</p>
                     </div>
-                    {m.mesAno.slice(0, 7) === mesAtual && <Badge variant="sucesso">mês atual</Badge>}
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      {m.mesAno.slice(0, 7) === mesAtual && <Badge variant="sucesso">mês atual</Badge>}
+                      <Badge variant={m.status === "publicado" ? "info" : "alerta"}>
+                        {m.status === "publicado" ? "publicada" : "rascunho"}
+                      </Badge>
+                    </div>
                   </div>
                   <p className="mt-3 text-[0.76rem] text-brand-200/50">
                     {m.quantidadeItens} culto{m.quantidadeItens === 1 ? "" : "s"} lançado{m.quantidadeItens === 1 ? "" : "s"}

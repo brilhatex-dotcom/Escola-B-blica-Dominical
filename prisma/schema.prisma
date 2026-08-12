@@ -451,14 +451,17 @@ model EscalaMensal {
   id         Int      @id @default(autoincrement())
   mesAno     DateTime @db.Date
   titulo     String
-  /// O quadro de avisos livre do rodapé do PDF ("Grupos escalados para
-  /// doutrina no Templo Matriz" etc.) — texto solto, não estruturado.
-  avisos     String?
+  /// "rascunho" | "publicado" — rascunho só é visto por quem edita; ver o
+  /// comentário grande em `app/api/escalas-mensais/[id]/publicar/route.ts`.
+  status       String    @default("rascunho")
+  publicadoEm  DateTime?
+  publicadoPor String?
   autor      String
   criadoEm   DateTime @default(now())
   atualizado DateTime @updatedAt
 
-  itens EscalaItem[]
+  itens  EscalaItem[]
+  avisos EscalaAviso[]
 
   @@unique([mesAno])
   @@map("Escalas_Mensais")
@@ -480,9 +483,6 @@ model EscalaItem {
   /// "Cong. Alto Bom Jesus") que o cadastro de congregações do portal ainda
   /// não tem. Ver o comentário grande em `app/api/escalas-mensais/route.ts`.
   local      String
-  /// "Pb. Reginaldo / Dc. Gilberto" — um ou mais pregadores, já com o
-  /// tratamento, separados por " / " como no PDF oficial.
-  pregadores String
   /// Nota entre parênteses do PDF, ex. "Consagração Geral" no dia do
   /// aniversário do templo. Quase sempre vazia.
   destaque   String?
@@ -491,12 +491,50 @@ model EscalaItem {
   /// cadastro.
   ordem      Int      @default(0)
 
-  escala      EscalaMensal @relation(fields: [escalaId], references: [id], onDelete: Cascade)
-  congregacao Congregacao? @relation(fields: [congId], references: [id])
+  escala      EscalaMensal        @relation(fields: [escalaId], references: [id], onDelete: Cascade)
+  congregacao Congregacao?        @relation(fields: [congId], references: [id])
+  obreiros    EscalaItemObreiro[]
 
   @@index([escalaId])
   @@index([congId])
   @@map("Escala_Itens")
+}
+
+/// Quem prega num culto — ligado à PESSOA, não a um texto solto. É o que
+/// permite contar quantas vezes cada obreiro serve no mês e avisar quando o
+/// mesmo obreiro cai duas vezes no mesmo dia (ver `conflitosDoObreiro` na
+/// rota de itens).
+model EscalaItemObreiro {
+  id       Int @id @default(autoincrement())
+  itemId   Int
+  pessoaId Int
+  /// Ordem de exibição entre os pregadores do MESMO culto ("Pb. Reginaldo /
+  /// Dc. Gilberto" — Reginaldo primeiro).
+  ordem    Int @default(0)
+
+  item   EscalaItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  pessoa Pessoa     @relation(fields: [pessoaId], references: [id])
+
+  @@unique([itemId, pessoaId])
+  @@index([itemId])
+  @@index([pessoaId])
+  @@map("Escala_Item_Obreiros")
+}
+
+/// Um aviso do rodapé da escala — "Grupos escalados para doutrina no Templo
+/// Matriz", com data e descrição. Vários por mês, em qualquer ordem.
+model EscalaAviso {
+  id        Int       @id @default(autoincrement())
+  escalaId  Int
+  data      DateTime? @db.Date
+  titulo    String
+  descricao String
+  ordem     Int       @default(0)
+
+  escala EscalaMensal @relation(fields: [escalaId], references: [id], onDelete: Cascade)
+
+  @@index([escalaId])
+  @@map("Escala_Avisos")
 }
 
 model Evento {
@@ -630,8 +668,9 @@ model Pessoa {
   criadoEm   DateTime @default(now())
   atualizado DateTime @updatedAt
 
-  cargos  PessoaCargo[]
-  usuario Usuario?
+  cargos      PessoaCargo[]
+  usuario     Usuario?
+  escalaItens EscalaItemObreiro[]
 
   @@index([nome])
   @@map("Pessoas")

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { dataCivil, erro, lerCorpo, responder, texto, textoOpcional } from "@/lib/api";
+import { dataCivil, erro, lerCorpo, responder, texto } from "@/lib/api";
 import { exigirEscrita, exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 import { autorDa } from "@/lib/api/legado";
 
@@ -12,20 +12,28 @@ import { autorDa } from "@/lib/api/legado";
  * todo mundo lê o mesmo mês, como sempre recebeu o mesmo PDF no WhatsApp.
  * Só GRAVAR é reservado a quem enxerga o campo inteiro — ver o comentário em
  * `app/api/escalas-mensais/[id]/route.ts`.
+ *
+ * RASCUNHO x PUBLICADO: uma escala "rascunho" só aparece pra quem PODE
+ * editá-la — um mês pela metade não é a escala oficial ainda, e mostrá-lo
+ * a todo mundo criaria confusão sobre qual congregação de fato vale.
  */
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const { recusa } = await exigirLeitura("escalas");
+  const { sessao, recusa } = await exigirLeitura("escalas");
   if (recusa) return recusa;
+
+  const podeVerRascunho = recorteDaSessao(sessao) === undefined;
 
   return responder(async () => {
     const escalas = await prisma.escalaMensal.findMany({
+      where: podeVerRascunho ? {} : { status: "publicado" },
       orderBy: { mesAno: "desc" },
       select: {
         id: true,
         titulo: true,
         mesAno: true,
+        status: true,
         autor: true,
         atualizado: true,
         _count: { select: { itens: true } },
@@ -37,6 +45,7 @@ export async function GET() {
         id: e.id,
         titulo: e.titulo,
         mesAno: e.mesAno.toISOString().slice(0, 10),
+        status: e.status,
         autor: e.autor,
         atualizado: e.atualizado.toISOString(),
         quantidadeItens: e._count.itens,
@@ -74,12 +83,7 @@ export async function POST(req: Request) {
 
   return responder(async () => {
     const criada = await prisma.escalaMensal.create({
-      data: {
-        titulo,
-        mesAno,
-        avisos: textoOpcional(corpo.avisos, 2000),
-        autor: autorDa(sessao),
-      },
+      data: { titulo, mesAno, autor: autorDa(sessao) },
       select: { id: true },
     });
     return { id: criada.id };
