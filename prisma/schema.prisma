@@ -43,6 +43,7 @@ model Congregacao {
   visitantes         Visitante[]
   licoes             Licao[]
   escalaCultos       EscalaCulto[]
+  escalaItens        EscalaItem[]
   eventos            Evento[]
   avisos             Aviso[]
   pessoaCargos       PessoaCargo[]
@@ -428,6 +429,74 @@ model EscalaCulto {
 
   @@index([congId])
   @@map("Escala_Cultos")
+}
+
+/**
+ * A escala mensal montada DENTRO do portal — decisão tomada em cima da
+ * anterior (ver o comentário grande em `app/api/escalas/route.ts`): aquela
+ * rejeitava modelar turnos porque duplicaria o PDF que o campo já distribuía.
+ * O pastor pediu o oposto — montar a escala pelo aplicativo, mais rápido do
+ * que hoje — e por decisão dele o link do Drive SAI de circulação: esta
+ * tabela é agora a única fonte da escala oficial. `Escala_Cultos` continua
+ * existindo só para as escalas antigas, já publicadas antes da troca, não
+ * sumirem do histórico.
+ *
+ * Uma linha por MÊS. Os cultos do mês inteiro (todas as congregações, todos
+ * os dias) ficam em `EscalaItem`, e são montados e editados junto — não um
+ * de cada vez como o resto do sistema, porque um mês tem mais de cem
+ * lançamentos e esperar cada um confirmar sozinho seria o oposto de "mais
+ * rápido".
+ */
+model EscalaMensal {
+  id         Int      @id @default(autoincrement())
+  mesAno     DateTime @db.Date
+  titulo     String
+  /// O quadro de avisos livre do rodapé do PDF ("Grupos escalados para
+  /// doutrina no Templo Matriz" etc.) — texto solto, não estruturado.
+  avisos     String?
+  autor      String
+  criadoEm   DateTime @default(now())
+  atualizado DateTime @updatedAt
+
+  itens EscalaItem[]
+
+  @@unique([mesAno])
+  @@map("Escalas_Mensais")
+}
+
+/// Um culto escalado: um dia, um lugar, quem prega.
+model EscalaItem {
+  id         Int      @id @default(autoincrement())
+  escalaId   Int
+  data       DateTime @db.Date
+  /// O código da legenda ("2" = Pregação, "27" = Consagração Geral…) — ver
+  /// `lib/escalas/tiposCulto.ts`. Guardado como veio do PDF oficial, não
+  /// recodificado: a legenda pode ganhar item novo sem migrar dado velho.
+  tipoCodigo Int
+  /// A congregação, quando já existe no cadastro do campo.
+  congId     Int?
+  /// O nome do local como aparece na escala. Preenchido sempre — inclusive
+  /// quando `congId` está vazio, porque a escala real cita lugares (ex.
+  /// "Cong. Alto Bom Jesus") que o cadastro de congregações do portal ainda
+  /// não tem. Ver o comentário grande em `app/api/escalas-mensais/route.ts`.
+  local      String
+  /// "Pb. Reginaldo / Dc. Gilberto" — um ou mais pregadores, já com o
+  /// tratamento, separados por " / " como no PDF oficial.
+  pregadores String
+  /// Nota entre parênteses do PDF, ex. "Consagração Geral" no dia do
+  /// aniversário do templo. Quase sempre vazia.
+  destaque   String?
+  /// Ordem de exibição dentro do mesmo dia — replica a ordem das
+  /// congregações no PDF (Matriz primeiro, depois 2, 3…), não a ordem de
+  /// cadastro.
+  ordem      Int      @default(0)
+
+  escala      EscalaMensal @relation(fields: [escalaId], references: [id], onDelete: Cascade)
+  congregacao Congregacao? @relation(fields: [congId], references: [id])
+
+  @@index([escalaId])
+  @@index([congId])
+  @@map("Escala_Itens")
 }
 
 model Evento {
