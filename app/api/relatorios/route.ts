@@ -100,7 +100,7 @@ export async function GET(req: Request) {
         ? Prisma.sql`f.data`
         : Prisma.sql`date_trunc(${por === "mes" ? "month" : "quarter"}, f.data)`;
 
-    const [serie, porClasse, porCongregacao, campoHalves, totais] = await Promise.all([
+    const [serie, porClasse, porCongregacao, campoHalves, totais, matriculadosPorCong, matriculadosPorClasse] = await Promise.all([
       /* Linha do tempo, no balde escolhido. */
       prisma.$queryRaw<
         Array<{ balde: Date; presentes: bigint; faltas: bigint; chamadas: bigint; classes: bigint }>
@@ -201,10 +201,23 @@ export async function GET(req: Request) {
         prisma.visitante.count({ where: { data: { gte: de, lte: ate }, ...filtroCong } }),
         prisma.aluno.count({ where: { ativo: true, ...filtroCong } }),
       ]),
+
+      /*
+       * Matriculados por congregação/classe — a base ATUAL de alunos ativos,
+       * não histórica (o cadastro não guarda quem estava matriculado em cada
+       * domingo do período). Por isso não entra na conta da taxa — é só
+       * contexto: "quantos existem hoje" ao lado de "quantos vieram no
+       * período".
+       */
+      prisma.aluno.groupBy({ by: ["congId"], where: { ativo: true, ...filtroCong }, _count: { _all: true } }),
+      prisma.aluno.groupBy({ by: ["classeId"], where: { ativo: true, ...filtroCong }, _count: { _all: true } }),
     ]);
 
     const taxaDe = (v: number | null) => (v === null ? 0 : Number(v));
     const num = (v: number | null) => (v === null ? null : Number(v));
+
+    const matriculadosCong = new Map(matriculadosPorCong.map((m) => [m.congId, m._count._all]));
+    const matriculadosClasse = new Map(matriculadosPorClasse.map((m) => [m.classeId, m._count._all]));
 
     /*
      * A tendência de uma linha: comparamos a média recente com a anterior.
@@ -252,6 +265,7 @@ export async function GET(req: Request) {
         classeId: l.classeId,
         classe: l.classe ?? "Sem classe",
         congregacao: l.congregacao ?? "—",
+        matriculados: matriculadosClasse.get(l.classeId) ?? 0,
         domingos: Number(l.domingos),
         presencas: Number(l.presencas),
         faltas: Number(l.faltas),
@@ -262,6 +276,7 @@ export async function GET(req: Request) {
       porCongregacao: porCongregacao.map((l) => ({
         congId: l.congId,
         congregacao: l.congregacao ?? "Sem congregação",
+        matriculados: matriculadosCong.get(l.congId) ?? 0,
         domingos: Number(l.domingos),
         classes: Number(l.classes),
         presencas: Number(l.presencas),
