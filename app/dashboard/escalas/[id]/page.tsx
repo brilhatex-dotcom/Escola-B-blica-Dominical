@@ -4,8 +4,8 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle, ArrowLeft, ArrowRightCircle, BadgeCheck, CalendarRange,
-  ChevronLeft, ChevronRight, Loader2, Menu, Pencil, Plus, Printer, Save, Search, Send,
-  Trash2, Undo2, UserRound, X,
+  ChevronLeft, ChevronRight, ClipboardPaste, Loader2, Menu, Pencil, Plus, Printer, Save, Search, Send,
+  Sparkles, Trash2, Undo2, UserRound, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Alert } from "@/components/ui/alert";
@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro } from "@/components/dashboard/PaginaModulo";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
-import { TIPOS_CULTO, rotuloDoTipo } from "@/lib/escalas/tiposCulto";
+import { separarTratamento } from "@/lib/pessoas/nome";
+import { TIPOS_CULTO, rotuloDoTipo, tipoCultoValido } from "@/lib/escalas/tiposCulto";
 
 /**
  * Montar (ou ler) a escala mensal de um mês.
@@ -121,6 +122,15 @@ export default function EscalaMensalPage({ params }: { params: Promise<{ id: str
 
   const [confirmandoPublicar, setConfirmandoPublicar] = useState(false);
   const [publicando, setPublicando] = useState(false);
+
+  const [importarAberto, setImportarAberto] = useState(false);
+  const [textoImportar, setTextoImportar] = useState("");
+  const [erroImportar, setErroImportar] = useState<string | null>(null);
+
+  const [gerarAberto, setGerarAberto] = useState(false);
+  const [origemGerar, setOrigemGerar] = useState<number | "">("");
+  const [gerando, setGerando] = useState(false);
+  const [erroGerar, setErroGerar] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setErro(null);
@@ -291,6 +301,93 @@ export default function EscalaMensalPage({ params }: { params: Promise<{ id: str
       ...doDia.map((it) => ({ ...it, chave: crypto.randomUUID(), id: undefined, data: proxima })),
     ]);
     setSujo(true);
+  }
+
+  /**
+   * Colar dados prontos (avançado) — carrega um mês inteiro de uma vez, sem
+   * gravar nada sozinho. Serve para trazer uma escala que já existia fora do
+   * portal (ex.: o PDF oficial de um mês anterior à troca) — cola-se aqui, o
+   * pastor confere na grade normal, e só então clica em "Salvar alterações"
+   * como qualquer outra edição.
+   */
+  function importarTexto() {
+    setErroImportar(null);
+    let dadosImportados: {
+      titulo?: string;
+      avisos?: { data?: string | null; titulo: string; descricao: string }[];
+      itens?: {
+        data: string; tipoCodigo: number; congId?: number | null; local: string;
+        destaque?: string | null; obreiros: string[];
+      }[];
+    };
+    try {
+      dadosImportados = JSON.parse(textoImportar);
+    } catch {
+      setErroImportar("Isso não é um JSON válido — confira se colou o texto inteiro.");
+      return;
+    }
+    if (!Array.isArray(dadosImportados.itens)) {
+      setErroImportar('Faltou a lista "itens".');
+      return;
+    }
+    for (let i = 0; i < dadosImportados.itens.length; i++) {
+      const it = dadosImportados.itens[i];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(it.data)) { setErroImportar(`Culto ${i + 1}: data inválida ("${it.data}").`); return; }
+      if (!tipoCultoValido(it.tipoCodigo)) { setErroImportar(`Culto ${i + 1}: tipo de culto "${it.tipoCodigo}" não existe na legenda.`); return; }
+      if (!it.local?.trim()) { setErroImportar(`Culto ${i + 1}: falta o local.`); return; }
+    }
+    if (itens.length > 0 && !window.confirm(`Isso substitui os ${itens.length} culto(s) já lançados na tela. Continuar?`)) {
+      return;
+    }
+
+    const itensNovos: ItemLocal[] = dadosImportados.itens.map((it) => ({
+      chave: crypto.randomUUID(),
+      data: it.data,
+      tipoCodigo: it.tipoCodigo,
+      congId: it.congId ?? null,
+      local: it.local,
+      destaque: it.destaque ?? "",
+      obreiros: it.obreiros.map((nomeCompleto) => {
+        const { tratamento, nome } = separarTratamento(nomeCompleto);
+        return { nomeNovo: nomeCompleto, nome, tratamento };
+      }),
+    }));
+    const avisosNovos: AvisoLocal[] = (dadosImportados.avisos ?? []).map((a) => ({
+      chave: crypto.randomUUID(), data: a.data ?? "", titulo: a.titulo, descricao: a.descricao,
+    }));
+
+    setItens(itensNovos);
+    setAvisos(avisosNovos);
+    if (dadosImportados.titulo) setTitulo(dadosImportados.titulo);
+    setSujo(true);
+    setImportarAberto(false);
+    setTextoImportar("");
+  }
+
+  /**
+   * Gerar a partir do mês anterior — a mesma escala de novo, com as datas
+   * trocadas para o mês atual (mesmo dia da semana, mesma posição no mês:
+   * "1º Domingo" de agosto vira "1º Domingo" de setembro). Precisa que a
+   * escala de origem já esteja gravada no banco (é o servidor que faz a
+   * conta, olhando os `EscalaItemObreiro` já resolvidos).
+   */
+  async function gerarDoMesAnterior() {
+    if (!origemGerar) return;
+    setGerando(true);
+    setErroGerar(null);
+    try {
+      const res = await fetch(`/api/escalas-mensais/${id}/gerar-do-mes-anterior`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origemId: origemGerar }),
+      });
+      const corpo = await res.json().catch(() => ({}));
+      if (!res.ok) { setErroGerar(corpo.erro ?? "Não foi possível gerar a partir do mês escolhido."); return; }
+      setGerarAberto(false);
+      await carregar();
+    } finally {
+      setGerando(false);
+    }
   }
 
   function adicionarObreiroAoItem(chaveItem: string, obreiro: ObreiroItem) {
@@ -587,16 +684,30 @@ export default function EscalaMensalPage({ params }: { params: Promise<{ id: str
             {/* ÁREA B — escala mensal, organizada por dia */}
             <div className="min-w-0 flex-1">
               {editavel && (
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-3 flex items-center justify-between gap-2">
                   <input
                     value={titulo}
                     onChange={(e) => { setTitulo(e.target.value); setSujo(true); }}
                     className={cn(campoBase, "font-display text-[0.9rem]")}
                   />
-                  <Button size="sm" variant="ghost" className="ml-2 shrink-0" onClick={() => iniciarNovoCulto()}>
-                    <Plus className="h-3.5 w-3.5" />
-                    Novo culto
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {itens.length === 0 && (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => setGerarAberto(true)} title="Gerar a partir de um mês já lançado no portal">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          Gerar do mês anterior
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setImportarAberto(true)} title="Colar uma escala pronta">
+                          <ClipboardPaste className="h-3.5 w-3.5" />
+                          Colar dados
+                        </Button>
+                      </>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => iniciarNovoCulto()}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Novo culto
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -812,17 +923,38 @@ export default function EscalaMensalPage({ params }: { params: Promise<{ id: str
 
           {/* A réplica impressa — some na tela, só aparece no papel/PDF. */}
           <div className="hidden print:block">
-            <header className="text-center">
-              <p className="text-[0.7rem] uppercase tracking-[0.2em]">Assembleia de Deus — IEADPE Betânia (PE)</p>
-              {(presidente?.nome || localLider?.nome) && (
-                <p className="mt-0.5 text-[0.68rem]">
-                  {presidente?.nome && <>{presidente.cargo}: {presidente.tratamento ? `${presidente.tratamento} ` : ""}{presidente.nome}</>}
-                  {presidente?.nome && localLider?.nome && "  ·  "}
-                  {localLider?.nome && <>{localLider.cargo}: {localLider.tratamento ? `${localLider.tratamento} ` : ""}{localLider.nome}</>}
-                </p>
-              )}
-              <h1 className="mt-2 text-[1.05rem] font-bold uppercase tracking-wide">{titulo}</h1>
+            <header className="flex items-center gap-3 border-b-[3px] border-[#0f2a8f] pb-1.5">
+              <div className="flex w-[4.6rem] shrink-0 flex-col items-center text-center">
+                <EmblemaAD />
+                <p className="mt-0.5 text-[0.42rem] font-bold leading-tight tracking-wide">ASSEMBLEIA DE DEUS</p>
+                <p className="text-[0.38rem] leading-tight tracking-wide text-[#0f2a8f]">PERNAMBUCO</p>
+              </div>
+
+              <div className="flex flex-1 items-center justify-center leading-none">
+                <div className="text-center">
+                  <p className="text-[2rem] font-black italic tracking-tight text-[#0f2a8f]">IEADPE</p>
+                  <p className="-mt-1 text-[1.7rem] font-black italic tracking-tight text-[#c81e1e]">BETÂNIA</p>
+                </div>
+              </div>
+
+              <div className="flex shrink-0 flex-col gap-1">
+                {presidente?.nome && (
+                  <SeloLideranca cor="#0f2a8f" rotulo={presidente.cargo} nome={`${presidente.tratamento ? `${presidente.tratamento} ` : ""}${presidente.nome}`} />
+                )}
+                {localLider?.nome && (
+                  <SeloLideranca cor="#c81e1e" rotulo={localLider.cargo} nome={`${localLider.tratamento ? `${localLider.tratamento} ` : ""}${localLider.nome}`} />
+                )}
+              </div>
             </header>
+
+            <div className="flex h-1.5 w-full">
+              <div className="w-2/3 bg-[#0f2a8f]" />
+              <div className="w-1/3 bg-[#c81e1e]" />
+            </div>
+
+            <h1 className="mt-2 border border-black bg-black py-1 text-center text-[1rem] font-bold uppercase tracking-wide text-white">
+              {titulo}
+            </h1>
 
             <section className="mt-3 border border-black text-[0.6rem] leading-tight">
               <p className="border-b border-black bg-gray-200 px-1.5 py-0.5 font-semibold uppercase">Legenda dos tipos de culto</p>
@@ -863,6 +995,69 @@ export default function EscalaMensalPage({ params }: { params: Promise<{ id: str
         </>
       )}
 
+      {importarAberto && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-brand-950/80 p-4 backdrop-blur-sm print:hidden" onClick={() => setImportarAberto(false)}>
+          <div className="glass-panel w-full max-w-lg rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center gap-2">
+              <ClipboardPaste className="h-5 w-5 text-gold-300" />
+              <h2 className="text-[0.94rem] font-semibold text-white">Colar dados</h2>
+            </div>
+            <p className="mb-3 text-[0.78rem] text-brand-200/60">
+              Cole aqui o texto que foi preparado para este mês. A grade fica preenchida na tela para você conferir —
+              nada é gravado até clicar em "Salvar alterações".
+            </p>
+            <textarea
+              rows={8}
+              value={textoImportar}
+              onChange={(e) => setTextoImportar(e.target.value)}
+              placeholder="Cole aqui…"
+              className={cn(campoBase, "h-auto py-2.5 font-mono text-[0.72rem] leading-relaxed")}
+            />
+            {erroImportar && <p className="mt-2 text-[0.8rem] text-flame-400" role="alert">{erroImportar}</p>}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setImportarAberto(false)}>Cancelar</Button>
+              <Button onClick={importarTexto} disabled={!textoImportar.trim()}>Importar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gerarAberto && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-brand-950/80 p-4 backdrop-blur-sm print:hidden" onClick={() => setGerarAberto(false)}>
+          <div className="glass-panel w-full max-w-sm rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-1 flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-gold-300" />
+              <h2 className="text-[0.94rem] font-semibold text-white">Gerar a partir do mês anterior</h2>
+            </div>
+            <p className="mb-3 text-[0.78rem] text-brand-200/60">
+              Repete a mesma escala de outro mês — mesmo dia da semana, mesma congregação, mesmos obreiros —
+              trocando as datas para este mês. Você confere e ajusta antes de salvar.
+            </p>
+            <label className="block">
+              <span className="mb-1.5 block text-[0.74rem] text-brand-200/70">Mês de referência</span>
+              <select
+                value={origemGerar}
+                onChange={(e) => setOrigemGerar(e.target.value ? Number(e.target.value) : "")}
+                className={cn(campoBase, "[&>option]:bg-brand-900")}
+              >
+                <option value="">Escolha um mês…</option>
+                {meses.filter((m) => m.id !== id).map((m) => (
+                  <option key={m.id} value={m.id}>{fmtMes.format(new Date(`${m.mesAno}T12:00:00`))}</option>
+                ))}
+              </select>
+            </label>
+            {erroGerar && <p className="mt-2 text-[0.8rem] text-flame-400" role="alert">{erroGerar}</p>}
+            <div className="mt-3 flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setGerarAberto(false)} disabled={gerando}>Cancelar</Button>
+              <Button onClick={() => void gerarDoMesAnterior()} disabled={!origemGerar || gerando}>
+                {gerando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                Gerar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmandoPublicar && dados && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-brand-950/80 p-4 backdrop-blur-sm print:hidden" onClick={() => setConfirmandoPublicar(false)}>
           <div className="glass-panel w-full max-w-sm rounded-2xl p-5" onClick={(e) => e.stopPropagation()}>
@@ -891,6 +1086,38 @@ export default function EscalaMensalPage({ params }: { params: Promise<{ id: str
         </div>
       )}
     </>
+  );
+}
+
+/** O globo com a cruz — o emblema da Assembleia de Deus, só para o cabeçalho impresso. */
+function EmblemaAD() {
+  return (
+    <svg viewBox="0 0 80 80" className="h-11 w-11" aria-hidden="true">
+      <circle cx="40" cy="40" r="30" fill="white" stroke="#0f2a8f" strokeWidth="2.5" />
+      <ellipse cx="40" cy="40" rx="12" ry="30" fill="none" stroke="#0f2a8f" strokeWidth="1" />
+      <ellipse cx="40" cy="40" rx="30" ry="12" fill="none" stroke="#0f2a8f" strokeWidth="1" />
+      <path d="M 10 40 A 30 30 0 0 1 70 40" fill="none" stroke="#0f2a8f" strokeWidth="1" />
+      <clipPath id="globoRecorte"><circle cx="40" cy="40" r="30" /></clipPath>
+      <rect x="4" y="33" width="72" height="14" fill="#c81e1e" clipPath="url(#globoRecorte)" />
+      <g fill="white" stroke="#0f2a8f" strokeWidth="1.5">
+        <rect x="34" y="6" width="12" height="68" />
+        <rect x="14" y="30" width="52" height="12" />
+      </g>
+    </svg>
+  );
+}
+
+function SeloLideranca({ cor, rotulo, nome }: { cor: string; rotulo: string; nome: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style={{ backgroundColor: cor }}>
+        <UserRound className="h-3.5 w-3.5 text-white" />
+      </div>
+      <div className="leading-tight">
+        <p className="rounded-sm px-1 text-[0.44rem] font-bold uppercase tracking-wide text-white" style={{ backgroundColor: cor }}>{rotulo}</p>
+        <p className="text-[0.56rem] font-semibold" style={{ color: cor }}>{nome}</p>
+      </div>
+    </div>
   );
 }
 
