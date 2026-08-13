@@ -51,6 +51,7 @@ interface LinhaClasse extends Tendencia {
   presencas: number;
   faltas: number;
   media: number;
+  mediaFaltas: number;
   taxa: number;
 }
 interface LinhaCong extends Tendencia {
@@ -62,6 +63,7 @@ interface LinhaCong extends Tendencia {
   presencas: number;
   faltas: number;
   media: number;
+  mediaFaltas: number;
   taxa: number;
 }
 interface PontoSerie {
@@ -221,7 +223,7 @@ function tendenciaTexto(t: Tendencia): string {
   return `${sinal}${t.variacao.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}${pct}`;
 }
 
-interface LinhaImpressa { id: number | null; nome: string; extra: string | number; matriculados: number; domingos: number; media: number; faltas: number; taxa: number; tendencia: Tendencia }
+interface LinhaImpressa { id: number | null; nome: string; extra: string | number; matriculados: number; domingos: number; media: number; mediaFaltas: number; taxa: number; tendencia: Tendencia }
 
 /** Uma tabela do relatório impresso — o mesmo desenho para congregação e classe. */
 function TabelaImpressa({ titulo, nomeCol, extraCol, linhas }: { titulo: string; nomeCol: string; extraCol: string; linhas: LinhaImpressa[] }) {
@@ -235,8 +237,8 @@ function TabelaImpressa({ titulo, nomeCol, extraCol, linhas }: { titulo: string;
             <th className="border-r border-black px-2 py-1 font-semibold">{extraCol}</th>
             <th className="border-r border-black px-2 py-1 text-right font-semibold">Matric.</th>
             <th className="border-r border-black px-2 py-1 text-right font-semibold">Domingos</th>
-            <th className="border-r border-black px-2 py-1 text-right font-semibold">Média</th>
-            <th className="border-r border-black px-2 py-1 text-right font-semibold">Ausentes</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Média presentes</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Média ausentes</th>
             <th className="border-r border-black px-2 py-1 text-right font-semibold">Taxa</th>
             <th className="px-2 py-1 text-right font-semibold">Tendência</th>
           </tr>
@@ -252,7 +254,7 @@ function TabelaImpressa({ titulo, nomeCol, extraCol, linhas }: { titulo: string;
                 <td className="border-r border-black/30 px-2 py-1 text-right">{numero(l.matriculados)}</td>
                 <td className="border-r border-black/30 px-2 py-1 text-right">{l.domingos}</td>
                 <td className="border-r border-black/30 px-2 py-1 text-right">{l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}</td>
-                <td className="border-r border-black/30 px-2 py-1 text-right">{numero(l.faltas)}</td>
+                <td className="border-r border-black/30 px-2 py-1 text-right">{l.mediaFaltas.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}</td>
                 <td className="border-r border-black/30 px-2 py-1 text-right font-semibold">{l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%</td>
                 <td className="px-2 py-1 text-right">{tendenciaTexto(l.tendencia)}</td>
               </tr>
@@ -605,8 +607,8 @@ export default function RelatoriosPage() {
                       </th>
                       <th className="px-3 py-2.5 text-right font-medium">Matriculados</th>
                       <th className="px-3 py-2.5 text-right font-medium">Domingos</th>
-                      <th className="px-3 py-2.5 text-right font-medium">Média</th>
-                      <th className="px-3 py-2.5 text-right font-medium">Ausentes</th>
+                      <th className="px-3 py-2.5 text-right font-medium">Média presentes</th>
+                      <th className="px-3 py-2.5 text-right font-medium">Média ausentes</th>
                       <th className="px-3 py-2.5 text-right font-medium">Taxa</th>
                       <th className="px-5 py-2.5 text-right font-medium">Tendência</th>
                     </tr>
@@ -622,7 +624,9 @@ export default function RelatoriosPage() {
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">
                               {l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                             </td>
-                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">{numero(l.faltas)}</td>
+                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">
+                              {l.mediaFaltas.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            </td>
                             <td className={cn("px-3 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
                               {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
                             </td>
@@ -638,7 +642,9 @@ export default function RelatoriosPage() {
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">
                               {l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                             </td>
-                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">{numero(l.faltas)}</td>
+                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-flame-400/75">
+                              {l.mediaFaltas.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                            </td>
                             <td className={cn("px-3 py-2.5 text-right text-[0.86rem] font-semibold tabular-nums", corDaTaxa(l.taxa))}>
                               {l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%
                             </td>
@@ -689,12 +695,12 @@ export default function RelatoriosPage() {
 
               <TabelaImpressa titulo="Índice por congregação" nomeCol="Congregação" extraCol="Classes" linhas={dadosIndice.porCongregacao.map((l) => ({
                 id: l.congId, nome: l.congregacao, extra: l.classes, matriculados: l.matriculados,
-                domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
+                domingos: l.domingos, media: l.media, mediaFaltas: l.mediaFaltas, taxa: l.taxa, tendencia: l,
               }))} />
 
               <TabelaImpressa titulo="Índice por classe" nomeCol="Classe" extraCol="Congregação" linhas={dadosIndice.porClasse.map((l) => ({
                 id: l.classeId, nome: l.classe, extra: l.congregacao, matriculados: l.matriculados,
-                domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
+                domingos: l.domingos, media: l.media, mediaFaltas: l.mediaFaltas, taxa: l.taxa, tendencia: l,
               }))} />
             </>
           )}

@@ -128,6 +128,7 @@ export async function GET(req: Request) {
           presencas: bigint;
           faltas: bigint;
           media: number | null;
+          media_faltas: number | null;
           taxa: number | null;
           media_ant: number | null;
           media_rec: number | null;
@@ -141,6 +142,7 @@ export async function GET(req: Request) {
           count(*) FILTER (WHERE f.presente)             AS presencas,
           count(*) FILTER (WHERE NOT f.presente)         AS faltas,
           round(count(*) FILTER (WHERE f.presente)::numeric / NULLIF(count(DISTINCT f.data), 0), 1) AS media,
+          round(count(*) FILTER (WHERE NOT f.presente)::numeric / NULLIF(count(DISTINCT f.data), 0), 1) AS media_faltas,
           round(100.0 * count(*) FILTER (WHERE f.presente) / NULLIF(count(*), 0), 1) AS taxa,
           round(count(*) FILTER (WHERE f.presente AND f.data <  ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data <  ${meio}), 0), 1) AS media_ant,
           round(count(*) FILTER (WHERE f.presente AND f.data >= ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data >= ${meio}), 0), 1) AS media_rec
@@ -163,6 +165,7 @@ export async function GET(req: Request) {
           presencas: bigint;
           faltas: bigint;
           media: number | null;
+          media_faltas: number | null;
           taxa: number | null;
           media_ant: number | null;
           media_rec: number | null;
@@ -176,6 +179,7 @@ export async function GET(req: Request) {
           count(*) FILTER (WHERE f.presente)             AS presencas,
           count(*) FILTER (WHERE NOT f.presente)         AS faltas,
           round(count(*) FILTER (WHERE f.presente)::numeric / NULLIF(count(DISTINCT f.data), 0), 1) AS media,
+          round(count(*) FILTER (WHERE NOT f.presente)::numeric / NULLIF(count(DISTINCT f.data), 0), 1) AS media_faltas,
           round(100.0 * count(*) FILTER (WHERE f.presente) / NULLIF(count(*), 0), 1) AS taxa,
           round(count(*) FILTER (WHERE f.presente AND f.data <  ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data <  ${meio}), 0), 1) AS media_ant,
           round(count(*) FILTER (WHERE f.presente AND f.data >= ${meio})::numeric / NULLIF(count(DISTINCT f.data) FILTER (WHERE f.data >= ${meio}), 0), 1) AS media_rec
@@ -270,6 +274,7 @@ export async function GET(req: Request) {
         presencas: Number(l.presencas),
         faltas: Number(l.faltas),
         media: taxaDe(l.media),
+        mediaFaltas: taxaDe(l.media_faltas),
         taxa: taxaDe(l.taxa),
         ...tendenciaDe(l.media_ant, l.media_rec),
       })),
@@ -282,6 +287,7 @@ export async function GET(req: Request) {
         presencas: Number(l.presencas),
         faltas: Number(l.faltas),
         media: taxaDe(l.media),
+        mediaFaltas: taxaDe(l.media_faltas),
         taxa: taxaDe(l.taxa),
         ...tendenciaDe(l.media_ant, l.media_rec),
       })),
