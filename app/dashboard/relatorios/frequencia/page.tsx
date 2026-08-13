@@ -272,6 +272,20 @@ export default function RelatoriosPage() {
   const [por, setPor] = useState<Por>("domingo");
   const [agrupar, setAgrupar] = useState<Agrupar>("congregacao");
 
+  /*
+   * O ÍNDICE POR CONGREGAÇÃO/CLASSE TEM O PRÓPRIO PERÍODO
+   *
+   * O De/Até do topo movimenta os indicadores e a linha do tempo. Mas quem
+   * está olhando o ranking muitas vezes quer um recorte diferente ali —
+   * "só este mês", por exemplo — sem perder o período maior que está vendo
+   * em cima. Por isso esta seção busca os dados dela sozinha, com o próprio
+   * filtro, começando igual ao período de cima e podendo divergir depois.
+   */
+  const [deIndice, setDeIndice] = useState("");
+  const [ateIndice, setAteIndice] = useState("");
+  const [dadosIndice, setDadosIndice] = useState<Relatorio | null>(null);
+  const [erroIndice, setErroIndice] = useState<string | null>(null);
+
   useEffect(() => {
     const controle = new AbortController();
     (async () => {
@@ -287,6 +301,8 @@ export default function RelatoriosPage() {
         setDados(r);
         if (!de) setDe(r.periodo.de);
         if (!ate) setAte(r.periodo.ate);
+        if (!deIndice) setDeIndice(r.periodo.de);
+        if (!ateIndice) setAteIndice(r.periodo.ate);
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
         const status = (e as { status?: number }).status;
@@ -298,7 +314,28 @@ export default function RelatoriosPage() {
       }
     })();
     return () => controle.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [de, ate, por]);
+
+  useEffect(() => {
+    if (!deIndice || !ateIndice) return;
+    const controle = new AbortController();
+    (async () => {
+      try {
+        setErroIndice(null);
+        const url = new URL("/api/relatorios", window.location.origin);
+        url.searchParams.set("de", deIndice);
+        url.searchParams.set("ate", ateIndice);
+        const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
+        if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status });
+        setDadosIndice(await res.json());
+      } catch (e) {
+        if ((e as Error).name === "AbortError") return;
+        setErroIndice("Não foi possível carregar o índice deste período.");
+      }
+    })();
+    return () => controle.abort();
+  }, [deIndice, ateIndice]);
 
   const totalPresencas = dados?.porClasse.reduce((s, l) => s + l.presencas, 0) ?? 0;
   const totalFaltas = dados?.porClasse.reduce((s, l) => s + l.faltas, 0) ?? 0;
@@ -517,20 +554,43 @@ export default function RelatoriosPage() {
                   Índice por {agrupar === "congregacao" ? "congregação" : "classe"}
                 </h2>
                 <p className="mt-0.5 text-[0.74rem] text-brand-200/55">
-                  Ordenado pela taxa de presença — presentes ÷ chamados
+                  Ordenado pela taxa de presença — presentes ÷ chamados. Tem período próprio, à parte do filtro lá em cima.
                 </p>
               </div>
-              <Alternar<Agrupar>
-                valor={agrupar}
-                aoMudar={setAgrupar}
-                opcoes={[
-                  ["congregacao", "Congregação"],
-                  ["classe", "Classe"],
-                ]}
-              />
+              <div className="flex flex-wrap items-center gap-2">
+                {([
+                  ["De", deIndice, setDeIndice],
+                  ["Até", ateIndice, setAteIndice],
+                ] as const).map(([rotulo, valor, definir]) => (
+                  <label
+                    key={rotulo}
+                    className="flex h-9 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2.5 text-[0.76rem]"
+                  >
+                    <span className="shrink-0 text-brand-200/55">{rotulo}</span>
+                    <input
+                      type="date"
+                      value={valor}
+                      onChange={(e) => definir(e.target.value)}
+                      className="bg-transparent text-brand-50 focus:outline-none [color-scheme:dark]"
+                    />
+                  </label>
+                ))}
+                <Alternar<Agrupar>
+                  valor={agrupar}
+                  aoMudar={setAgrupar}
+                  opcoes={[
+                    ["congregacao", "Congregação"],
+                    ["classe", "Classe"],
+                  ]}
+                />
+              </div>
             </header>
 
-            {(agrupar === "congregacao" ? dados.porCongregacao : dados.porClasse).length === 0 ? (
+            {erroIndice ? (
+              <div className="px-5 py-6"><EstadoErro mensagem={erroIndice} /></div>
+            ) : !dadosIndice ? (
+              <div className="px-5 py-6"><EsqueletoLista linhas={3} /></div>
+            ) : (agrupar === "congregacao" ? dadosIndice.porCongregacao : dadosIndice.porClasse).length === 0 ? (
               <EstadoVazio mensagem="Nenhuma chamada registrada neste período." />
             ) : (
               <div className="overflow-x-auto">
@@ -553,7 +613,7 @@ export default function RelatoriosPage() {
                   </thead>
                   <tbody className="divide-y divide-white/6">
                     {agrupar === "congregacao"
-                      ? dados.porCongregacao.map((l, i) => (
+                      ? dadosIndice.porCongregacao.map((l, i) => (
                           <tr key={l.congId ?? `sem-${i}`} className="transition-colors duration-300 hover:bg-white/[0.03]">
                             <td className="px-5 py-2.5 text-[0.84rem] text-brand-50">{l.congregacao}</td>
                             <td className="px-3 py-2.5 text-[0.8rem] tabular-nums text-brand-200/60">{l.classes}</td>
@@ -569,7 +629,7 @@ export default function RelatoriosPage() {
                             <td className="px-5 py-2.5 text-right"><Seta t={l} /></td>
                           </tr>
                         ))
-                      : dados.porClasse.map((l, i) => (
+                      : dadosIndice.porClasse.map((l, i) => (
                           <tr key={l.classeId ?? `sem-${i}`} className="transition-colors duration-300 hover:bg-white/[0.03]">
                             <td className="px-5 py-2.5 text-[0.84rem] text-brand-50">{l.classe}</td>
                             <td className="px-3 py-2.5 text-[0.78rem] text-brand-200/60">{l.congregacao}</td>
@@ -621,15 +681,23 @@ export default function RelatoriosPage() {
             </div>
           </section>
 
-          <TabelaImpressa titulo="Índice por congregação" nomeCol="Congregação" extraCol="Classes" linhas={dados.porCongregacao.map((l) => ({
-            id: l.congId, nome: l.congregacao, extra: l.classes, matriculados: l.matriculados,
-            domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
-          }))} />
+          {dadosIndice && (
+            <>
+              <p className="mt-3 text-[0.74rem]">
+                Índice por congregação/classe — período próprio: {fmtDataCurta.format(new Date(`${dadosIndice.periodo.de}T12:00:00`))} a {fmtDataCurta.format(new Date(`${dadosIndice.periodo.ate}T12:00:00`))}
+              </p>
 
-          <TabelaImpressa titulo="Índice por classe" nomeCol="Classe" extraCol="Congregação" linhas={dados.porClasse.map((l) => ({
-            id: l.classeId, nome: l.classe, extra: l.congregacao, matriculados: l.matriculados,
-            domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
-          }))} />
+              <TabelaImpressa titulo="Índice por congregação" nomeCol="Congregação" extraCol="Classes" linhas={dadosIndice.porCongregacao.map((l) => ({
+                id: l.congId, nome: l.congregacao, extra: l.classes, matriculados: l.matriculados,
+                domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
+              }))} />
+
+              <TabelaImpressa titulo="Índice por classe" nomeCol="Classe" extraCol="Congregação" linhas={dadosIndice.porClasse.map((l) => ({
+                id: l.classeId, nome: l.classe, extra: l.congregacao, matriculados: l.matriculados,
+                domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
+              }))} />
+            </>
+          )}
         </div>
         </>
       )}
