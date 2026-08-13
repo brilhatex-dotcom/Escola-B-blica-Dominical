@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, ChartColumn, Minus, Percent, TrendingDown, TrendingUp, UserRoundPlus, Users,
+  ArrowLeft, ChartColumn, Minus, Percent, Printer, TrendingDown, TrendingUp, UserRoundPlus, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -13,6 +13,7 @@ import {
   EstadoErro,
   EstadoVazio,
 } from "@/components/dashboard/PaginaModulo";
+import { Button } from "@/components/ui/button";
 import { numero } from "@/lib/dashboard/formato";
 
 /**
@@ -45,6 +46,7 @@ interface LinhaClasse extends Tendencia {
   classeId: number | null;
   classe: string;
   congregacao: string;
+  matriculados: number;
   domingos: number;
   presencas: number;
   faltas: number;
@@ -54,6 +56,7 @@ interface LinhaClasse extends Tendencia {
 interface LinhaCong extends Tendencia {
   congId: number | null;
   congregacao: string;
+  matriculados: number;
   domingos: number;
   classes: number;
   presencas: number;
@@ -140,6 +143,8 @@ function Alternar<T extends string>({
   );
 }
 
+const fmtDataCurta = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+
 function corDaTaxa(t: number): string {
   if (t >= 75) return "text-emerald-300";
   if (t >= 50) return "text-gold-200";
@@ -208,6 +213,57 @@ function manchete(t: Tendencia): { titulo: string; sub: string; cor: string } {
   };
 }
 
+/** A tendência em texto puro — para o papel, sem ícone nem cor. */
+function tendenciaTexto(t: Tendencia): string {
+  if (t.tendencia === "sem-base" || t.variacao === null) return "sem base";
+  const sinal = t.variacao > 0 ? "+" : "";
+  const pct = t.variacaoPct !== null ? ` (${sinal}${t.variacaoPct}%)` : "";
+  return `${sinal}${t.variacao.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}${pct}`;
+}
+
+interface LinhaImpressa { id: number | null; nome: string; extra: string | number; matriculados: number; domingos: number; media: number; faltas: number; taxa: number; tendencia: Tendencia }
+
+/** Uma tabela do relatório impresso — o mesmo desenho para congregação e classe. */
+function TabelaImpressa({ titulo, nomeCol, extraCol, linhas }: { titulo: string; nomeCol: string; extraCol: string; linhas: LinhaImpressa[] }) {
+  return (
+    <section className="mt-4 break-inside-avoid">
+      <h2 className="border border-b-0 border-black bg-gray-200 px-2 py-1 text-[0.8rem] font-bold uppercase">{titulo}</h2>
+      <table className="w-full border-collapse border border-black text-left text-[0.7rem]">
+        <thead>
+          <tr className="border-b border-black">
+            <th className="border-r border-black px-2 py-1 font-semibold">{nomeCol}</th>
+            <th className="border-r border-black px-2 py-1 font-semibold">{extraCol}</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Matric.</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Domingos</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Média</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Ausentes</th>
+            <th className="border-r border-black px-2 py-1 text-right font-semibold">Taxa</th>
+            <th className="px-2 py-1 text-right font-semibold">Tendência</th>
+          </tr>
+        </thead>
+        <tbody>
+          {linhas.length === 0 ? (
+            <tr><td colSpan={8} className="px-2 py-2 text-center italic">Nenhuma chamada registrada neste período.</td></tr>
+          ) : (
+            linhas.map((l, i) => (
+              <tr key={l.id ?? `sem-${i}`} className="border-b border-black/30 last:border-b-0">
+                <td className="border-r border-black/30 px-2 py-1">{l.nome}</td>
+                <td className="border-r border-black/30 px-2 py-1">{l.extra}</td>
+                <td className="border-r border-black/30 px-2 py-1 text-right">{numero(l.matriculados)}</td>
+                <td className="border-r border-black/30 px-2 py-1 text-right">{l.domingos}</td>
+                <td className="border-r border-black/30 px-2 py-1 text-right">{l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}</td>
+                <td className="border-r border-black/30 px-2 py-1 text-right">{numero(l.faltas)}</td>
+                <td className="border-r border-black/30 px-2 py-1 text-right font-semibold">{l.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%</td>
+                <td className="px-2 py-1 text-right">{tendenciaTexto(l.tendencia)}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 export default function RelatoriosPage() {
   const [dados, setDados] = useState<Relatorio | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -273,42 +329,51 @@ export default function RelatoriosPage() {
 
   return (
     <>
-      <Link
-        href="/dashboard/relatorios"
-        className="mb-3 inline-flex items-center gap-1.5 text-[0.78rem] text-brand-200/60 transition-colors duration-300 hover:text-gold-200"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Painel de Relatórios
-      </Link>
+      <div className="print:hidden">
+        <Link
+          href="/dashboard/relatorios"
+          className="mb-3 inline-flex items-center gap-1.5 text-[0.78rem] text-brand-200/60 transition-colors duration-300 hover:text-gold-200"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Painel de Relatórios
+        </Link>
 
-      <CabecalhoModulo icone={ChartColumn} titulo="Frequência" descricao="Índices de frequência por período, congregação e classe">
-        <div className="flex flex-wrap gap-2">
-          {([
-            ["De", de, setDe],
-            ["Até", ate, setAte],
-          ] as const).map(([rotulo, valor, definir]) => (
-            <label
-              key={rotulo}
-              className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem]"
-            >
-              <span className="shrink-0 text-brand-200/55">{rotulo}</span>
-              <input
-                type="date"
-                value={valor}
-                onChange={(e) => definir(e.target.value)}
-                className="bg-transparent text-brand-50 focus:outline-none [color-scheme:dark]"
-              />
-            </label>
-          ))}
-        </div>
-      </CabecalhoModulo>
+        <CabecalhoModulo icone={ChartColumn} titulo="Frequência" descricao="Índices de frequência por período, congregação e classe">
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["De", de, setDe],
+              ["Até", ate, setAte],
+            ] as const).map(([rotulo, valor, definir]) => (
+              <label
+                key={rotulo}
+                className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem]"
+              >
+                <span className="shrink-0 text-brand-200/55">{rotulo}</span>
+                <input
+                  type="date"
+                  value={valor}
+                  onChange={(e) => definir(e.target.value)}
+                  className="bg-transparent text-brand-50 focus:outline-none [color-scheme:dark]"
+                />
+              </label>
+            ))}
+            {dados && (
+              <Button size="sm" onClick={() => window.print()}>
+                <Printer className="h-4 w-4" />
+                Imprimir
+              </Button>
+            )}
+          </div>
+        </CabecalhoModulo>
+      </div>
 
       {erro ? (
-        <EstadoErro mensagem={erro} />
+        <div className="print:hidden"><EstadoErro mensagem={erro} /></div>
       ) : !dados ? (
-        <EsqueletoLista />
+        <div className="print:hidden"><EsqueletoLista /></div>
       ) : (
         <>
+        <div className="print:hidden">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Resumo
               icone={Percent}
@@ -478,9 +543,10 @@ export default function RelatoriosPage() {
                       <th className="px-3 py-2.5 font-medium">
                         {agrupar === "congregacao" ? "Classes" : "Congregação"}
                       </th>
+                      <th className="px-3 py-2.5 text-right font-medium">Matriculados</th>
                       <th className="px-3 py-2.5 text-right font-medium">Domingos</th>
                       <th className="px-3 py-2.5 text-right font-medium">Média</th>
-                      <th className="px-3 py-2.5 text-right font-medium">Faltas</th>
+                      <th className="px-3 py-2.5 text-right font-medium">Ausentes</th>
                       <th className="px-3 py-2.5 text-right font-medium">Taxa</th>
                       <th className="px-5 py-2.5 text-right font-medium">Tendência</th>
                     </tr>
@@ -491,6 +557,7 @@ export default function RelatoriosPage() {
                           <tr key={l.congId ?? `sem-${i}`} className="transition-colors duration-300 hover:bg-white/[0.03]">
                             <td className="px-5 py-2.5 text-[0.84rem] text-brand-50">{l.congregacao}</td>
                             <td className="px-3 py-2.5 text-[0.8rem] tabular-nums text-brand-200/60">{l.classes}</td>
+                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{numero(l.matriculados)}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{l.domingos}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">
                               {l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
@@ -506,6 +573,7 @@ export default function RelatoriosPage() {
                           <tr key={l.classeId ?? `sem-${i}`} className="transition-colors duration-300 hover:bg-white/[0.03]">
                             <td className="px-5 py-2.5 text-[0.84rem] text-brand-50">{l.classe}</td>
                             <td className="px-3 py-2.5 text-[0.78rem] text-brand-200/60">{l.congregacao}</td>
+                            <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{numero(l.matriculados)}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-brand-200/70">{l.domingos}</td>
                             <td className="px-3 py-2.5 text-right text-[0.8rem] tabular-nums text-emerald-300/85">
                               {l.media.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
@@ -522,6 +590,47 @@ export default function RelatoriosPage() {
               </div>
             )}
           </motion.section>
+        </div>
+
+        {/* ---------------- Réplica impressa — some na tela, só aparece no papel/PDF ---------------- */}
+        <div className="hidden print:block">
+          <header className="border-b-2 border-black pb-3 text-center">
+            <p className="text-[0.7rem] uppercase tracking-[0.2em]">Assembleia de Deus — IEADPE Betânia (PE)</p>
+            <h1 className="mt-1 text-[1.15rem] font-bold uppercase tracking-wide">Relatório de Frequência</h1>
+            <p className="mt-1 text-[0.82rem]">
+              {fmtDataCurta.format(new Date(`${dados.periodo.de}T12:00:00`))} a {fmtDataCurta.format(new Date(`${dados.periodo.ate}T12:00:00`))}
+            </p>
+          </header>
+
+          <section className="mt-3 grid grid-cols-4 gap-2 border border-black text-center text-[0.74rem]">
+            <div className="border-r border-black p-2">
+              <p className="text-[1rem] font-bold">{taxaGeral.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%</p>
+              <p>Taxa de presença</p>
+            </div>
+            <div className="border-r border-black p-2">
+              <p className="text-[1rem] font-bold">{mediaPresencasPorBalde.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}</p>
+              <p>Média por {rotuloBalde}</p>
+            </div>
+            <div className="border-r border-black p-2">
+              <p className="text-[1rem] font-bold">{numero(dados.matriculados)}</p>
+              <p>Matriculados ativos</p>
+            </div>
+            <div className="p-2">
+              <p className="text-[1rem] font-bold">{numero(dados.visitantes)}</p>
+              <p>Visitantes no período</p>
+            </div>
+          </section>
+
+          <TabelaImpressa titulo="Índice por congregação" nomeCol="Congregação" extraCol="Classes" linhas={dados.porCongregacao.map((l) => ({
+            id: l.congId, nome: l.congregacao, extra: l.classes, matriculados: l.matriculados,
+            domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
+          }))} />
+
+          <TabelaImpressa titulo="Índice por classe" nomeCol="Classe" extraCol="Congregação" linhas={dados.porClasse.map((l) => ({
+            id: l.classeId, nome: l.classe, extra: l.congregacao, matriculados: l.matriculados,
+            domingos: l.domingos, media: l.media, faltas: l.faltas, taxa: l.taxa, tendencia: l,
+          }))} />
+        </div>
         </>
       )}
     </>
