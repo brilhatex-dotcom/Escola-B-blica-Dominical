@@ -89,6 +89,7 @@ const VE_A_CONGREGACAO = [
   "rel-frequencia",
   "rel-semanal",
   "rel-ranking",
+  "rel-encarte",
   "rel-faltas",
   "rel-ficha",
   "rel-certificados",

@@ -269,6 +269,13 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         descricao: "Ranking por congregação, por classe e por frequência",
       },
       {
+        chave: "rel-encarte",
+        rotulo: "Encarte de Destaques",
+        href: "/dashboard/relatorios/encarte",
+        icone: Award,
+        descricao: "O Top 3 de presença do domingo, como imagem para o WhatsApp",
+      },
+      {
         chave: "rel-faltas",
         rotulo: "Alerta de Faltas",
         href: "/dashboard/relatorios/faltas",
