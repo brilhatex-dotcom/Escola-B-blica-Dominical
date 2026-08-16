@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Cinzel, Playfair_Display, Inter } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerProvider } from "@/components/pwa/ServiceWorkerProvider";
+import { InstalarApp } from "@/components/pwa/InstalarApp";
 
 /* Titulos */
 const cinzel = Cinzel({
@@ -82,6 +83,7 @@ export default function RootLayout({
       <body className="bg-brand-990 font-sans antialiased">
         {children}
         <ServiceWorkerProvider />
+        <InstalarApp />
       </body>
     </html>
   );
