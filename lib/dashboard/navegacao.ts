@@ -262,6 +262,13 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         descricao: "O relatório de domingo, no modelo da Superintendência das Escolas Dominicais",
       },
       {
+        chave: "rel-consolidado",
+        rotulo: "Relatório Consolidado",
+        href: "/dashboard/relatorios/consolidado",
+        icone: CalendarDays,
+        descricao: "O campo inteiro somado, num domingo só, com o ranking completo por congregação",
+      },
+      {
         chave: "rel-ranking",
         rotulo: "Ranking",
         href: "/dashboard/relatorios/ranking",
