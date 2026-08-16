@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronDown, HelpCircle, LogOut, Settings, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iniciais } from "@/lib/dashboard/formato";
+import { SESSAO_LOCAL_CHAVE } from "@/lib/config";
 import type { Usuario } from "@/lib/dashboard/tipos";
 
 /**
@@ -143,6 +144,10 @@ export function UserMenu({ usuario, className }: UserMenuProps) {
                  */
                 onClick={async () => {
                   setAberto(false);
+                  // Sem isto, um aparelho lembrado (ver `app/page.tsx`) abriria
+                  // direto no painel de novo, sem internet — "Sair" num celular
+                  // emprestado precisa valer de verdade, mesmo offline.
+                  localStorage.removeItem(SESSAO_LOCAL_CHAVE);
                   // Encerra a sessao no SERVIDOR antes de navegar. Sem isto o
                   // cookie continuaria valido: bastaria digitar /dashboard para
                   // voltar, e "Sair" seria so uma troca de tela.

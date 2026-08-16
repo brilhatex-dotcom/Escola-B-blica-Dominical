@@ -32,6 +32,25 @@ export const APP_VERSION = "1.0";
 export const ORG_NAME = "IEADPE Campo de Betânia";
 
 /**
+ * Duração da sessão, em horas — usada tanto para assinar o cookie
+ * (`lib/auth/sessao.ts`) quanto para decidir, no cliente, se um aparelho
+ * "lembrado" ainda pode pular a tela de login quando abre sem internet (ver
+ * `SESSAO_LOCAL_CHAVE` abaixo). As duas precisam concordar: se o número
+ * daqui for maior que o do cookie, o app abriria "logado" no visual sem
+ * sessão nenhuma de verdade por trás.
+ */
+export const SESSAO_HORAS = 8;
+
+/**
+ * Chave no `localStorage` que guarda QUANDO este aparelho entrou pela
+ * última vez com sucesso — não a sessão em si (essa é o cookie httpOnly,
+ * que o JavaScript nem consegue ler), só um lembrete para a tela de abertura
+ * decidir se vale tentar pular direto para o painel quando não há internet
+ * para perguntar ao servidor. Ver o comentário grande em `app/page.tsx`.
+ */
+export const SESSAO_LOCAL_CHAVE = "ebd:sessao-local";
+
+/**
  * A senha herdada bloqueia a GRAVAÇÃO?
  *
  * ============================================================================
