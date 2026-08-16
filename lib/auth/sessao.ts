@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { SESSAO_HORAS } from "@/lib/config";
 import {
   escopoDe,
   papelHerdado,
@@ -26,7 +27,7 @@ import {
  */
 
 const COOKIE = "ebd_sessao";
-const HORAS = 8;
+const HORAS = SESSAO_HORAS;
 
 export interface Sessao {
   id: number;

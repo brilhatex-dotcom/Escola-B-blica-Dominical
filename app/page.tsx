@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { SplashScreen } from "@/components/splash/SplashScreen";
 import { LoginScreen } from "@/components/login/LoginScreen";
@@ -12,6 +13,8 @@ import {
 } from "@/components/media/DroneBackdrop";
 import {
   REPLAY_SPLASH_EVERY_VISIT,
+  SESSAO_HORAS,
+  SESSAO_LOCAL_CHAVE,
   SPLASH_SESSION_KEY,
   SPLASH_TO_LOGIN_MS,
 } from "@/lib/config";
@@ -36,11 +39,32 @@ type Stage = "boot" | "splash" | "login";
  * hydration mismatch.
  */
 export default function Home() {
+  const router = useRouter();
   const [stage, setStage] = useState<Stage>("boot");
   const [backdropPhase, setBackdropPhase] = useState<BackdropPhase>("hidden");
   const backdrop = useRef<DroneBackdropHandle>(null);
 
   useEffect(() => {
+    /*
+     * Aparelho lembrado, sem internet: pula a abertura e o login e vai direto
+     * ao painel.
+     *
+     * Isto NÃO é a autenticação — essa continua sendo só o cookie httpOnly,
+     * conferido no servidor a cada gravação (ver lib/auth/sessao.ts). É
+     * apenas reconhecer que pedir usuário/senha de novo é inútil sem rede
+     * para checar a resposta — e faria exatamente quem já usa o portal hoje
+     * ficar trancado do lado de fora bem na hora em que o offline mais
+     * precisa funcionar. Se o cookie tiver mesmo expirado, o painel funciona
+     * igual do jeito que já funciona sem sessão nenhuma: aberto na tela,
+     * recusado pelo servidor em qualquer gravação real.
+     */
+    const quando = Number(window.localStorage.getItem(SESSAO_LOCAL_CHAVE) ?? 0);
+    const sessaoLocalValida = quando > 0 && Date.now() - quando < SESSAO_HORAS * 3_600_000;
+    if (!navigator.onLine && sessaoLocalValida) {
+      router.replace("/dashboard");
+      return;
+    }
+
     if (REPLAY_SPLASH_EVERY_VISIT) {
       setStage("splash");
       return;
@@ -54,7 +78,7 @@ export default function Home() {
     } else {
       setStage("splash");
     }
-  }, []);
+  }, [router]);
 
   const mostrarVideo = useCallback(() => setBackdropPhase("cinema"), []);
 

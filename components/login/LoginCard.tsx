@@ -8,7 +8,7 @@ import { VerseOfTheDay } from "./VerseOfTheDay";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { APP_VERSION, ORG_NAME } from "@/lib/config";
+import { APP_VERSION, ORG_NAME, SESSAO_LOCAL_CHAVE } from "@/lib/config";
 
 interface LoginCardProps {
   /** `precisaTrocar` chega `true` quando a senha ainda e a herdada da planilha. */
@@ -69,9 +69,18 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
         return;
       }
 
+      // Lembrete local de "este aparelho já entrou" — não é a sessão em si
+      // (essa é o cookie httpOnly), só o que permite a próxima abertura sem
+      // internet pular direto para o painel. Ver `app/page.tsx`.
+      localStorage.setItem(SESSAO_LOCAL_CHAVE, String(Date.now()));
       onAuthenticated(dados.nome || usuario.trim(), Boolean(dados.precisaTrocar));
     } catch {
-      setErros({ geral: "Sem resposta do servidor. Verifique a conexão." });
+      const jaEntrouNesteAparelho = Boolean(localStorage.getItem(SESSAO_LOCAL_CHAVE));
+      setErros({
+        geral: !navigator.onLine && !jaEntrouNesteAparelho
+          ? "Sem internet, e este aparelho ainda não entrou no portal antes. Entre pelo menos uma vez com internet — depois disso, ele abre direto, mesmo sem sinal."
+          : "Sem resposta do servidor. Verifique a conexão.",
+      });
     } finally {
       setLoading(false);
     }
