@@ -12,3 +12,6 @@ next-env.d.ts
 .vercel
 tsconfig.tsbuildinfo
 capturas/
+
+# Claude Code — worktrees de subagentes em background, nunca parte do projeto.
+.claude/
