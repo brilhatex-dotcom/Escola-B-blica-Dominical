@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, BadgeCheck, FilePlus2, Loader2, PenLine, Printer, ReceiptText, RotateCcw } from "lucide-react";
+import { ArrowLeft, BadgeCheck, FilePlus2, Loader2, PenLine, Printer, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CabecalhoModulo, EsqueletoLista, EstadoErro } from "@/components/dashboard/PaginaModulo";
@@ -27,6 +27,10 @@ import { proximoTrimestre, trimestreDe, trimestreValido } from "@/lib/revistas/t
  * Esta tela agora só LÊ: confirmado, mostra a tabela travada, o botão de
  * imprimir e o de reabrir. Rascunho ou pedido nunca começado, ela aponta para
  * o assistente — sem oferecer um segundo jeito de fazer a mesma coisa.
+ *
+ * A administração do campo (`podeAdministrar`) ainda ganha aqui "Editar
+ * pedido" — que também leva ao assistente, mesmo com o pedido confirmado — e
+ * "Excluir pedido", valendo para pedido aberto ou fechado.
  * ============================================================================
  */
 
@@ -40,6 +44,7 @@ interface Dados {
   trimestre: { chave: string; rotulo: string };
   confirmado: boolean; confirmadoEm: string | null; confirmadoPor: string | null;
   podeReabrir: boolean;
+  podeAdministrar: boolean;
   linhas: Linha[]; total: number; revistas: number;
 }
 
@@ -61,6 +66,7 @@ export default function DetalhePedidoPage({ params }: { params: Promise<{ congId
   const [dados, setDados] = useState<Dados | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [reabrindo, setReabrindo] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const { podeGravar } = useAcesso();
   const editavel = podeGravar("revistas");
@@ -109,6 +115,29 @@ export default function DetalhePedidoPage({ params }: { params: Promise<{ congId
       setMsg((e as Error).message);
     } finally {
       setReabrindo(false);
+    }
+  }
+
+  async function excluir() {
+    if (!dados) return;
+    const aviso = dados.confirmado
+      ? `Excluir o pedido CONFIRMADO de ${dados.congNome} (${dados.trimestre.rotulo})? Os pagamentos já lançados continuam registrados.`
+      : `Excluir o rascunho de pedido de ${dados.congNome} (${dados.trimestre.rotulo})?`;
+    if (!window.confirm(aviso)) return;
+    setExcluindo(true);
+    setMsg(null);
+    try {
+      const url = new URL("/api/revistas/pedido", window.location.origin);
+      url.searchParams.set("congId", congId);
+      url.searchParams.set("trimestre", trimestre);
+      const res = await fetch(url, { method: "DELETE" });
+      const corpo = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível excluir.");
+      await carregar();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setExcluindo(false);
     }
   }
 
@@ -209,6 +238,21 @@ export default function DetalhePedidoPage({ params }: { params: Promise<{ congId
                 )}
               </div>
             </Alert>
+          )}
+
+          {editavel && dados.podeAdministrar && (
+            <div className="mb-4 flex flex-wrap items-center gap-2.5 print:hidden">
+              <Button asChild size="sm" variant="ghost">
+                <Link href={linkAssistente}>
+                  <PenLine className="h-3.5 w-3.5" />
+                  Editar pedido
+                </Link>
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => void excluir()} disabled={excluindo}>
+                {excluindo ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                Excluir pedido
+              </Button>
+            </div>
           )}
 
           <div className="glass-panel overflow-hidden rounded-2xl">

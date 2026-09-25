@@ -77,6 +77,8 @@ export interface DadosPedido {
   confirmadoEm: string | null;
   confirmadoPor: string | null;
   podeReabrir: boolean;
+  /** Administração do campo: edita e exclui o pedido mesmo confirmado. */
+  podeAdministrar: boolean;
   linhas: LinhaPedido[];
   total: number;
   revistas: number;
