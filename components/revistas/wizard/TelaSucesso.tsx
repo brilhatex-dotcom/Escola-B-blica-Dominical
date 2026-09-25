@@ -22,6 +22,7 @@ export function TelaSucesso({
   revistas,
   total,
   aoNovoPedido,
+  editado = false,
 }: {
   pedidoId: number | null;
   congId: number;
@@ -31,6 +32,8 @@ export function TelaSucesso({
   revistas: number;
   total: number;
   aoNovoPedido: () => void;
+  /** Um pedido já confirmado que a administração alterou. */
+  editado?: boolean;
 }) {
   return (
     <motion.div
@@ -42,7 +45,7 @@ export function TelaSucesso({
       <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
         <CheckCircle2 className="h-7 w-7 text-emerald-300" />
       </span>
-      <h2 className="mt-4 font-display text-[1.2rem] font-semibold text-white">Pedido realizado com sucesso!</h2>
+      <h2 className="mt-4 font-display text-[1.2rem] font-semibold text-white">{editado ? "Pedido atualizado com sucesso!" : "Pedido realizado com sucesso!"}</h2>
       {pedidoId !== null && (
         <p className="mt-1 text-[0.8rem] tabular-nums text-brand-200/55">Número do pedido: #{String(pedidoId).padStart(6, "0")}</p>
       )}

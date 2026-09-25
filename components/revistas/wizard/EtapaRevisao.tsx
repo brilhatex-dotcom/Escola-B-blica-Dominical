@@ -21,6 +21,7 @@ export function EtapaRevisao({
   aoConfirmar,
   confirmando,
   erro,
+  editandoConfirmado = false,
 }: {
   congNome: string;
   dados: DadosPedido;
@@ -30,6 +31,8 @@ export function EtapaRevisao({
   aoConfirmar: () => void;
   confirmando: boolean;
   erro: string | null;
+  /** Administração editando um pedido já confirmado: o botão só salva. */
+  editandoConfirmado?: boolean;
 }) {
   const itens = dados.linhas
     .map((l) => ({ ...l, quantidade: Number(valores[`${l.categoria}|${l.tipo}`] || 0) }))
@@ -112,7 +115,7 @@ export function EtapaRevisao({
         </Button>
         <Button onClick={aoConfirmar} disabled={confirmando || itens.length === 0}>
           {confirmando ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-          Confirmar Pedido
+          {editandoConfirmado ? "Salvar Alterações" : "Confirmar Pedido"}
         </Button>
       </div>
     </div>

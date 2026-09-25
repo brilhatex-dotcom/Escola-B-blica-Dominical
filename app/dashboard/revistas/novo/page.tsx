@@ -54,7 +54,7 @@ function Conteudo() {
   const [confirmando, setConfirmando] = useState(false);
   const [erroAcao, setErroAcao] = useState<string | null>(null);
   const [reabrindo, setReabrindo] = useState(false);
-  const [resultado, setResultado] = useState<{ id: number | null; revistas: number; total: number } | null>(null);
+  const [resultado, setResultado] = useState<{ id: number | null; revistas: number; total: number; editado: boolean } | null>(null);
 
   // Carrega a lista de congregações do trimestre escolhido — usada nas
   // Etapas 1 e 2. Sem `setPainel(null)` na troca de trimestre: os cartões
@@ -200,6 +200,13 @@ function Conteudo() {
     try {
       const salvouOk = await salvarRascunho();
       if (!salvouOk) return;
+      // Pedido já confirmado, editado pela administração: salvar já basta —
+      // ele continua confirmado, sem passar de novo pelo "confirmar".
+      if (pedido?.confirmado) {
+        setResultado({ id: pedido.id, revistas: revistasDigitadas, total: totalDigitado, editado: true });
+        setEtapa("sucesso");
+        return;
+      }
       const res = await fetch("/api/revistas/pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -207,7 +214,7 @@ function Conteudo() {
       });
       const corpo = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(corpo.erro ?? "Não foi possível confirmar.");
-      setResultado({ id: corpo.id ?? null, revistas: revistasDigitadas, total: totalDigitado });
+      setResultado({ id: corpo.id ?? null, revistas: revistasDigitadas, total: totalDigitado, editado: false });
       setEtapa("sucesso");
     } catch (e) {
       setErroAcao((e as Error).message);
@@ -304,6 +311,7 @@ function Conteudo() {
           revistas={resultado.revistas}
           total={resultado.total}
           aoNovoPedido={novoPedido}
+          editado={resultado.editado}
         />
       ) : (
         <>
@@ -344,7 +352,7 @@ function Conteudo() {
                   <EstadoErro mensagem={erroPedido} />
                 ) : !pedido ? (
                   <EsqueletoLista linhas={5} />
-                ) : pedido.confirmado ? (
+                ) : pedido.confirmado && !pedido.podeAdministrar ? (
                   <Alert tipo="sucesso" titulo="Este pedido já foi confirmado">
                     <p>
                       {congAtual?.nome ?? pedido.congNome} já tem um pedido confirmado para {painel.trimestre.rotulo}.
@@ -364,6 +372,12 @@ function Conteudo() {
                   </Alert>
                 ) : (
                   <>
+                    {pedido.confirmado && (
+                      <Alert tipo="info" titulo="Editando um pedido já confirmado" className="mb-4">
+                        Como administração do campo, você pode alterar este pedido sem reabri-lo. Ele continua confirmado;
+                        as linhas que já existiam mantêm o preço travado na confirmação.
+                      </Alert>
+                    )}
                     <EtapaQuantidades dados={pedido} valores={valores} aoMudar={(chave, v) => setValores((a) => ({ ...a, [chave]: v }))} aoUsarSugestoes={usarSugestoes} />
                     {erroAcao && <p className="mt-3 text-[0.82rem] text-flame-400">{erroAcao}</p>}
                     <div className="mt-5 lg:hidden">
@@ -376,7 +390,7 @@ function Conteudo() {
                 )}
               </div>
 
-              {pedido && !pedido.confirmado && (
+              {pedido && (!pedido.confirmado || pedido.podeAdministrar) && (
                 <ResumoPedido
                   congNome={congAtual?.nome ?? pedido.congNome}
                   trimestreRotulo={painel.trimestre.rotulo}
@@ -404,6 +418,7 @@ function Conteudo() {
                   aoConfirmar={() => void confirmarPedido()}
                   confirmando={confirmando}
                   erro={erroAcao}
+                  editandoConfirmado={pedido.confirmado}
                 />
               </div>
             </div>

@@ -150,6 +150,9 @@ export async function GET(req: Request) {
       // Só a administração do campo pode reabrir um pedido já confirmado —
       // mesma regra do POST abaixo.
       podeReabrir: !recorte,
+      // A administração do campo também edita e exclui qualquer pedido,
+      // confirmado (fechado) ou em rascunho (aberto) — ver PUT e DELETE.
+      podeAdministrar: !recorte,
       linhas,
       total: calcularTotalPedido(pedido?.itens.map((it) => ({ quantidade: it.quantidade, precoUnitario: Number(it.precoUnitario) })) ?? []),
       revistas: calcularTotalRevistas(pedido?.itens ?? []),
@@ -158,7 +161,8 @@ export async function GET(req: Request) {
 }
 
 /* ------------------------------------------------------------------ *
- * PUT — salvar o rascunho (só antes de confirmar)
+ * PUT — salvar o rascunho; a administração do campo também corrige um
+ * pedido já confirmado, sem precisar reabrir
  * ------------------------------------------------------------------ */
 
 interface ItemEntrada { categoria?: string; tipo?: string; quantidade?: unknown }
@@ -213,8 +217,15 @@ export async function PUT(req: Request) {
   const existente = await prisma.pedidoRevista.findUnique({
     where: { congId_trimestre: { congId: congId!, trimestre: tri.chave } },
   });
+  if (existente?.confirmado && recorte) {
+    return erro("Este pedido já foi confirmado. Só a administração do campo pode editá-lo.", 409);
+  }
+  // Editando um pedido confirmado, as linhas que já existiam mantêm o preço
+  // travado na confirmação — só uma modalidade nova entra com o preço atual.
+  const precoTravado = new Map<string, number>();
   if (existente?.confirmado) {
-    return erro("Este pedido já foi confirmado. Reabra para editar.", 409);
+    const itensAtuais = await prisma.pedidoRevistaItem.findMany({ where: { pedidoId: existente.id } });
+    for (const it of itensAtuais) precoTravado.set(`${it.categoria}|${it.tipo}`, Number(it.precoUnitario));
   }
 
   return responder(async () => {
@@ -222,7 +233,7 @@ export async function PUT(req: Request) {
       .filter((it) => it.quantidade > 0)
       .map((it) => {
         const lista = porCategoria.get(it.categoria) ?? [];
-        const preco = lista.find((x) => x.key === it.tipo)?.preco ?? 0;
+        const preco = precoTravado.get(`${it.categoria}|${it.tipo}`) ?? lista.find((x) => x.key === it.tipo)?.preco ?? 0;
         return { ...it, precoUnitario: preco };
       });
 
@@ -247,8 +258,19 @@ export async function PUT(req: Request) {
       return p;
     });
 
+    if (existente?.confirmado) {
+      registrar({
+        sessao,
+        acao: "UPDATE",
+        entidade: "Pedidos_Revistas",
+        descricao: `Pedido confirmado de revistas de ${cong.nome?.trim() || `Congregação ${cong.id}`} editado pela administração — ${tri.rotulo}, ${calcularTotalRevistas(linhasComPreco)} revista(s), R$ ${calcularTotalPedido(linhasComPreco).toFixed(2)}.`,
+        congId: congId!,
+      });
+    }
+
     return {
       ok: true,
+      confirmado: existente?.confirmado ?? false,
       total: calcularTotalPedido(linhasComPreco),
       revistas: calcularTotalRevistas(linhasComPreco),
       pedidoId: pedido.id,
@@ -345,5 +367,48 @@ export async function POST(req: Request) {
       congId: congId!,
     });
     return { ok: true, confirmado: false };
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * DELETE — excluir o pedido (só a administração do campo), esteja ele
+ * confirmado ou em rascunho. Os pagamentos lançados NÃO são apagados —
+ * moram em outra tabela e continuam no saldo da congregação.
+ * ------------------------------------------------------------------ */
+
+export async function DELETE(req: Request) {
+  const { sessao, recusa } = await exigirEscrita("revistas");
+  if (recusa) return recusa;
+
+  const url = new URL(req.url);
+  const congId = Number(url.searchParams.get("congId"));
+  if (!Number.isInteger(congId) || congId <= 0) return erro("Informe a congregação.", 400);
+
+  if (recorteDaSessao(sessao)) {
+    return erro("Só a administração do campo pode excluir um pedido.", 403);
+  }
+
+  const cong = await prisma.congregacao.findUnique({ where: { id: congId }, select: { id: true, nome: true } });
+  if (!cong) return erro("Congregação não encontrada.", 404);
+  const nomeCong = cong.nome?.trim() || `Congregação ${cong.id}`;
+
+  const tri = resolverTrimestre(new Date(), url.searchParams.get("trimestre"));
+  const pedido = await prisma.pedidoRevista.findUnique({
+    where: { congId_trimestre: { congId, trimestre: tri.chave } },
+    include: { itens: true },
+  });
+  if (!pedido) return erro("Não existe pedido desta congregação neste trimestre.", 404);
+
+  return responder(async () => {
+    // `PedidoRevistaItem` tem `onDelete: Cascade` — os itens vão junto.
+    await prisma.pedidoRevista.delete({ where: { id: pedido.id } });
+    registrar({
+      sessao,
+      acao: "DELETE",
+      entidade: "Pedidos_Revistas",
+      descricao: `Pedido de revistas de ${nomeCong} excluído (${pedido.confirmado ? "confirmado" : "rascunho"}) — ${tri.rotulo}, ${calcularTotalRevistas(pedido.itens)} revista(s).`,
+      congId,
+    });
+    return { ok: true };
   });
 }
