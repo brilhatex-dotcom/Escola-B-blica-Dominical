@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AlertTriangle, BadgeCheck, BookMarked, Building2, ChevronRight,
-  Clock, Coins, FilePlus2, HandCoins, Loader2, PenLine, Plus, Receipt, Settings2, Sparkles, Trash2,
+  Clock, Coins, FilePlus2, HandCoins, Loader2, PenLine, Plus, Receipt as ReceiptIcon, ReceiptText, Settings2, Sparkles, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,8 @@ import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { SeletorTrimestre } from "@/components/revistas/SeletorTrimestre";
 import { SituacaoBadge } from "@/components/revistas/SituacaoBadge";
 import { PrazoTexto } from "@/components/revistas/PrazoTexto";
-import { trimestreDe } from "@/lib/revistas/trimestre";
+import { ComprovanteModal, type ComprovanteDados } from "@/components/revistas/ComprovanteModal";
+import { rotuloDoTrimestre, trimestreDe } from "@/lib/revistas/trimestre";
 
 /**
  * Pedidos de Lições — o painel de acompanhamento, separado de propósito do
@@ -116,7 +117,7 @@ export default function RevistasPage() {
   const nenhumPedidoAinda = dados ? dados.congregacoes.every((c) => c.pedido === null) : false;
 
   return (
-    <>
+    <div className="print:hidden">
       <CabecalhoModulo icone={BookMarked} titulo="Pedidos de Lições" descricao="Faça e acompanhe os pedidos de revistas da Escola Bíblica Dominical.">
         {editavel && (
           <Button asChild>
@@ -151,7 +152,7 @@ export default function RevistasPage() {
             href={`/dashboard/revistas/consolidado?trimestre=${trimestre}`}
             className="flex h-10 items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-[0.8rem] text-brand-200/70 transition-colors hover:border-gold-400/30 hover:text-gold-200"
           >
-            <Receipt className="h-4 w-4" />
+            <ReceiptIcon className="h-4 w-4" />
             Pedido consolidado (CPAD)
           </Link>
         )}
@@ -237,7 +238,7 @@ export default function RevistasPage() {
           </div>
         </>
       )}
-    </>
+    </div>
   );
 }
 
@@ -503,18 +504,19 @@ function CartaoCongregacao({ cong, trimestre, aberto, aoAlternar, editavel, aoMu
             )}
           </div>
 
-          <PagamentosDaCong cong={cong} editavel={editavel} aoMudar={aoMudar} />
+          <PagamentosDaCong cong={cong} trimestre={trimestre} editavel={editavel} aoMudar={aoMudar} />
         </motion.div>
       )}
     </div>
   );
 }
 
-function PagamentosDaCong({ cong, editavel, aoMudar }: { cong: CongPedido; editavel: boolean; aoMudar: () => void }) {
+function PagamentosDaCong({ cong, trimestre, editavel, aoMudar }: { cong: CongPedido; trimestre: string; editavel: boolean; aoMudar: () => void }) {
   const [valor, setValor] = useState("");
   const [obs, setObs] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [comprovante, setComprovante] = useState<ComprovanteDados | null>(null);
 
   async function darBaixa() {
     const n = Number(valor.replace(",", "."));
@@ -531,6 +533,10 @@ function PagamentosDaCong({ cong, editavel, aoMudar }: { cong: CongPedido; edita
       if (!res.ok) throw new Error(corpo?.erro ?? "Não foi possível registrar.");
       setValor(""); setObs("");
       aoMudar();
+      // O comprovante abre sozinho — ver o comentário grande no topo de
+      // `ComprovanteModal`. O servidor já manda o saldo calculado certo,
+      // sem esperar a tela recarregar a lista inteira.
+      if (corpo.comprovante) setComprovante(corpo.comprovante as ComprovanteDados);
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
@@ -541,6 +547,29 @@ function PagamentosDaCong({ cong, editavel, aoMudar }: { cong: CongPedido; edita
   async function desfazer(id: number) {
     await fetch(`/api/revistas?id=${id}`, { method: "DELETE" });
     aoMudar();
+  }
+
+  /*
+   * Reemitir o comprovante de uma baixa JÁ registrada — calculado aqui, não
+   * pedido ao servidor de novo, porque os dados já estão na tela: soma-se o
+   * que foi pago ATÉ aquela baixa (ela incluída) e tira do total devido do
+   * pedido confirmado. É a mesma conta que o servidor faz na hora de criar,
+   * só que olhando para trás em vez de para o instante da gravação.
+   */
+  function comprovanteDe(b: Baixa): ComprovanteDados {
+    const somaAteAqui = cong.pagamentos
+      .filter((p) => new Date(p.criadoEm).getTime() <= new Date(b.criadoEm).getTime())
+      .reduce((s, p) => s + p.valor, 0);
+    return {
+      id: b.id,
+      congNome: cong.nome,
+      trimestreRotulo: rotuloDoTrimestre(trimestre),
+      valor: b.valor,
+      observacao: b.observacao,
+      autor: b.autor,
+      criadoEm: b.criadoEm,
+      saldoApos: Number((cong.totalDevido - somaAteAqui).toFixed(2)),
+    };
   }
 
   return (
@@ -565,6 +594,9 @@ function PagamentosDaCong({ cong, editavel, aoMudar }: { cong: CongPedido; edita
               <span className="shrink-0 text-[0.7rem] tabular-nums text-brand-300/45">
                 {fmtData.format(new Date(b.criadoEm))}
               </span>
+              <button type="button" onClick={() => setComprovante(comprovanteDe(b))} aria-label="Ver comprovante" title="Ver comprovante" className="shrink-0 rounded p-1 text-brand-300/50 hover:text-gold-200">
+                <ReceiptText className="h-3.5 w-3.5" />
+              </button>
               {editavel && (
                 <button type="button" onClick={() => void desfazer(b.id)} aria-label="Desfazer baixa" className="shrink-0 rounded p-1 text-brand-300/50 hover:text-flame-400">
                   <Trash2 className="h-3.5 w-3.5" />
@@ -600,6 +632,8 @@ function PagamentosDaCong({ cong, editavel, aoMudar }: { cong: CongPedido; edita
       {cong.saldo <= 0 && cong.totalDevido > 0 && (
         <p className="mt-1 text-[0.78rem] text-emerald-300">Pedido quitado.</p>
       )}
+
+      <ComprovanteModal dados={comprovante} aoFechar={() => setComprovante(null)} />
     </div>
   );
 }

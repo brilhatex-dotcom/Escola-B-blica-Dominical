@@ -30,6 +30,15 @@ export function DialogContent({
           "fixed inset-0 z-50 bg-brand-990/80 backdrop-blur-sm",
           "data-[state=open]:animate-in data-[state=open]:fade-in-0",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
+          /*
+           * Sem isto, um `position: fixed` cobrindo a tela inteira sobra na
+           * impressão mesmo com o `DialogContent` marcado `print:hidden` —
+           * o Chrome intercala uma página em branco antes do conteúdo de
+           * verdade, tratando o overlay fixo como se fosse parte da
+           * paginação. Descoberto imprimindo o comprovante de pagamento com
+           * o modal ainda aberto (ver `ComprovanteModal`).
+           */
+          "print:hidden",
         )}
       />
       <DialogPrimitive.Content
