@@ -52,27 +52,48 @@ export function autorDa(sessao: { nome?: string } | null): string {
 }
 
 /**
- * Uma lista de nomes digitada — um por linha.
+ * A lista de presença de uma reunião — um array `[{nome, presente, congId?,
+ * congNome?, papel?}]`, montado na tela (ver `ModalReuniao`), não mais
+ * digitado em duas caixas de texto.
  *
- * Descarta linhas vazias e REPETIDOS. O repetido importa: colar uma lista do
- * WhatsApp costuma trazer o mesmo nome duas vezes, e a ata sairia com
- * "18 participantes" numa reunião de 16.
+ * Cada convocado chega com um `presente` EXPLÍCITO (`true`/`false`) — ninguém
+ * é dado como falta por estar ausente da lista, porque ninguém fica fora da
+ * lista: quem não é riscado já entra com `presente: false`, e quem a pessoa
+ * vir marca como presente. A mesma garantia de "nada é inferido do que falta"
+ * que a Chamada tem, só que aqui o padrão combinado com a liderança é começar
+ * com todos em falta, em vez de tudo em branco.
  *
- * A comparação ignora a caixa, porque "Maria" e "maria" na mesma lista são a
- * mesma pessoa digitada duas vezes — mas o nome guardado é o PRIMEIRO como foi
- * escrito, sem forçar caixa nenhuma sobre o que a secretaria digitou.
+ * Descarta linhas sem nome e REPETIDOS (mesmo nome duas vezes na lista faria
+ * a ata contar gente a mais) — a comparação ignora a caixa, mas o nome
+ * guardado é o da PRIMEIRA ocorrência, como a tela mandou.
  */
-export function nomesDaLista(valor: unknown): string[] {
-  if (typeof valor !== "string") return [];
+export interface ParticipanteEntrada {
+  nome: string;
+  presente: boolean;
+  congId: number | null;
+  congNome: string | null;
+  papel: string | null;
+}
+
+export function participantesDaLista(valor: unknown): ParticipanteEntrada[] {
+  if (!Array.isArray(valor)) return [];
   const vistos = new Set<string>();
-  const nomes: string[] = [];
-  for (const linha of valor.split(/\r?\n/)) {
-    const nome = linha.trim();
+  const lista: ParticipanteEntrada[] = [];
+  for (const item of valor) {
+    if (!item || typeof item !== "object") continue;
+    const bruto = item as Record<string, unknown>;
+    const nome = typeof bruto.nome === "string" ? bruto.nome.trim().slice(0, 160) : "";
     if (!nome) continue;
     const chave = nome.toLowerCase();
     if (vistos.has(chave)) continue;
     vistos.add(chave);
-    nomes.push(nome);
+    lista.push({
+      nome,
+      presente: bruto.presente === true,
+      congId: Number.isInteger(bruto.congId) ? (bruto.congId as number) : null,
+      congNome: typeof bruto.congNome === "string" ? bruto.congNome.trim() || null : null,
+      papel: typeof bruto.papel === "string" ? bruto.papel.trim() || null : null,
+    });
   }
-  return nomes;
+  return lista;
 }

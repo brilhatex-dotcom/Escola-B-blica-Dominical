@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { dataCivil, erro, lerCorpo, responder, texto, textoOpcional } from "@/lib/api";
 import { escopoDeEscrita } from "@/lib/auth/escopo";
-import { nomesDaLista } from "@/lib/api/legado";
+import { participantesDaLista } from "@/lib/api/legado";
 
 /**
  * Uma reunião: editar e excluir.
@@ -33,20 +33,19 @@ export async function PATCH(req: Request, { params }: Contexto) {
     /*
      * A lista de presença é substituída INTEIRA quando vem, e não mesclada.
      *
-     * É um instantâneo do que a secretaria tem na tela — mesma razão do pacote
-     * da Chamada. Mesclando, alguém removido de uma das caixas continuaria na
-     * ata, e a contagem passaria a discordar da lista logo abaixo dela.
+     * É um instantâneo do que está na tela (ver `ModalReuniao`) — mesma razão
+     * do pacote da Chamada. Mesclando no servidor, alguém removido da lista na
+     * tela continuaria na ata, e a contagem passaria a discordar da lista
+     * logo abaixo dela.
      */
-    const mexeuNaLista = corpo.presentes !== undefined || corpo.ausentes !== undefined;
+    const mexeuNaLista = corpo.participantes !== undefined;
     let lista: { participantes: unknown; presentes: number; total: number } | null = null;
 
     if (mexeuNaLista) {
-      const presentes = nomesDaLista(corpo.presentes).map((nome) => ({ nome, presente: true }));
-      const ausentes = nomesDaLista(corpo.ausentes).map((nome) => ({ nome, presente: false }));
-      const participantes = [...presentes, ...ausentes];
+      const participantes = participantesDaLista(corpo.participantes);
       lista = {
         participantes,
-        presentes: presentes.length,
+        presentes: participantes.filter((p) => p.presente).length,
         total: participantes.length,
       };
     }
