@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Lock, LogIn, Loader2, User } from "lucide-react";
+import { Lock, LogIn, Loader2, User, WifiOff } from "lucide-react";
 import { FormField } from "./FormField";
 import { VerseOfTheDay } from "./VerseOfTheDay";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { APP_VERSION, ORG_NAME, SESSAO_LOCAL_CHAVE } from "@/lib/config";
+import { APP_VERSION, ORG_NAME } from "@/lib/config";
+import { aparelhoLembrado, esquecerAparelho, lembrarAparelho } from "@/lib/offline/aparelho";
+import { liberarBloqueios } from "@/lib/sync/motor";
 
 interface LoginCardProps {
   /** `precisaTrocar` chega `true` quando a senha ainda e a herdada da planilha. */
@@ -36,7 +39,9 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
   const [lembrar, setLembrar] = useState(true);
   const [loading, setLoading] = useState(false);
   const [erros, setErros] = useState<{ usuario?: string; senha?: string; geral?: string }>({});
+  const [entrarOffline, setEntrarOffline] = useState(false);
   const [verAjuda, setVerAjuda] = useState(false);
+  const router = useRouter();
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -46,6 +51,7 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
     if (!usuario.trim()) falhas.usuario = "Informe o seu usuário.";
     if (!senha) falhas.senha = "Informe a sua senha.";
     setErros(falhas);
+    setEntrarOffline(false);
     if (Object.keys(falhas).length > 0) return;
 
     setLoading(true);
@@ -69,17 +75,21 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
         return;
       }
 
-      // Lembrete local de "este aparelho já entrou" — não é a sessão em si
-      // (essa é o cookie httpOnly), só o que permite a próxima abertura sem
-      // internet pular direto para o painel. Ver `app/page.tsx`.
-      localStorage.setItem(SESSAO_LOCAL_CHAVE, String(Date.now()));
+      // "Lembrar-me" é o que deixa este aparelho abrir sem internet depois.
+      // Desmarcado (aparelho emprestado), nada fica guardado.
+      if (lembrar) lembrarAparelho();
+      else esquecerAparelho();
+      // O que ficou parado na fila por sessão vencida (401) volta a subir:
+      // o novo login resolve exatamente a causa do bloqueio.
+      void liberarBloqueios().catch(() => {});
       onAuthenticated(dados.nome || usuario.trim(), Boolean(dados.precisaTrocar));
     } catch {
-      const jaEntrouNesteAparelho = Boolean(localStorage.getItem(SESSAO_LOCAL_CHAVE));
+      const lembrado = aparelhoLembrado();
+      setEntrarOffline(lembrado);
       setErros({
-        geral: !navigator.onLine && !jaEntrouNesteAparelho
-          ? "Sem internet, e este aparelho ainda não entrou no portal antes. Entre pelo menos uma vez com internet — depois disso, ele abre direto, mesmo sem sinal."
-          : "Sem resposta do servidor. Verifique a conexão.",
+        geral: lembrado
+          ? "Sem internet agora. Este aparelho já entrou antes — dá para abrir o painel com o que está guardado nele."
+          : "Sem resposta do servidor. Este aparelho ainda não está liberado para abrir sem internet: entre uma vez com internet, com “Lembrar-me” marcado.",
       });
     } finally {
       setLoading(false);
@@ -208,6 +218,12 @@ export function LoginCard({ onAuthenticated }: LoginCardProps) {
           <p role="alert" className="rounded-lg border border-flame-500/35 bg-flame-500/10 px-3 py-2 text-[0.78rem] text-flame-400">
             {erros.geral}
           </p>
+        )}
+        {entrarOffline && (
+          <Button type="button" variant="ghost" className="w-full" onClick={() => router.replace("/dashboard")}>
+            <WifiOff className="h-4 w-4" />
+            Entrar sem internet
+          </Button>
         )}
 
         {/* Lembrar-me / Esqueci minha senha */}

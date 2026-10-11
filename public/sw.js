@@ -24,7 +24,7 @@
  * caches antigos no `activate`.
  */
 
-const VERSAO = "v1";
+const VERSAO = "v2";
 const CACHE_SHELL = `ebd-shell-${VERSAO}`;
 const CACHE_ESTATICO = `ebd-estatico-${VERSAO}`;
 const CACHE_IMAGENS = `ebd-imagens-${VERSAO}`;
@@ -73,25 +73,43 @@ self.addEventListener("install", (evento) => {
  * que as bibliotecas de PWA fazem. Aqui basta ler o proprio HTML e extrair os
  * `/_next/static/...` que ele referencia: os nomes tem hash, entao a lista e
  * exata e nunca fica velha.
+ *
+ * Alem de "/", guarda as telas que precisam abrir SEM internet mesmo sem nunca
+ * terem sido recarregadas: entrar no portal leva ao painel por navegacao
+ * interna do Next, que nao passa pelo cache de paginas — sem isto, a primeira
+ * abertura offline do painel cairia de volta na tela de login.
  */
+const DOCUMENTOS_OFFLINE = ["/", "/dashboard", "/dashboard/chamada"];
+
 async function aquecerAppShell() {
-  try {
-    const resposta = await fetch("/", { cache: "reload" });
-    if (!resposta.ok) return;
+  const shell = await caches.open(CACHE_SHELL);
+  const estatico = await caches.open(CACHE_ESTATICO);
+  const referencias = new Set();
 
-    const html = await resposta.clone().text();
-    await (await caches.open(CACHE_SHELL)).put("/", resposta);
+  await Promise.allSettled(
+    DOCUMENTOS_OFFLINE.map(async (caminho) => {
+      const resposta = await fetch(caminho, { cache: "reload" });
+      if (!resposta.ok) return;
+      const html = await resposta.clone().text();
+      await shell.put(caminho, resposta);
+      // Os <script src> trazem "/_next/static/...", mas o JS da PROPRIA tela
+      // so aparece dentro dos dados do Next, escrito sem o prefixo
+      // ("static/chunks/app/.../page-xxx.js"). Sem pegar essa forma, a tela
+      // abria offline e quebrava com "Loading chunk failed".
+      for (const m of html.matchAll(/(?:\/_next\/)?(static\/(?:chunks|css|media)\/[^"'\\\s]+)/g)) {
+        if (!m[1].endsWith(".map")) referencias.add(`/_next/${m[1]}`);
+      }
+    }),
+  );
 
-    const referencias = [...html.matchAll(/["'](\/_next\/static\/[^"']+)["']/g)]
-      .map((m) => m[1])
-      .filter((u) => !u.endsWith(".map"));
-
-    const cache = await caches.open(CACHE_ESTATICO);
-    // `allSettled`: um arquivo que falhe nao pode derrubar o aquecimento todo.
-    await Promise.allSettled([...new Set(referencias)].map((u) => cache.add(u)));
-  } catch {
-    /* sem rede agora: o cache se completa na proxima visita */
-  }
+  // So baixa o que ainda nao esta guardado: os nomes tem hash, entao um
+  // arquivo ja em cache esta certo — rebaixar tudo a cada abertura gastaria
+  // os dados moveis de quem esta na igreja.
+  await Promise.allSettled(
+    [...referencias].map(async (u) => {
+      if (!(await estatico.match(u))) await estatico.add(u);
+    }),
+  );
 }
 
 self.addEventListener("activate", (evento) => {
@@ -104,7 +122,7 @@ self.addEventListener("activate", (evento) => {
           .map((n) => caches.delete(n)),
       );
       await self.clients.claim();
-      await aquecerAppShell();
+      await aquecerAppShell().catch(() => {});
     })(),
   );
 });
@@ -113,6 +131,17 @@ self.addEventListener("message", (evento) => {
   // A pagina pede a troca imediata quando o usuario aceita atualizar.
   if (evento.data?.tipo === "APLICAR_ATUALIZACAO") {
     self.skipWaiting();
+    return;
+  }
+
+  /*
+   * Reaquecer as telas offline a pedido da pagina. O `activate` so roda
+   * quando ESTE arquivo muda — uma publicacao nova do portal nao o altera,
+   * e sem isto as telas guardadas ficariam presas na versao da primeira
+   * instalacao.
+   */
+  if (evento.data?.tipo === "AQUECER") {
+    evento.waitUntil(aquecerAppShell().catch(() => {}));
     return;
   }
 

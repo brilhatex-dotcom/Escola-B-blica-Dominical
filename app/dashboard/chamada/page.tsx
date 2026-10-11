@@ -30,7 +30,9 @@ import { AcoesDoRegistro } from "@/components/crud/AcoesDoRegistro";
 import { FormularioModal, type CampoForm } from "@/components/crud/FormularioModal";
 import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { temBancoLocal } from "@/lib/db/local";
-import { guardarChamada, lerChamadaLocal, situacaoDoEnvio } from "@/lib/db/chamadas";
+import {
+  classesDoEspelho, congregacoesDoEspelho, guardarChamada, lerChamadaLocal, situacaoDoEnvio, turmaDoEspelho,
+} from "@/lib/db/chamadas";
 import type { ChamadaLocal } from "@/lib/db/schema";
 import { sincronizar } from "@/lib/sync/motor";
 
@@ -161,6 +163,24 @@ function daMemoriaDoAparelho(local: ChamadaLocal): Chamada | null {
   };
 }
 
+/** Chamada em branco montada do espelho local — ver `turmaDoEspelho`. */
+async function doEspelhoLocal(classeId: number, data: string): Promise<Chamada | null> {
+  const turma = await turmaDoEspelho(classeId);
+  if (!turma) return null;
+  return {
+    classe: {
+      id: classeId,
+      nome: turma.nome,
+      faixa: turma.faixa,
+      congregacao: turma.congregacao,
+      professores: turma.prof ? [{ id: -1, nome: turma.prof, tratamento: null }] : [],
+    },
+    data,
+    iniciada: false,
+    alunos: turma.alunos.map((a) => ({ ...a, presente: null })),
+  };
+}
+
 export default function ChamadaPage() {
   const { podeGravar, escopo } = useAcesso();
   /*
@@ -215,7 +235,12 @@ export default function ChamadaPage() {
         }));
         setCongregacoes(lista);
       })
-      .catch(() => setErro("Não foi possível carregar as congregações."));
+      .catch(async () => {
+        // Sem internet: a lista que ficou guardada no aparelho.
+        const lista = temBancoLocal() ? await congregacoesDoEspelho().catch(() => []) : [];
+        if (lista.length > 0) setCongregacoes(lista);
+        else setErro("Não foi possível carregar as congregações.");
+      });
   }, [precisaEscolherCong]);
 
   useEffect(() => {
@@ -238,21 +263,28 @@ export default function ChamadaPage() {
     const url = new URL("/api/classes", window.location.origin);
     if (precisaEscolherCong && congId !== null) url.searchParams.set("cong", String(congId));
 
+    const aplicar = (lista: Array<{ id: number; nome: string }>) => {
+      setClasses(lista);
+      // Trocar de congregação troca a classe também: a selecionada pode não
+      // existir mais na lista nova.
+      setClasseId((atual) =>
+        atual && lista.some((c) => c.id === atual) ? atual : lista[0]?.id ?? null,
+      );
+    };
+
     void fetch(url)
       .then((r) => r.json())
-      .then((d) => {
-        const lista = (d.itens ?? []).map((c: { id: number; nome: string }) => ({
-          id: c.id,
-          nome: c.nome,
-        }));
-        setClasses(lista);
-        // Trocar de congregação troca a classe também: a selecionada pode não
-        // existir mais na lista nova.
-        setClasseId((atual) =>
-          atual && lista.some((c: { id: number }) => c.id === atual) ? atual : lista[0]?.id ?? null,
-        );
-      })
-      .catch(() => setErro("Não foi possível carregar as classes."));
+      .then((d) =>
+        aplicar((d.itens ?? []).map((c: { id: number; nome: string }) => ({ id: c.id, nome: c.nome }))),
+      )
+      .catch(async () => {
+        // Sem internet: as classes que ficaram guardadas no aparelho.
+        const lista = temBancoLocal()
+          ? await classesDoEspelho(precisaEscolherCong ? congId : null).catch(() => [])
+          : [];
+        if (lista.length > 0) aplicar(lista);
+        else setErro("Não foi possível carregar as classes.");
+      });
   }, [precisaEscolherCong, congId]);
 
   useEffect(() => {
@@ -291,7 +323,11 @@ export default function ChamadaPage() {
 
       const pendente = !!local && local.estado !== "sincronizado";
 
-      const base = doServidor ?? (local ? daMemoriaDoAparelho(local) : null);
+      const base =
+        doServidor ??
+        (local ? daMemoriaDoAparelho(local) : null) ??
+        (temBancoLocal() ? await doEspelhoLocal(classeId, data).catch(() => null) : null);
+      if (controle.signal.aborted) return;
       if (!base) {
         setErro("Não foi possível carregar a chamada.");
         setChamada(null);

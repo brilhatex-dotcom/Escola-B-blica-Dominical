@@ -2,14 +2,18 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { KeyRound, ShieldAlert } from "lucide-react";
+import { KeyRound, LogIn, ShieldAlert } from "lucide-react";
 import { Alert } from "@/components/ui/alert";
 import { EXIGIR_SENHA_PROPRIA_PARA_GRAVAR } from "@/lib/config";
 
 /**
  * Tarja de estado da proteção do portal.
  *
- * Dois avisos, com causas diferentes e ações diferentes:
+ * Três avisos, com causas diferentes e ações diferentes:
+ *
+ *   SESSÃO EXPIRADA · o aparelho entrou no painel sem internet (ver
+ *     lib/offline/aparelho.ts) e o cookie venceu nesse meio-tempo. O que foi
+ *     feito offline fica na fila e sobe depois do novo login.
  *
  *   PORTAL DESPROTEGIDO · falta `AUTH_SECRET` no servidor, então não há como
  *     verificar sessão nenhuma e as rotas de escrita ficam abertas. É o mesmo
@@ -26,22 +30,48 @@ import { EXIGIR_SENHA_PROPRIA_PARA_GRAVAR } from "@/lib/config";
 export function AvisoDeSeguranca() {
   const [estado, setEstado] = useState<{
     autenticacaoAtiva: boolean;
+    semSessao: boolean;
     precisaTrocar: boolean;
   } | null>(null);
 
   useEffect(() => {
-    void fetch("/api/auth/eu", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d) =>
-        setEstado({
-          autenticacaoAtiva: Boolean(d.autenticacaoAtiva),
-          precisaTrocar: Boolean(d.sessao?.precisaTrocar),
-        }),
-      )
-      .catch(() => setEstado(null));
+    const consultar = () =>
+      void fetch("/api/auth/eu", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((d) =>
+          setEstado({
+            autenticacaoAtiva: Boolean(d.autenticacaoAtiva),
+            semSessao: !d.sessao,
+            precisaTrocar: Boolean(d.sessao?.precisaTrocar),
+          }),
+        )
+        .catch(() => setEstado(null));
+    consultar();
+    // Quem entrou sem internet só descobre que a sessão venceu quando a
+    // internet volta — é aí que a pergunta precisa ser refeita.
+    window.addEventListener("online", consultar);
+    return () => window.removeEventListener("online", consultar);
   }, []);
 
   if (!estado) return null;
+
+  if (estado.autenticacaoAtiva && estado.semSessao) {
+    return (
+      <Alert tipo="alerta" titulo="A sua sessão expirou" className="mb-4">
+        <p>
+          Entre de novo para continuar gravando. O que você fez sem internet está
+          guardado neste aparelho e sobe sozinho depois do login.
+        </p>
+        <Link
+          href="/"
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gold-400/15 px-3 py-1.5 text-[0.78rem] font-medium text-gold-200 ring-1 ring-gold-400/25 transition-colors duration-300 hover:bg-gold-400/25"
+        >
+          <LogIn className="h-3.5 w-3.5" />
+          Entrar de novo
+        </Link>
+      </Alert>
+    );
+  }
 
   if (!estado.autenticacaoAtiva) {
     return (

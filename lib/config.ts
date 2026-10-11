@@ -31,22 +31,27 @@ export const ALLOW_SKIP_SPLASH = true;
 export const APP_VERSION = "1.0";
 export const ORG_NAME = "IEADPE Campo de Betânia";
 
-/**
- * Duração da sessão, em horas — usada tanto para assinar o cookie
- * (`lib/auth/sessao.ts`) quanto para decidir, no cliente, se um aparelho
- * "lembrado" ainda pode pular a tela de login quando abre sem internet (ver
- * `SESSAO_LOCAL_CHAVE` abaixo). As duas precisam concordar: se o número
- * daqui for maior que o do cookie, o app abriria "logado" no visual sem
- * sessão nenhuma de verdade por trás.
- */
+/** Duração da sessão (o cookie assinado de `lib/auth/sessao.ts`), em horas. */
 export const SESSAO_HORAS = 8;
 
 /**
- * Chave no `localStorage` que guarda QUANDO este aparelho entrou pela
- * última vez com sucesso — não a sessão em si (essa é o cookie httpOnly,
- * que o JavaScript nem consegue ler), só um lembrete para a tela de abertura
- * decidir se vale tentar pular direto para o painel quando não há internet
- * para perguntar ao servidor. Ver o comentário grande em `app/page.tsx`.
+ * Por quantos dias um aparelho "lembrado" entra no painel SEM internet.
+ *
+ * É de propósito bem maior que a sessão: o uso real é entrar no sábado, com
+ * internet, e abrir o app no domingo de manhã na igreja, sem sinal — com 8
+ * horas o app trancaria justamente aí. Entrar offline não dá acesso a nada
+ * novo: o painel mostra só o que já está guardado no próprio aparelho, e toda
+ * gravação continua passando pelo cookie no servidor. Se o cookie tiver
+ * vencido quando a internet voltar, o painel avisa para entrar de novo, e o
+ * que foi feito offline fica guardado e sobe depois do novo login.
+ */
+export const LEMBRAR_APARELHO_DIAS = 30;
+
+/**
+ * Chave no `localStorage` que guarda QUANDO este aparelho entrou pela última
+ * vez com "Lembrar-me" marcado — não a sessão em si (essa é o cookie
+ * httpOnly), só o lembrete que deixa a abertura pular para o painel quando não
+ * há internet. Ver `lib/offline/aparelho.ts`.
  */
 export const SESSAO_LOCAL_CHAVE = "ebd:sessao-local";
 

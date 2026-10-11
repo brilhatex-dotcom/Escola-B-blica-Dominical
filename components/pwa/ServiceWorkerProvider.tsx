@@ -63,6 +63,20 @@ export function ServiceWorkerProvider() {
 
     registrar();
 
+    // Uma vez por sessão, com internet: renova as telas guardadas para abrir
+    // offline (ver "AQUECER" em public/sw.js), para elas acompanharem cada
+    // publicação nova do portal.
+    void navigator.serviceWorker.ready.then((reg) => {
+      if (!navigator.onLine) return;
+      try {
+        if (sessionStorage.getItem("ebd:sw-aquecido")) return;
+        sessionStorage.setItem("ebd:sw-aquecido", "1");
+      } catch {
+        /* sem sessionStorage, aquece de novo a cada carga — funciona igual */
+      }
+      reg.active?.postMessage({ tipo: "AQUECER" });
+    });
+
     /*
      * Recarrega quando a versao nova assume — mas SO quando e de fato uma
      * troca de versao.

@@ -13,11 +13,36 @@ import {
 } from "@/components/media/DroneBackdrop";
 import {
   REPLAY_SPLASH_EVERY_VISIT,
-  SESSAO_HORAS,
-  SESSAO_LOCAL_CHAVE,
   SPLASH_SESSION_KEY,
   SPLASH_TO_LOGIN_MS,
 } from "@/lib/config";
+import { aparelhoLembrado, servidorResponde } from "@/lib/offline/aparelho";
+
+/*
+ * Trava contra laço de recarga: se o painel ainda não estiver guardado neste
+ * aparelho (ex.: o Service Worker novo ainda não assumiu), abrir /dashboard
+ * offline cai de volta na abertura — que mandaria para o painel de novo, para
+ * sempre. Uma tentativa a cada 20 s; a segunda vez cai no login, que explica.
+ */
+const MARCA_REDIRECIONAMENTO = "ebd:offline-redirecionou";
+
+function redirecionouHaPouco(): boolean {
+  try {
+    const quando = Number(window.sessionStorage.getItem(MARCA_REDIRECIONAMENTO) ?? 0);
+    return Date.now() - quando < 20_000;
+  } catch {
+    return false;
+  }
+}
+
+function irParaPainelOffline(router: ReturnType<typeof useRouter>): void {
+  try {
+    window.sessionStorage.setItem(MARCA_REDIRECIONAMENTO, String(Date.now()));
+  } catch {
+    /* sem sessionStorage a trava não existe, mas a entrada funciona */
+  }
+  router.replace("/dashboard");
+}
 
 type Stage = "boot" | "splash" | "login";
 
@@ -46,31 +71,25 @@ export default function Home() {
 
   useEffect(() => {
     /*
-     * Aparelho lembrado, sem internet: pula a abertura e o login e vai direto
-     * ao painel.
+     * Aparelho lembrado e sem internet: vai direto ao painel, sem login.
      *
-     * Isto NÃO é a autenticação — essa continua sendo só o cookie httpOnly,
-     * conferido no servidor a cada gravação (ver lib/auth/sessao.ts). É
-     * apenas reconhecer que pedir usuário/senha de novo é inútil sem rede
-     * para checar a resposta — e faria exatamente quem já usa o portal hoje
-     * ficar trancado do lado de fora bem na hora em que o offline mais
-     * precisa funcionar. Se o cookie tiver mesmo expirado, o painel funciona
-     * igual do jeito que já funciona sem sessão nenhuma: aberto na tela,
-     * recusado pelo servidor em qualquer gravação real.
+     * Pedir usuário e senha sem rede para conferir é inútil, e trancaria quem
+     * já usa o portal justo quando o offline precisa funcionar. Ver
+     * `lib/offline/aparelho.ts` — isto não é autenticação.
+     *
+     * "Sem internet" é testado de dois jeitos: `navigator.onLine` (modo avião)
+     * de imediato, e uma sonda ao servidor em paralelo com a abertura — o
+     * celular com sinal fraco diz que está online e nada passa.
      */
-    const quando = Number(window.localStorage.getItem(SESSAO_LOCAL_CHAVE) ?? 0);
-    const sessaoLocalValida = quando > 0 && Date.now() - quando < SESSAO_HORAS * 3_600_000;
-    if (!navigator.onLine && sessaoLocalValida) {
-      router.replace("/dashboard");
+    const podeEntrarOffline = aparelhoLembrado() && !redirecionouHaPouco();
+    if (podeEntrarOffline && !navigator.onLine) {
+      irParaPainelOffline(router);
       return;
     }
 
     if (REPLAY_SPLASH_EVERY_VISIT) {
       setStage("splash");
-      return;
-    }
-    const visto = window.sessionStorage.getItem(SPLASH_SESSION_KEY);
-    if (visto) {
+    } else if (window.sessionStorage.getItem(SPLASH_SESSION_KEY)) {
       // Sem abertura: o fundo ja entra congelado, como o login espera.
       setStage("login");
       setBackdropPhase("frozen");
@@ -78,6 +97,15 @@ export default function Home() {
     } else {
       setStage("splash");
     }
+
+    if (!podeEntrarOffline) return;
+    let vivo = true;
+    void servidorResponde().then((responde) => {
+      if (vivo && !responde) irParaPainelOffline(router);
+    });
+    return () => {
+      vivo = false;
+    };
   }, [router]);
 
   const mostrarVideo = useCallback(() => setBackdropPhase("cinema"), []);
