@@ -3,7 +3,7 @@ import { lerPaginacao, pagina, responder } from "@/lib/api";
 import { exigirLeitura } from "@/lib/auth/guarda";
 import { dataCivil, erro, lerCorpo, texto, textoOpcional } from "@/lib/api";
 import { escopoDeEscrita } from "@/lib/auth/escopo";
-import { autorDa, criarComIdHerdado, nomesDaLista } from "@/lib/api/legado";
+import { autorDa, criarComIdHerdado, participantesDaLista } from "@/lib/api/legado";
 
 /**
  * Reuniões, com a lista de presença de cada uma.
@@ -20,6 +20,9 @@ export const dynamic = "force-dynamic";
 interface Participante {
   nome?: string;
   presente?: boolean;
+  congId?: number;
+  congNome?: string;
+  papel?: string;
 }
 
 export async function GET(req: Request) {
@@ -51,7 +54,13 @@ export async function GET(req: Request) {
           const brutos = Array.isArray(r.participantes) ? (r.participantes as Participante[]) : [];
           const participantes = brutos
             .filter((x) => x && typeof x === "object" && typeof x.nome === "string")
-            .map((x) => ({ nome: x.nome as string, presente: x.presente === true }));
+            .map((x) => ({
+              nome: x.nome as string,
+              presente: x.presente === true,
+              congId: typeof x.congId === "number" ? x.congId : null,
+              congNome: typeof x.congNome === "string" ? x.congNome : null,
+              papel: typeof x.papel === "string" ? x.papel : null,
+            }));
 
           return {
             id: r.id,
@@ -82,17 +91,17 @@ export async function GET(req: Request) {
  * Registrar uma reunião.
  *
  * ============================================================================
- * PRESENTES E AUSENTES SÃO DUAS LISTAS, E NÃO UMA COM MARCAÇÃO
+ * A LISTA CHEGA PRONTA — COM TODO MUNDO JÁ EM FALTA
  *
- * `Reunioes.participantes` é um JSON `[{nome, presente}]` do sistema antigo.
- * A tela poderia pedir uma lista só e marcar quem veio — e aí quem esquecesse
- * de marcar alguém o transformaria em ausente sem perceber, exatamente o
- * problema que a Chamada resolve com três estados.
- *
- * Duas caixas de texto resolvem isso sem inventar estado nenhum: quem está na
- * primeira veio, quem está na segunda faltou, e quem não está em nenhuma
- * simplesmente não foi convocado. `presentes` e `total` são CALCULADOS daí — se
- * viessem do cliente, um erro de digitação faria a ata dizer "12 de 9".
+ * `participantes` chega da tela (`ModalReuniao`) como um array com um
+ * convocado por linha, cada um já com `presente: true|false` — não mais duas
+ * caixas de texto separadas. A lista em si normalmente nasce da Hierarquia
+ * (Dirigente e Secretário Local de cada congregação, ver
+ * `/api/agenda/reunioes/convocados`), com todos em falta por padrão: quem bate
+ * o olho na reunião só precisa RISCAR quem esteve, em vez de digitar nome por
+ * nome. `participantesDaLista` (lib/api/legado.ts) valida e tira repetido;
+ * `presentes` e `total` continuam CALCULADOS daqui, nunca aceitos do cliente —
+ * um valor errado vindo de fora faria a ata dizer "12 de 9".
  * ============================================================================
  */
 export async function POST(req: Request) {
@@ -108,9 +117,7 @@ export async function POST(req: Request) {
   const data = dataCivil(corpo.data);
   if (!data) return erro("Informe a data da reunião (YYYY-MM-DD).", 400);
 
-  const presentes = nomesDaLista(corpo.presentes).map((nome) => ({ nome, presente: true }));
-  const ausentes = nomesDaLista(corpo.ausentes).map((nome) => ({ nome, presente: false }));
-  const participantes = [...presentes, ...ausentes];
+  const participantes = participantesDaLista(corpo.participantes);
 
   return responder(async () =>
     criarComIdHerdado(
@@ -125,8 +132,8 @@ export async function POST(req: Request) {
             local: textoOpcional(corpo.local, 160),
             obs: textoOpcional(corpo.obs, 1000),
             autor: autorDa(sessao),
-            participantes,
-            presentes: presentes.length,
+            participantes: participantes as never,
+            presentes: participantes.filter((p) => p.presente).length,
             total: participantes.length,
             registradoEm: new Date(),
           },

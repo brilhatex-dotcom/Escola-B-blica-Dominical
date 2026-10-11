@@ -82,7 +82,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     */
     <AcessoProvider>
     <div
-      className="relative min-h-[100dvh] bg-brand-990"
+      /*
+       * `print:min-h-0` importa mais do que parece: sem ele, esta div guarda
+       * uma tela inteira de altura em branco na impressão mesmo com TODO o
+       * conteúdo visível marcado `print:hidden` — `min-height` não liga para
+       * os filhos estarem escondidos. Quem sofre é justamente o conteúdo
+       * impresso que é colocado fora desta árvore via `createPortal` (ver
+       * `ComprovanteModal`): ele nasce DEPOIS desta div no `<body>`, e a
+       * altura mínima vazia empurra a primeira página inteira em branco antes
+       * dele. Descoberto imprimindo o comprovante de pagamento das Revistas.
+       */
+      className="relative min-h-[100dvh] bg-brand-990 print:min-h-0"
       style={{ ["--lateral" as string]: largura }}
     >
       {/*

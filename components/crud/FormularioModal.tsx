@@ -269,7 +269,7 @@ export function FormularioModal({
   );
 }
 
-const campoBase = cn(
+export const campoBase = cn(
   "h-11 w-full min-w-0 rounded-xl border border-white/10 bg-white/[0.04] px-3",
   "text-[0.86rem] text-brand-50 placeholder:text-brand-200/35",
   "transition-colors duration-300 focus:border-gold-400/35 focus:outline-none",

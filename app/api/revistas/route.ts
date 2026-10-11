@@ -343,7 +343,7 @@ export async function POST(req: Request) {
         observacao,
         autor: sessao ? sessao.nome || sessao.login : null,
       },
-      select: { id: true },
+      select: { id: true, criadoEm: true, autor: true },
     });
 
     registrar({
@@ -356,7 +356,41 @@ export async function POST(req: Request) {
       congId: congId!,
     });
 
-    return { ok: true, id: criado.id };
+    /*
+     * O comprovante (Fase 28) precisa do saldo DEPOIS desta baixa, para dizer
+     * "quitado" ou "ainda falta R$ X" — e isso só a rota sabe calcular direito:
+     * o total devido vem do PEDIDO CONFIRMADO (não da sugestão), a mesma regra
+     * do GET desta rota.
+     */
+    const [pedido, somaPagamentos] = await Promise.all([
+      prisma.pedidoRevista.findUnique({
+        where: { congId_trimestre: { congId: congId!, trimestre: tri.chave } },
+        include: { itens: true },
+      }),
+      prisma.pagamentoRevista.aggregate({
+        where: { congId: congId!, trimestre: tri.chave },
+        _sum: { valor: true },
+      }),
+    ]);
+    const totalDevido = pedido?.confirmado
+      ? pedido.itens.reduce((s, it) => s + it.quantidade * Number(it.precoUnitario), 0)
+      : 0;
+    const totalPago = Number(somaPagamentos._sum.valor ?? 0);
+
+    return {
+      ok: true,
+      id: criado.id,
+      comprovante: {
+        id: criado.id,
+        congNome: cong.nome?.trim() || `Congregação ${cong.id}`,
+        trimestreRotulo: tri.rotulo,
+        valor,
+        observacao,
+        autor: criado.autor,
+        criadoEm: criado.criadoEm.toISOString(),
+        saldoApos: Number((totalDevido - totalPago).toFixed(2)),
+      },
+    };
   });
 }
 
