@@ -594,8 +594,9 @@ function PagamentosDaCong({ cong, trimestre, editavel, aoMudar }: { cong: CongPe
               <span className="shrink-0 text-[0.7rem] tabular-nums text-brand-300/45">
                 {fmtData.format(new Date(b.criadoEm))}
               </span>
-              <button type="button" onClick={() => setComprovante(comprovanteDe(b))} aria-label="Ver comprovante" title="Ver comprovante" className="shrink-0 rounded p-1 text-brand-300/50 hover:text-gold-200">
+              <button type="button" onClick={() => setComprovante(comprovanteDe(b))} title="Ver comprovante" className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[0.72rem] text-brand-100/80 transition-colors hover:border-gold-400/30 hover:text-gold-200">
                 <ReceiptText className="h-3.5 w-3.5" />
+                Recibo
               </button>
               {editavel && (
                 <button type="button" onClick={() => void desfazer(b.id)} aria-label="Desfazer baixa" className="shrink-0 rounded p-1 text-brand-300/50 hover:text-flame-400">
