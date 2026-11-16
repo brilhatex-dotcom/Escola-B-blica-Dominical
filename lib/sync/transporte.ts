@@ -75,7 +75,11 @@ async function enviarChamada(item: ItemFila): Promise<{ idRemoto?: number }> {
     body: JSON.stringify({
       classeId: pacote.classeId,
       data: pacote.data,
-      presencas: pacote.marcas.map((m) => ({ alunoId: m.alunoId, presente: m.presente })),
+      presencas: pacote.marcas.map((m) => ({
+        alunoId: m.alunoId,
+        presente: m.presente,
+        ...(m.justificada ? { justificada: true } : {}),
+      })),
     }),
   });
 

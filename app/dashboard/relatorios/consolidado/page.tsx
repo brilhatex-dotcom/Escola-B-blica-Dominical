@@ -19,7 +19,7 @@ import { domingoMaisRecente, numero } from "@/lib/dashboard/formato";
 
 interface LinhaCong { id: number; nome: string; matriculados: number; presentes: number; faltas: number; taxa: number }
 interface Totais {
-  matriculados: number; presentes: number; faltas: number; visitantes: number;
+  matriculados: number; presentes: number; faltas: number; justificadas?: number; visitantes: number;
   congregacoesParticipantes: number; congregacoesTotal: number; taxa: number;
 }
 interface Dados { data: string; totais: Totais; congregacoes: LinhaCong[] }
@@ -122,8 +122,8 @@ export default function ConsolidadoPage() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               <Kpi icone={UsersRound} rotulo="Matriculados" valor={numero(dados.totais.matriculados)} nota="base ativa do campo, hoje" />
               <Kpi icone={Users} rotulo="Presentes" valor={numero(dados.totais.presentes)} nota="neste domingo, campo inteiro" />
-              <Kpi icone={Users} rotulo="Faltas" valor={numero(dados.totais.faltas)} nota="registradas neste domingo" />
-              <Kpi icone={Percent} rotulo="Taxa do campo" valor={`${dados.totais.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%`} nota="presentes ÷ matriculados" />
+              <Kpi icone={Users} rotulo="Faltas" valor={numero(dados.totais.faltas)} nota={dados.totais.justificadas ? `registradas · ${numero(dados.totais.justificadas)} justificada(s) fora da conta` : "registradas neste domingo"} />
+              <Kpi icone={Percent} rotulo="Taxa do campo" valor={`${dados.totais.taxa.toLocaleString("pt-BR", { minimumFractionDigits: 1 })}%`} nota={dados.totais.justificadas ? "presentes ÷ (matriculados − justificadas)" : "presentes ÷ matriculados"} />
               <Kpi icone={UserRoundPlus} rotulo="Visitantes" valor={numero(dados.totais.visitantes)} nota="recebidos neste domingo" />
             </div>
 

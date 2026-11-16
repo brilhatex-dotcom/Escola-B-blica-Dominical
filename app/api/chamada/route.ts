@@ -2,12 +2,17 @@ import { prisma } from "@/lib/prisma";
 import { erro, lerInt, responder } from "@/lib/api";
 import { exigirEscrita, exigirLeitura, recorteDaSessao } from "@/lib/auth/guarda";
 import { registrar } from "@/lib/auditoria";
+import { justificadasDisponiveis } from "@/lib/ebd/justificadas";
 
 /**
  * A chamada de uma classe num domingo.
  *
  * GET  ?classe=12&data=2026-08-09  -> alunos da classe e quem ja esta marcado
- * POST { classeId, data, presencas: [{alunoId, presente}] }
+ * POST { classeId, data, presencas: [{alunoId, presente, justificada?}] }
+ *
+ * `justificada: true` é a falta justificada: o aluno não veio, mas avisou. Ela
+ * NÃO vira linha em Frequencias — vai para "Faltas_Justificadas" — e por isso
+ * não pesa contra ninguém em relatório nenhum. Ver lib/ebd/justificadas.ts.
  *
  * ============================================================================
  * POR QUE O POST GRAVA A CHAMADA INTEIRA, E NAO UMA PRESENCA POR VEZ
@@ -47,8 +52,9 @@ export async function GET(req: Request) {
 
     const dia = new Date(`${data}T00:00:00Z`);
     const recorte = recorteDaSessao(sessao);
+    const comJustificada = await justificadasDisponiveis();
 
-    const [classe, alunos, marcadas] = await Promise.all([
+    const [classe, alunos, marcadas, justificadas] = await Promise.all([
       prisma.classe.findFirst({
         where: { id: classeId, ...(recorte ? { congId: { in: recorte.in } } : {}) },
         select: {
@@ -82,11 +88,15 @@ export async function GET(req: Request) {
         where: { classeId, data: dia },
         select: { alunoId: true, presente: true },
       }),
+      comJustificada
+        ? prisma.faltaJustificada.findMany({ where: { classeId, data: dia }, select: { alunoId: true } })
+        : Promise.resolve([]),
     ]);
 
     if (!classe) throw new Error("Classe não encontrada ou fora do seu alcance.");
 
     const presencaPor = new Map(marcadas.map((f) => [f.alunoId, f.presente]));
+    const justificou = new Set(justificadas.map((j) => j.alunoId));
 
     return {
       classe: {
@@ -99,10 +109,13 @@ export async function GET(req: Request) {
       data,
       // `iniciada` distingue "ninguem veio" de "ninguem marcou ainda" — duas
       // situacoes que somam zero presentes e pedem acoes opostas.
-      iniciada: marcadas.length > 0,
+      iniciada: marcadas.length + justificadas.length > 0,
+      // A tela só oferece "Justificada" quando dá para gravar de verdade.
+      justificadaDisponivel: comJustificada,
       alunos: alunos.map((a) => ({
         ...a,
-        presente: presencaPor.get(a.id) ?? null,
+        presente: justificou.has(a.id) ? false : presencaPor.get(a.id) ?? null,
+        justificada: justificou.has(a.id),
       })),
     };
   });
@@ -111,7 +124,7 @@ export async function GET(req: Request) {
 interface CorpoChamada {
   classeId: number;
   data: string;
-  presencas: Array<{ alunoId: number; presente: boolean }>;
+  presencas: Array<{ alunoId: number; presente: boolean; justificada?: boolean }>;
 }
 
 export async function POST(req: Request) {
@@ -148,6 +161,8 @@ export async function POST(req: Request) {
   if (!classe) {
     return erro("Classe não encontrada ou fora do seu alcance.", 404);
   }
+
+  const comJustificada = await justificadasDisponiveis();
 
   return responder(async () => {
     const dia = new Date(`${data}T00:00:00Z`);
@@ -187,6 +202,9 @@ export async function POST(req: Request) {
       let criadas = 0;
       let atualizadas = 0;
       let ignoradasPorMatricula = 0;
+      let justificadas = 0;
+      /** Justificadas que tiveram de entrar como falta comum — a tabela ainda não existe. */
+      let justificadasComoFalta = 0;
 
       for (const p of presencas) {
         if (!Number.isInteger(p.alunoId) || typeof p.presente !== "boolean") continue;
@@ -198,8 +216,34 @@ export async function POST(req: Request) {
         }
 
         const jaExiste = idPor.get(p.alunoId);
+
+        /*
+         * FALTA JUSTIFICADA: sai de Frequencias e entra em Faltas_Justificadas.
+         *
+         * Apagar a linha de Frequencias (quando ela existia como falta ou
+         * presença) é o que faz a justificada não pesar contra: para todo
+         * relatório da casa, "sem linha" é "não foi chamado".
+         */
+        if (p.justificada === true && comJustificada) {
+          if (jaExiste !== undefined) await tx.frequencia.delete({ where: { id: jaExiste } });
+          await tx.faltaJustificada.upsert({
+            where: { alunoId_data: { alunoId: p.alunoId, data: dia } },
+            update: { classeId, congId: classe.congId, autor: sessao?.nome ?? null },
+            create: { alunoId: p.alunoId, classeId, congId: classe.congId, data: dia, autor: sessao?.nome ?? null },
+          });
+          justificadas++;
+          continue;
+        }
+        if (p.justificada === true) justificadasComoFalta++;
+
+        // Era justificada e agora é presença ou falta comum: a justificativa sai.
+        if (comJustificada) {
+          await tx.faltaJustificada.deleteMany({ where: { alunoId: p.alunoId, data: dia } });
+        }
+
+        const presente = p.justificada === true ? false : p.presente;
         if (jaExiste !== undefined) {
-          await tx.frequencia.update({ where: { id: jaExiste }, data: { presente: p.presente } });
+          await tx.frequencia.update({ where: { id: jaExiste }, data: { presente } });
           atualizadas++;
         } else {
           await tx.frequencia.create({
@@ -209,14 +253,22 @@ export async function POST(req: Request) {
               classeId,
               congId: classe.congId,
               data: dia,
-              presente: p.presente,
+              presente,
             },
           });
           criadas++;
         }
       }
 
-      return { ok: true, criadas, atualizadas, ignoradasPorMatricula, total: criadas + atualizadas };
+      return {
+        ok: true,
+        criadas,
+        atualizadas,
+        justificadas,
+        justificadasComoFalta,
+        ignoradasPorMatricula,
+        total: criadas + atualizadas + justificadas,
+      };
     });
 
     /*
@@ -231,6 +283,7 @@ export async function POST(req: Request) {
       descricao:
         `Chamada da classe ${classeId} em ${data}: ` +
         `${resultado.criadas} marcada(s) e ${resultado.atualizadas} corrigida(s)` +
+        (resultado.justificadas > 0 ? `, ${resultado.justificadas} falta(s) justificada(s)` : "") +
         (resultado.ignoradasPorMatricula > 0
           ? `, ${resultado.ignoradasPorMatricula} ignorada(s) por matrícula posterior a esta data`
           : "") +

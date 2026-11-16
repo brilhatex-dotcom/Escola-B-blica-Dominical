@@ -96,6 +96,12 @@ export interface Marca {
   /** Id do Postgres. Aqui ele existe: a lista da chamada veio do servidor. */
   alunoId: number;
   presente: boolean;
+  /**
+   * Falta justificada: o aluno não veio, mas avisou. Vai junto com
+   * `presente: false` — um servidor que ainda não conhece a justificada grava
+   * falta comum, em vez de recusar o pacote inteiro.
+   */
+  justificada?: boolean;
 }
 
 /**

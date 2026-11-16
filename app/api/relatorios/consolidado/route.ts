@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { justificadasPorCongNoDia } from "@/lib/ebd/justificadas";
 import { erro, responder } from "@/lib/api";
 import { exigirLeitura } from "@/lib/auth/guarda";
 import { domingoMaisRecente } from "@/lib/dashboard/formato";
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
   const dia = new Date(`${dataStr}T00:00:00Z`);
 
   return responder(async () => {
-    const [congregacoes, matriculados, porCongregacao, visitantes] = await Promise.all([
+    const [congregacoes, matriculados, porCongregacao, visitantes, justificadasPorCong] = await Promise.all([
       prisma.congregacao.findMany({ select: { id: true, nome: true } }),
       prisma.aluno.groupBy({ by: ["congId"], where: { ativo: true }, _count: { _all: true } }),
       prisma.$queryRaw<LinhaBruta[]>`
@@ -51,6 +52,8 @@ export async function GET(req: Request) {
         GROUP BY "congId"
       `,
       prisma.visitante.count({ where: { data: dia } }),
+      // Falta justificada não pesa contra: quem justificou sai do denominador.
+      justificadasPorCongNoDia(dia),
     ]);
 
     const matriculadosPorCong = new Map(matriculados.map((m) => [m.congId, m._count._all]));
@@ -62,15 +65,18 @@ export async function GET(req: Request) {
         const matriculadosCong = matriculadosPorCong.get(c.id) ?? 0;
         const presentes = presentesPorCong.get(c.id) ?? 0;
         const faltas = faltasPorCong.get(c.id) ?? 0;
+        const justificadas = justificadasPorCong.get(c.id) ?? 0;
+        const base = Math.max(0, matriculadosCong - justificadas);
         return {
           id: c.id,
           nome: c.nome?.trim() || `Congregação ${c.id}`,
           matriculados: matriculadosCong,
           presentes,
           faltas,
+          justificadas,
           // Fez chamada nesse domingo se marcou alguém, presente ou faltoso.
-          participou: presentes + faltas > 0,
-          taxa: matriculadosCong > 0 ? Math.round((presentes / matriculadosCong) * 1000) / 10 : 0,
+          participou: presentes + faltas + justificadas > 0,
+          taxa: base > 0 ? Math.min(100, Math.round((presentes / base) * 1000) / 10) : 0,
         };
       })
       .sort((a, b) =>
@@ -85,11 +91,13 @@ export async function GET(req: Request) {
       matriculados: linhas.reduce((s, l) => s + l.matriculados, 0),
       presentes: linhas.reduce((s, l) => s + l.presentes, 0),
       faltas: linhas.reduce((s, l) => s + l.faltas, 0),
+      justificadas: linhas.reduce((s, l) => s + l.justificadas, 0),
       visitantes,
       congregacoesParticipantes: participantes.length,
       congregacoesTotal: linhas.length,
     };
-    const taxaCampo = totais.matriculados > 0 ? Math.round((totais.presentes / totais.matriculados) * 1000) / 10 : 0;
+    const baseCampo = totais.matriculados - totais.justificadas;
+    const taxaCampo = baseCampo > 0 ? Math.round((totais.presentes / baseCampo) * 1000) / 10 : 0;
 
     return {
       data: dataStr,
