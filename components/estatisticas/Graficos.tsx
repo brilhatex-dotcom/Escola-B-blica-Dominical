@@ -47,38 +47,88 @@ export interface PontoTaxa {
  * cor — é a mesma grandeza, só que estimada. O tracejado é que diz "ainda
  * não aconteceu"; uma cor nova faria parecer outra série.
  */
-export function GraficoTaxaComProjecao({ dados }: { dados: PontoTaxa[] }) {
+export interface CoresGrafico {
+  linha: string;
+  eixo: string;
+  grade: string;
+  fundo: string;
+  texto: string;
+  tamanhoEixo?: number;
+}
+
+const CORES_PADRAO: CoresGrafico = {
+  linha: OURO,
+  eixo: EIXO.fill,
+  grade: "rgba(255,255,255,0.06)",
+  fundo: "#0B1F45",
+  texto: "#e8eefb",
+};
+
+export function GraficoTaxaComProjecao({
+  dados,
+  cores = CORES_PADRAO,
+  className = "h-60 sm:h-72",
+}: {
+  dados: PontoTaxa[];
+  /** O Modo Data Show troca as cores (alto contraste) e o tamanho do eixo. */
+  cores?: CoresGrafico;
+  className?: string;
+}) {
+  const eixo = { fill: cores.eixo, fontSize: cores.tamanhoEixo ?? 11 };
+  const grossura = cores.tamanhoEixo ? 4 : 2;
+  const raio = cores.tamanhoEixo ? 7 : 4;
   return (
-    <div className="h-60 sm:h-72">
+    <div className={className}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={dados} margin={{ left: 4, right: 12, top: 8 }}>
-          <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-          <XAxis dataKey="data" tickFormatter={dia} tick={EIXO} axisLine={false} tickLine={false} minTickGap={18} />
+          <CartesianGrid stroke={cores.grade} vertical={false} />
+          <XAxis
+            dataKey="data"
+            tickFormatter={dia}
+            tick={eixo}
+            axisLine={false}
+            tickLine={false}
+            minTickGap={18}
+            tickMargin={cores.tamanhoEixo ? cores.tamanhoEixo / 2 : 4}
+            // Com letra grande, a faixa padrão de 30px corta as datas pela metade.
+            height={cores.tamanhoEixo ? Math.round(cores.tamanhoEixo * 2.2) : 30}
+          />
           <YAxis
             domain={[0, 100]}
             tickFormatter={(v: number) => `${v}%`}
-            tick={EIXO}
+            tick={eixo}
             axisLine={false}
             tickLine={false}
-            width={42}
+            width={cores.tamanhoEixo ? cores.tamanhoEixo * 4 : 42}
           />
           <Tooltip
-            contentStyle={caixaTooltip}
+            contentStyle={{ ...caixaTooltip, background: cores.fundo, color: cores.texto }}
             cursor={{ stroke: "rgba(255,255,255,0.25)" }}
             labelFormatter={(v) => `Domingo ${dia(String(v))}`}
             formatter={(v, nome) => [pct(Number(v)), nome === "projetada" ? "Projeção" : "Presença"]}
           />
-          <Line type="monotone" dataKey="taxa" name="taxa" stroke={OURO} strokeWidth={2} dot={{ r: 4, strokeWidth: 0, fill: OURO }} activeDot={{ r: 6 }} connectNulls={false} />
+          <Line
+            type="monotone"
+            dataKey="taxa"
+            name="taxa"
+            stroke={cores.linha}
+            strokeWidth={grossura}
+            dot={{ r: raio, strokeWidth: 0, fill: cores.linha }}
+            activeDot={{ r: raio + 2 }}
+            connectNulls={false}
+            isAnimationActive={!cores.tamanhoEixo}
+          />
           <Line
             type="monotone"
             dataKey="projetada"
             name="projetada"
-            stroke={OURO}
-            strokeWidth={2}
-            strokeDasharray="5 5"
-            dot={{ r: 4, strokeWidth: 2, fill: "#0B1F45", stroke: OURO }}
-            activeDot={{ r: 6 }}
+            stroke={cores.linha}
+            strokeWidth={grossura}
+            strokeDasharray={cores.tamanhoEixo ? "10 8" : "5 5"}
+            dot={{ r: raio, strokeWidth: grossura, fill: cores.fundo, stroke: cores.linha }}
+            activeDot={{ r: raio + 2 }}
             connectNulls
+            isAnimationActive={!cores.tamanhoEixo}
           />
         </LineChart>
       </ResponsiveContainer>

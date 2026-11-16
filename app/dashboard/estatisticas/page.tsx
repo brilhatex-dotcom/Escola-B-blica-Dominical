@@ -11,6 +11,7 @@ import {
   CalendarRange,
   Medal,
   Minus,
+  MonitorPlay,
   Printer,
   TrendingUp,
   Trophy,
@@ -22,6 +23,8 @@ import { CabecalhoModulo, EsqueletoLista, EstadoErro, EstadoVazio } from "@/comp
 import { FiltroPeriodo } from "@/components/dashboard/FiltroPeriodo";
 import { GraficoBarras, GraficoTaxaComProjecao, type PontoTaxa } from "@/components/estatisticas/Graficos";
 import { domingoMaisRecente, numero } from "@/lib/dashboard/formato";
+import { ModoDataShow } from "@/components/estatisticas/ModoDataShow";
+import type { LinhaRanking, RespPanorama, RespPedidos, RespRanking } from "@/components/estatisticas/tipos";
 
 /**
  * Estatísticas — a área só de medição.
@@ -96,68 +99,6 @@ function periodoDoAtalho(a: Atalho): { de: string; ate: string } {
  * Tipos das respostas
  * ------------------------------------------------------------------ */
 
-interface LinhaRanking {
-  congId: number;
-  nome: string;
-  matriculados: number;
-  domingosComChamada: number;
-  taxa: number | null;
-  mediaPresentes: number;
-  mediaBase: number;
-  justificadasTotal: number;
-  posicao?: number;
-}
-interface LinhaClasse {
-  classeId: number;
-  nome: string;
-  congregacao: string | null;
-  domingosComChamada: number;
-  taxa: number | null;
-  mediaPresentes: number;
-  mediaBase: number;
-  posicao: number;
-}
-interface RespRanking {
-  periodo: { de: string; ate: string; domingos: number };
-  justificadaDisponivel: boolean;
-  campo: { taxa: number | null; mediaPresentes: number; mediaBase: number; matriculados: number; domingosComChamada: number; justificadasTotal: number };
-  congregacoes: LinhaRanking[];
-  poucasChamadas: LinhaRanking[];
-  semChamada: Array<{ congId: number; nome: string; matriculados: number }>;
-  classes: LinhaClasse[];
-}
-
-interface RespPedidos {
-  trimestre: { chave: string; rotulo: string };
-  disponiveis: string[];
-  trimestres: Array<{
-    chave: string; rotulo: string; congregacoesComPedido: number; confirmados: number;
-    revistas: number; revistasAluno: number; revistasProfessor: number; valor: number; pago: number; saldo: number;
-  }>;
-  congregacoes: Array<{
-    congId: number; nome: string; matriculados: number; revistasAluno: number; revistasProfessor: number;
-    outras: number; revistas: number; cobertura: number | null; valor: number; pago: number; saldo: number | null;
-    situacao: "sem-pedido" | "confirmado" | "rascunho";
-  }>;
-  categorias: Array<{ categoria: string; rotulo: string; quantidade: number }>;
-}
-
-interface RespPanorama {
-  janela: { de: string; ate: string; semanas: number };
-  serie: Array<{ data: string; presentes: number; base: number; taxa: number }>;
-  projecao: Array<{ data: string; taxa: number; presentes: number }>;
-  tendenciaSemanal: number | null;
-  tendencias: Array<{
-    congId: number; nome: string; atual: number | null; anterior: number | null; variacao: number | null;
-    projecao: number | null; direcao: "subindo" | "caindo" | "estavel" | "sem-base";
-  }>;
-  matriculas: { atuais: number; meses: Array<{ mes: string; novas: number }>; mediaMensal: number; projetadosNoProximoTrimestre: number };
-  revistas: {
-    trimestre: { chave: string; rotulo: string };
-    estimativaAluno: number; ultimoTrimestre: string | null; ultimoPedidoAluno: number | null; valorEstimado: number | null;
-  };
-}
-
 /* ------------------------------------------------------------------ *
  * Peças
  * ------------------------------------------------------------------ */
@@ -206,16 +147,23 @@ const CORES_PODIO = [
  * Aba: Ranking
  * ------------------------------------------------------------------ */
 
-function AbaRanking() {
-  const [atalho, setAtalho] = useState<Atalho | null>("trimestre");
-  const [periodo, setPeriodo] = useState<{ de: string; ate: string }>({ de: "", ate: "" });
+interface Periodo { de: string; ate: string }
+
+function AbaRanking({
+  atalho,
+  setAtalho,
+  periodo,
+  setPeriodo,
+}: {
+  atalho: Atalho | null;
+  setAtalho: (a: Atalho | null) => void;
+  periodo: Periodo;
+  setPeriodo: React.Dispatch<React.SetStateAction<Periodo>>;
+}) {
   const [dados, setDados] = useState<RespRanking | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [todasClasses, setTodasClasses] = useState(false);
-
-  // As datas só no cliente: no servidor, em UTC, "hoje" pode ser outro dia.
-  useEffect(() => setPeriodo(periodoDoAtalho("trimestre")), []);
 
   useEffect(() => {
     if (!periodo.de || !periodo.ate) return;
@@ -725,6 +673,14 @@ const ABAS: Array<{ chave: Aba; rotulo: string; icone: typeof Trophy }> = [
 
 export default function EstatisticasPage() {
   const [aba, setAba] = useState<Aba>("ranking");
+  // O período mora aqui, e não na aba: o Modo Data Show apresenta o MESMO
+  // período que está escolhido na tela.
+  const [atalho, setAtalho] = useState<Atalho | null>("trimestre");
+  const [periodo, setPeriodo] = useState<Periodo>({ de: "", ate: "" });
+  const [projetando, setProjetando] = useState(false);
+
+  // As datas só no cliente: no servidor, em UTC, "hoje" pode ser outro dia.
+  useEffect(() => setPeriodo(periodoDoAtalho("trimestre")), []);
 
   return (
     <>
@@ -733,10 +689,21 @@ export default function EstatisticasPage() {
         titulo="Estatísticas"
         descricao="Medição da Escola Bíblica: presença diante dos matriculados, pedidos e panoramas"
       >
-        <Button variant="ghost" size="sm" onClick={() => window.print()} className="print:hidden">
-          <Printer className="h-4 w-4" />
-          Imprimir
-        </Button>
+        <div className="flex gap-2 print:hidden">
+          {/*
+            Data show: tela cheia, letra grande e alto contraste, para mostrar
+            o ranking no telão — inclusive em salão claro ou com luz irregular,
+            onde o azul-escuro do portal vira um cinza lavado.
+          */}
+          <Button size="sm" onClick={() => setProjetando(true)} disabled={!periodo.de}>
+            <MonitorPlay className="h-4 w-4" />
+            Data show
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => window.print()}>
+            <Printer className="h-4 w-4" />
+            Imprimir
+          </Button>
+        </div>
       </CabecalhoModulo>
 
       <div role="tablist" className="mb-4 flex gap-1 overflow-x-auto rounded-2xl border border-white/8 bg-white/[0.03] p-1 print:hidden">
@@ -761,9 +728,13 @@ export default function EstatisticasPage() {
         })}
       </div>
 
-      {aba === "ranking" && <AbaRanking />}
+      {aba === "ranking" && (
+        <AbaRanking atalho={atalho} setAtalho={setAtalho} periodo={periodo} setPeriodo={setPeriodo} />
+      )}
       {aba === "pedidos" && <AbaPedidos />}
       {aba === "panorama" && <AbaPanorama />}
+
+      {projetando && periodo.de && <ModoDataShow de={periodo.de} ate={periodo.ate} aoFechar={() => setProjetando(false)} />}
     </>
   );
 }
