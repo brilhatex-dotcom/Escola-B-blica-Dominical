@@ -109,15 +109,15 @@ model Classe {
 }
 
 model Aluno {
-  id       Int       @id
-  legacyId Int?
-  nome     String
+  id            Int       @id
+  legacyId      Int?
+  nome          String
   /// Data de nascimento; vazia em 149 linhas do export -> null.
-  nasc     DateTime? @db.Date
+  nasc          DateTime? @db.Date
   /// No export vem como numero (ex.: 87981418516). Guardado como String:
   /// estoura Int32 e telefone nao e aritmetica.
-  tel      String?
-  resp     String?
+  tel           String?
+  resp          String?
   /// Posicao no ministerio: membro, auxiliar, diacono, presbitero, evangelista,
   /// pastor. Ver lib/ebd/posicoes.ts.
   ///
@@ -125,10 +125,10 @@ model Aluno {
   /// nenhuma delas. NAO se confunde com `Cargos`/`PessoaCargos`, que guardam o
   /// que a pessoa faz na EBD e decidem o acesso ao portal — um Presbitero pode
   /// nao dar aula nenhuma, e um Professor pode ser Membro.
-  posicao  String?
-  congId   Int?
-  classeId Int?
-  ativo    Boolean   @default(true)
+  posicao       String?
+  congId        Int?
+  classeId      Int?
+  ativo         Boolean   @default(true)
   /// Quando esta matrícula nasceu NESTE portal — não a data em que a pessoa
   /// começou na igreja de verdade, que ninguém registrou para as 323 linhas
   /// herdadas. `null` nelas, de propósito: são matrículas antigas, sem
@@ -141,7 +141,8 @@ model Aluno {
   congregacao Congregacao? @relation(fields: [congId], references: [id])
   classe      Classe?      @relation(fields: [classeId], references: [id])
 
-  frequencias Frequencia[]
+  frequencias        Frequencia[]
+  faltasJustificadas FaltaJustificada[]
 
   @@index([congId])
   @@index([classeId])
@@ -166,6 +167,44 @@ model Frequencia {
   @@index([congId])
   @@index([data])
   @@map("Frequencias")
+}
+
+/// Uma falta JUSTIFICADA: o aluno não veio, mas avisou (doença, viagem,
+/// trabalho) — e a igreja decidiu que isso NÃO pesa contra ele nem contra a
+/// classe.
+///
+/// ============================================================================
+/// POR QUE É UMA TABELA À PARTE, E NÃO UMA COLUNA EM `Frequencias`
+///
+/// 1. A REGRA "NÃO PESA CONTRA" SAI DE GRAÇA. A casa inteira já trata "sem
+///    linha em Frequencias" como "não foi chamado" — não conta presença, não
+///    conta falta, não entra no denominador (ver lib/relatorios/comum.ts).
+///    Guardando a justificada AQUI, e não lá, todo relatório de período,
+///    ranking, certificado e contagem de faltosos passa a desconsiderá-la sem
+///    precisar mudar uma linha deles.
+///
+/// 2. O DEPLOY NÃO DEPENDE DA ORDEM. O Vercel não roda migração. Uma coluna
+///    nova em `Frequencias` faria TODA consulta à chamada falhar entre a
+///    publicação e alguém rodar o SQL no Neon — possivelmente num domingo de
+///    manhã. Uma tabela nova que ainda não existe só desliga o botão
+///    "Justificada" (ver lib/chamada/justificadas.ts); o resto segue igual.
+/// ============================================================================
+model FaltaJustificada {
+  id       Int      @id @default(autoincrement())
+  alunoId  Int
+  classeId Int?
+  congId   Int?
+  data     DateTime @db.Date
+  motivo   String?
+  autor    String?
+  criadoEm DateTime @default(now())
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@unique([alunoId, data])
+  @@index([congId, data])
+  @@index([classeId, data])
+  @@map("Faltas_Justificadas")
 }
 
 model FreqLicao {
@@ -331,8 +370,8 @@ model PagamentoRevista {
 /// aguardando pagamento.
 /// ============================================================================
 model PedidoRevista {
-  id     Int    @id @default(autoincrement())
-  congId Int
+  id        Int    @id @default(autoincrement())
+  congId    Int
   /// "3T-2026" — a mesma chave usada em `PagamentoRevista.trimestre`.
   trimestre String
 
@@ -359,9 +398,9 @@ model PedidoRevista {
 /// mostrando o valor que foi cobrado, mesmo que a tabela de precos mude
 /// depois.
 model PedidoRevistaItem {
-  id        Int    @id @default(autoincrement())
-  pedidoId  Int
-  categoria String
+  id            Int     @id @default(autoincrement())
+  pedidoId      Int
+  categoria     String
   /// "aluno" | "professor"
   tipo          String
   quantidade    Int
@@ -440,7 +479,6 @@ model EscalaCulto {
  * tabela é agora a única fonte da escala oficial. `Escala_Cultos` continua
  * existindo só para as escalas antigas, já publicadas antes da troca, não
  * sumirem do histórico.
- *
  * Uma linha por MÊS. Os cultos do mês inteiro (todas as congregações, todos
  * os dias) ficam em `EscalaItem`, e são montados e editados junto — não um
  * de cada vez como o resto do sistema, porque um mês tem mais de cem
@@ -448,17 +486,17 @@ model EscalaCulto {
  * rápido".
  */
 model EscalaMensal {
-  id         Int      @id @default(autoincrement())
-  mesAno     DateTime @db.Date
-  titulo     String
+  id           Int       @id @default(autoincrement())
+  mesAno       DateTime  @db.Date
+  titulo       String
   /// "rascunho" | "publicado" — rascunho só é visto por quem edita; ver o
   /// comentário grande em `app/api/escalas-mensais/[id]/publicar/route.ts`.
   status       String    @default("rascunho")
   publicadoEm  DateTime?
   publicadoPor String?
-  autor      String
-  criadoEm   DateTime @default(now())
-  atualizado DateTime @updatedAt
+  autor        String
+  criadoEm     DateTime  @default(now())
+  atualizado   DateTime  @updatedAt
 
   itens  EscalaItem[]
   avisos EscalaAviso[]

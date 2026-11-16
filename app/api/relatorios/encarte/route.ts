@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { justificadasPorCongNoDia } from "@/lib/ebd/justificadas";
 import { erro, responder } from "@/lib/api";
 import { exigirLeitura } from "@/lib/auth/guarda";
 import { domingoMaisRecente } from "@/lib/dashboard/formato";
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
   const dia = new Date(`${dataStr}T00:00:00Z`);
 
   return responder(async () => {
-    const [congregacoes, matriculados, porCongregacao] = await Promise.all([
+    const [congregacoes, matriculados, porCongregacao, justificadasPorCong] = await Promise.all([
       prisma.congregacao.findMany({ select: { id: true, nome: true } }),
       prisma.aluno.groupBy({ by: ["congId"], where: { ativo: true }, _count: { _all: true } }),
       /*
@@ -67,6 +68,8 @@ export async function GET(req: Request) {
         WHERE data = ${dia}
         GROUP BY "congId"
       `,
+      // Falta justificada não pesa contra: quem justificou sai do denominador.
+      justificadasPorCongNoDia(dia),
     ]);
 
     const matriculadosPorCong = new Map(matriculados.map((m) => [m.congId, m._count._all]));
@@ -76,6 +79,7 @@ export async function GET(req: Request) {
     const linhas: Linha[] = congregacoes
       .map((c) => {
         const matric = matriculadosPorCong.get(c.id) ?? 0;
+        const base = Math.max(0, matric - (justificadasPorCong.get(c.id) ?? 0));
         const chamou = (chamadasPorCong.get(c.id) ?? 0) > 0;
         const presentes = presencasPorCong.get(c.id) ?? 0;
         return {
@@ -83,11 +87,11 @@ export async function GET(req: Request) {
           nome: c.nome?.trim() || `Congregação ${c.id}`,
           matriculados: matric,
           presentes,
-          percentual: matric > 0 ? Math.round((presentes / matric) * 1000) / 10 : 0,
+          percentual: base > 0 ? Math.min(100, Math.round((presentes / base) * 1000) / 10) : 0,
           // Elegível: tem gente matriculada E fez chamada nesse domingo —
           // as duas condições que evitam dividir por zero e evitam
           // classificar quem não tem dado nenhum naquele dia.
-          elegivel: matric > 0 && chamou,
+          elegivel: base > 0 && chamou,
         };
       })
       .filter((l) => l.elegivel)

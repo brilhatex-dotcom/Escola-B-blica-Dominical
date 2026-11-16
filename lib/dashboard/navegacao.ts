@@ -1,5 +1,6 @@
 import {
   Award,
+  BarChart3,
   BadgeCheck,
   Bell,
   BookMarked,
@@ -97,6 +98,28 @@ export const MENU_GRUPOS: readonly GrupoMenu[] = [
         href: "/dashboard",
         icone: Home,
         descricao: "Visão geral da Escola Bíblica",
+      },
+    ],
+  },
+
+  /*
+   * Estatísticas fica logo abaixo do Dashboard, num item só — é a "área só de
+   * medição" pedida pela liderança: ranking por matriculados, pedidos de
+   * lição e panoramas, num lugar fácil de achar, sem misturar com as folhas
+   * de impressão dos Relatórios.
+   */
+  {
+    chave: "medicao",
+    rotulo: "Estatísticas",
+    icone: BarChart3,
+    solo: true,
+    itens: [
+      {
+        chave: "estatisticas",
+        rotulo: "Estatísticas",
+        href: "/dashboard/estatisticas",
+        icone: BarChart3,
+        descricao: "Ranking por matriculados, pedidos de lição e panoramas futuros",
       },
     ],
   },

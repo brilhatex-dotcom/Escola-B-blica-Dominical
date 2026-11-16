@@ -91,6 +91,7 @@ const VE_A_CONGREGACAO = [
   "rel-ranking",
   "rel-encarte",
   "rel-consolidado",
+  "estatisticas",
   "rel-faltas",
   "rel-ficha",
   "rel-certificados",

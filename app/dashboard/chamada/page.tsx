@@ -7,6 +7,7 @@ import {
   Check,
   CheckCheck,
   CloudOff,
+  FileCheck2,
   Loader2,
   MapPin,
   Save,
@@ -42,9 +43,10 @@ import { sincronizar } from "@/lib/sync/motor";
  * ============================================================================
  * TRES ESTADOS POR ALUNO, E NAO DOIS
  *
- *   presente   · veio
- *   ausente    · faltou
- *   null       · AINDA NAO FOI MARCADO
+ *   presente    · veio
+ *   ausente     · faltou
+ *   justificada · faltou, mas avisou — NAO pesa contra (ver lib/ebd/justificadas.ts)
+ *   null        · AINDA NAO FOI MARCADO
  *
  * A diferenca entre "faltou" e "ninguem marcou" e a diferenca entre um dado e a
  * ausencia dele. Com dois estados, todo aluno nasce "ausente" e uma chamada
@@ -78,6 +80,38 @@ interface AlunoChamada {
   nome: string;
   nasc: string | null;
   presente: boolean | null;
+  justificada?: boolean;
+}
+
+/** O que foi marcado para um aluno. "Sem marca" é a ausência dele no mapa. */
+type Situacao = "presente" | "falta" | "justificada";
+
+function situacaoDe(a: { presente: boolean | null; justificada?: boolean }): Situacao | null {
+  if (a.justificada) return "justificada";
+  if (a.presente === null) return null;
+  return a.presente ? "presente" : "falta";
+}
+
+/*
+ * "O servidor já aceita falta justificada" — lembrado no aparelho para a
+ * Chamada sem internet oferecer o botão também. Se o palpite estiver velho,
+ * nada se perde: o servidor que não conhece a justificada grava falta comum.
+ */
+const CHAVE_JUSTIFICADA = "ebd:justificada-ok";
+function lembrarJustificada(ok: boolean) {
+  try {
+    if (ok) window.localStorage.setItem(CHAVE_JUSTIFICADA, "1");
+    else window.localStorage.removeItem(CHAVE_JUSTIFICADA);
+  } catch {
+    /* sem armazenamento */
+  }
+}
+function justificadaLembrada(): boolean {
+  try {
+    return window.localStorage.getItem(CHAVE_JUSTIFICADA) === "1";
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -128,6 +162,8 @@ interface Chamada {
   };
   data: string;
   iniciada: boolean;
+  /** Dá para marcar falta justificada (a tabela já existe no servidor). */
+  justificadaDisponivel?: boolean;
   alunos: AlunoChamada[];
 }
 
@@ -141,7 +177,7 @@ interface Chamada {
  */
 function daMemoriaDoAparelho(local: ChamadaLocal): Chamada | null {
   if (!local.cache) return null;
-  const marcado = new Map(local.marcas.map((m) => [m.alunoId, m.presente]));
+  const marcado = new Map(local.marcas.map((m) => [m.alunoId, m]));
   return {
     classe: {
       id: local.classeId,
@@ -156,9 +192,11 @@ function daMemoriaDoAparelho(local: ChamadaLocal): Chamada | null {
     },
     data: local.data,
     iniciada: local.marcas.length > 0,
+    justificadaDisponivel: justificadaLembrada(),
     alunos: local.cache.alunos.map((a) => ({
       ...a,
-      presente: marcado.get(a.id) ?? null,
+      presente: marcado.get(a.id)?.presente ?? null,
+      justificada: marcado.get(a.id)?.justificada ?? false,
     })),
   };
 }
@@ -177,6 +215,7 @@ async function doEspelhoLocal(classeId: number, data: string): Promise<Chamada |
     },
     data,
     iniciada: false,
+    justificadaDisponivel: justificadaLembrada(),
     alunos: turma.alunos.map((a) => ({ ...a, presente: null })),
   };
 }
@@ -201,7 +240,7 @@ export default function ChamadaPage() {
   const [classeId, setClasseId] = useState<number | null>(null);
   const [data, setData] = useState<string>("");
   const [chamada, setChamada] = useState<Chamada | null>(null);
-  const [marcas, setMarcas] = useState<Map<number, boolean>>(new Map());
+  const [marcas, setMarcas] = useState<Map<number, Situacao>>(new Map());
   const [carregando, setCarregando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -308,6 +347,7 @@ export default function ChamadaPage() {
         const res = await fetch(url, { signal: controle.signal, cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         doServidor = await res.json();
+        lembrarJustificada(Boolean(doServidor?.justificadaDisponivel));
       } catch (e) {
         if ((e as Error).name === "AbortError") return;
       }
@@ -352,7 +392,7 @@ export default function ChamadaPage() {
        * marcado pela versao antiga do servidor.
        */
       if (pendente && local) {
-        setMarcas(new Map(local.marcas.map((m) => [m.alunoId, m.presente])));
+        setMarcas(new Map(local.marcas.map((m) => [m.alunoId, situacaoDe(m) ?? "falta"])));
         const situacao = await situacaoDoEnvio(classeId, data);
         if (controle.signal.aborted) return;
         setNaFila(situacao.situacao === "aguardando" || situacao.situacao === "bloqueada");
@@ -360,9 +400,10 @@ export default function ChamadaPage() {
       } else {
         setMarcas(
           new Map(
-            base.alunos
-              .filter((a) => a.presente !== null)
-              .map((a) => [a.id, a.presente as boolean]),
+            base.alunos.flatMap((a) => {
+              const sit = situacaoDe(a);
+              return sit ? [[a.id, sit] as const] : [];
+            }),
           ),
         );
       }
@@ -429,23 +470,26 @@ export default function ChamadaPage() {
     [carregarVisitantes, classeId, data],
   );
 
-  const marcar = useCallback((alunoId: number, presente: boolean) => {
+  const marcar = useCallback((alunoId: number, situacao: Situacao) => {
     setMarcas((atual) => {
       const novo = new Map(atual);
       // Tocar de novo no mesmo botao DESMARCA, voltando ao estado "nao
       // marcado". Sem isso, um toque errado nao teria desfazer: o aluno ficaria
       // preso como falta e ninguem saberia que foi engano.
-      if (novo.get(alunoId) === presente) novo.delete(alunoId);
-      else novo.set(alunoId, presente);
+      if (novo.get(alunoId) === situacao) novo.delete(alunoId);
+      else novo.set(alunoId, situacao);
       return novo;
     });
     setAviso(null);
   }, []);
 
   const marcarTodos = useCallback(
-    (presente: boolean) => {
+    (situacao: Situacao) => {
       if (!chamada) return;
-      setMarcas(new Map(chamada.alunos.map((a) => [a.id, presente])));
+      // "Todos presentes" não passa por cima de quem já tem falta justificada.
+      setMarcas((atual) =>
+        new Map(chamada.alunos.map((a) => [a.id, atual.get(a.id) === "justificada" ? "justificada" : situacao])),
+      );
       setAviso(null);
     },
     [chamada],
@@ -461,7 +505,11 @@ export default function ChamadaPage() {
 
     const classeId = chamada.classe.id;
     const dia = chamada.data;
-    const presencas = [...marcas].map(([alunoId, presente]) => ({ alunoId, presente }));
+    const presencas = [...marcas].map(([alunoId, sit]) => ({
+      alunoId,
+      presente: sit === "presente",
+      ...(sit === "justificada" ? { justificada: true } : {}),
+    }));
     const quantas = `${presencas.length} ${presencas.length === 1 ? "marcação" : "marcações"}`;
 
     try {
@@ -525,8 +573,11 @@ export default function ChamadaPage() {
     }
   }
 
-  const presentes = [...marcas.values()].filter(Boolean).length;
-  const ausentes = [...marcas.values()].filter((v) => !v).length;
+  const valores = [...marcas.values()];
+  const presentes = valores.filter((v) => v === "presente").length;
+  const ausentes = valores.filter((v) => v === "falta").length;
+  const justificadas = valores.filter((v) => v === "justificada").length;
+  const comJustificada = Boolean(chamada?.justificadaDisponivel) || justificadas > 0;
   const naoMarcados = (chamada?.alunos.length ?? 0) - marcas.size;
 
   return (
@@ -630,6 +681,11 @@ export default function ChamadaPage() {
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="sucesso">{presentes} presentes</Badge>
               <Badge variant="erro">{ausentes} faltas</Badge>
+              {justificadas > 0 && (
+                <Badge variant="alerta">
+                  {justificadas} {justificadas === 1 ? "justificada" : "justificadas"}
+                </Badge>
+              )}
               {naoMarcados > 0 && <Badge variant="neutro">{naoMarcados} sem marcar</Badge>}
               {visitantes.length > 0 && (
                 <Badge variant="info">
@@ -652,7 +708,7 @@ export default function ChamadaPage() {
                   Incluir visitante
                 </Button>
               )}
-              <Button variant="ghost" size="sm" onClick={() => marcarTodos(true)}>
+              <Button variant="ghost" size="sm" onClick={() => marcarTodos("presente")}>
                 <CheckCheck className="h-4 w-4" />
                 Todos presentes
               </Button>
@@ -675,8 +731,9 @@ export default function ChamadaPage() {
                   transition={{ duration: 0.35, delay: Math.min(i, 20) * 0.015 }}
                   className={cn(
                     "flex items-center gap-3 px-4 py-2.5 transition-colors duration-300",
-                    marca === true && "bg-emerald-500/[0.06]",
-                    marca === false && "bg-flame-500/[0.05]",
+                    marca === "presente" && "bg-emerald-500/[0.06]",
+                    marca === "falta" && "bg-flame-500/[0.05]",
+                    marca === "justificada" && "bg-gold-400/[0.06]",
                   )}
                 >
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 ring-1 ring-white/12">
@@ -685,8 +742,11 @@ export default function ChamadaPage() {
                     </span>
                   </span>
 
-                  <span className="min-w-0 flex-1 truncate text-[0.86rem] text-brand-50">
-                    {a.nome}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[0.86rem] text-brand-50">{a.nome}</span>
+                    {marca === "justificada" && (
+                      <span className="block text-[0.68rem] text-gold-300/80">Falta justificada · não conta contra</span>
+                    )}
                   </span>
 
                   {/*
@@ -699,13 +759,13 @@ export default function ChamadaPage() {
                   <div className="flex shrink-0 gap-1.5">
                     <button
                       type="button"
-                      onClick={() => marcar(a.id, true)}
-                      aria-pressed={marca === true}
+                      onClick={() => marcar(a.id, "presente")}
+                      aria-pressed={marca === "presente"}
                       aria-label={`${a.nome}: presente`}
                       className={cn(
                         "flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/60",
-                        marca === true
+                        marca === "presente"
                           ? "border-emerald-400/40 bg-emerald-500/20 text-emerald-200"
                           : "border-white/10 bg-white/[0.03] text-brand-200/50 hover:border-emerald-400/30 hover:text-emerald-300",
                       )}
@@ -714,19 +774,37 @@ export default function ChamadaPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => marcar(a.id, false)}
-                      aria-pressed={marca === false}
+                      onClick={() => marcar(a.id, "falta")}
+                      aria-pressed={marca === "falta"}
                       aria-label={`${a.nome}: ausente`}
                       className={cn(
                         "flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/60",
-                        marca === false
+                        marca === "falta"
                           ? "border-flame-500/40 bg-flame-500/20 text-flame-400"
                           : "border-white/10 bg-white/[0.03] text-brand-200/50 hover:border-flame-500/30 hover:text-flame-400",
                       )}
                     >
                       <X className="h-4 w-4" />
                     </button>
+                    {comJustificada && (
+                      <button
+                        type="button"
+                        onClick={() => marcar(a.id, "justificada")}
+                        aria-pressed={marca === "justificada"}
+                        aria-label={`${a.nome}: falta justificada`}
+                        title="Falta justificada — não conta contra o aluno nem a classe"
+                        className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-xl border transition-all duration-300",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300/60",
+                          marca === "justificada"
+                            ? "border-gold-300/45 bg-gold-400/20 text-gold-200"
+                            : "border-white/10 bg-white/[0.03] text-brand-200/50 hover:border-gold-300/35 hover:text-gold-200",
+                        )}
+                      >
+                        <FileCheck2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </motion.li>
               );
