@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Check, Loader2, Plus, Save, Users, X } from "lucide-react";
+import { Check, GraduationCap, Loader2, Plus, Save, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { campoBase } from "@/components/crud/FormularioModal";
 import { Seletor, type Candidato } from "@/components/dashboard/GerirResponsaveis";
+import { porPapelENome } from "@/lib/agenda/convocacao";
 
 /**
  * Cadastro de reunião — com a lista de presença montada a partir da
@@ -20,7 +21,8 @@ import { Seletor, type Candidato } from "@/components/dashboard/GerirResponsavei
  * Numa reunião de campo (dirigentes e secretários de cada congregação), a
  * lista de quem deveria estar já é conhecida — é a Hierarquia. Digitar os
  * ~28 nomes toda vez é trabalho repetido e um convite a esquecer alguém. O
- * botão "Carregar Dirigentes e Secretários" busca em
+ * botão "Carregar liderança" (Dirigente, Vice-Dirigente e Secretário Local) — e
+ * "Carregar professores", para estudos e reuniões com o corpo docente — busca em
  * `/api/agenda/reunioes/convocados` e entra com todos em FALTA: quem está
  * conduzindo a reunião só risca quem apareceu, em vez de montar a lista do
  * zero. Isso não fere "falta não é o mesmo que não marcado" — ninguém fica
@@ -117,13 +119,21 @@ export function ModalReuniao({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, reuniao]);
 
-  async function carregarConvocados({ silencioso = false }: { silencioso?: boolean } = {}) {
+  async function carregarConvocados({
+    silencioso = false,
+    quem = "lideranca",
+  }: { silencioso?: boolean; quem?: "lideranca" | "professores" } = {}) {
     setCarregandoConvocados(true);
     try {
-      const res = await fetch("/api/agenda/reunioes/convocados", { cache: "no-store" });
+      const res = await fetch(`/api/agenda/reunioes/convocados?quem=${quem}`, { cache: "no-store" });
       if (!res.ok) throw new Error();
       const dados: { congregacoes: GrupoConvocados[] } = await res.json();
-      setSemRegistro(dados.congregacoes.filter((g) => g.pessoas.length === 0).map((g) => g.congNome));
+      const vazias = dados.congregacoes.filter((g) => g.pessoas.length === 0).map((g) => g.congNome);
+      setSemRegistro(
+        vazias.length > 0
+          ? [`${quem === "professores" ? "Sem professor cadastrado" : "Sem Dirigente, Vice nem Secretário cadastrado"}: ${vazias.join(", ")}.`]
+          : [],
+      );
       setParticipantes((atual) => {
         const existentes = new Set(atual.map((p) => p.nome.toLowerCase()));
         const novos: ParticipanteReuniao[] = [];
@@ -143,7 +153,7 @@ export function ModalReuniao({
         return [...atual, ...novos];
       });
     } catch {
-      if (!silencioso) setErro("Não foi possível carregar a lista de Dirigentes e Secretários.");
+      if (!silencioso) setErro("Não foi possível carregar a lista da Hierarquia.");
     } finally {
       setCarregandoConvocados(false);
     }
@@ -179,6 +189,8 @@ export function ModalReuniao({
         semCong.push({ p, indice });
       }
     });
+    // Dentro de cada congregação: Dirigente, Vice, Secretário, Professores.
+    for (const g of porCong.values()) g.itens.sort((x, y) => porPapelENome(x.p, y.p));
     return {
       listaCong: [...porCong.values()].sort((a, b) => a.congNome.localeCompare(b.congNome, "pt-BR")),
       semCong,
@@ -272,15 +284,27 @@ export function ModalReuniao({
                   {totalPresentes} de {participantes.length} presentes
                 </span>
               </div>
-              <Button type="button" size="sm" variant="ghost" onClick={() => void carregarConvocados()} disabled={carregandoConvocados || gravando}>
-                {carregandoConvocados ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
-                Carregar Dirigentes e Secretários
-              </Button>
+              <div className="flex flex-wrap gap-1">
+                <Button type="button" size="sm" variant="ghost" onClick={() => void carregarConvocados()} disabled={carregandoConvocados || gravando}>
+                  {carregandoConvocados ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Users className="h-3.5 w-3.5" />}
+                  Carregar liderança
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void carregarConvocados({ quem: "professores" })}
+                  disabled={carregandoConvocados || gravando}
+                >
+                  <GraduationCap className="h-3.5 w-3.5" />
+                  Carregar professores
+                </Button>
+              </div>
             </div>
 
             {participantes.length === 0 && !carregandoConvocados && (
               <p className="py-4 text-center text-[0.8rem] text-brand-200/45">
-                Ninguém na lista ainda — carregue os Dirigentes e Secretários ou adicione alguém abaixo.
+                Ninguém na lista ainda — carregue a liderança, os professores, ou adicione alguém abaixo.
               </p>
             )}
 
@@ -311,8 +335,8 @@ export function ModalReuniao({
 
             {semRegistro.length > 0 && (
               <p className="mt-2 border-t border-white/8 pt-2 text-[0.72rem] leading-relaxed text-gold-200/75">
-                Sem Dirigente nem Secretário Local cadastrado: {semRegistro.join(", ")}. Essas congregações não
-                entraram na lista — chame por telefone, ou adicione alguém abaixo.
+                {semRegistro.join(" ")} Essas congregações não entraram na lista — chame por telefone, ou
+                adicione alguém abaixo.
               </p>
             )}
 

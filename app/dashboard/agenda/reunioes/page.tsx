@@ -16,6 +16,8 @@ import { useAcesso } from "@/components/acesso/AcessoProvider";
 import { ModalReuniao, type ParticipanteReuniao } from "@/components/agenda/ModalReuniao";
 import { LOGO_SRC } from "@/lib/brand";
 import { ORG_NAME } from "@/lib/config";
+import { porPapelENome, rotuloDoPapel } from "@/lib/agenda/convocacao";
+import { FolhaDeFrequencia } from "@/components/agenda/FolhaDeFrequencia";
 
 /**
  * Reuniões, com a lista de presença de cada uma.
@@ -54,6 +56,8 @@ function agruparPorCongregacao(participantes: ParticipanteReuniao[]) {
       semCong.push(p);
     }
   }
+  // Dirigente, Vice, Secretário e Professores — a ordem pedida pela liderança.
+  for (const g of porCong.values()) g.itens.sort(porPapelENome);
   return {
     grupos: [...porCong.values()].sort((a, b) => a.congNome.localeCompare(b.congNome, "pt-BR")),
     semCong,
@@ -110,6 +114,7 @@ export default function ReunioesPage() {
     <>
       <div className="print:hidden">
         <CabecalhoModulo icone={Users} titulo="Reuniões" descricao="Com a lista de presença de cada uma" total={dados?.total ?? null}>
+          <FolhaDeFrequencia />
           {podeMexer && (
             <Button size="sm" onClick={() => setCriando(true)}>
               <Plus className="h-4 w-4" />
@@ -300,7 +305,7 @@ function LinhaPresenca({ p }: { p: ParticipanteReuniao }) {
         ? <Check className="h-3 w-3 shrink-0 text-emerald-300" />
         : <X className="h-3 w-3 shrink-0" />}
       <span className="truncate">{p.nome}</span>
-      {p.papel && <span className="shrink-0 text-[0.65rem] text-brand-200/40">({p.papel})</span>}
+      {p.papel && <span className="shrink-0 text-[0.65rem] text-brand-200/40">({rotuloDoPapel(p.papel)})</span>}
     </li>
   );
 }
@@ -351,7 +356,7 @@ function ImpressaoReuniao({ reuniao }: { reuniao: Reuniao }) {
                     <tr key={`${p.nome}-${i}`}>
                       <td className="w-6 py-0.5 align-top">{p.presente ? "✓" : "✗"}</td>
                       <td className="py-0.5 align-top">{p.nome}</td>
-                      <td className="py-0.5 align-top text-[0.74rem]">{p.papel ?? ""}</td>
+                      <td className="py-0.5 align-top text-[0.74rem]">{rotuloDoPapel(p.papel)}</td>
                       <td className="py-0.5 align-top text-[0.74rem] font-medium">
                         {p.presente ? "presente" : "falta"}
                       </td>
